@@ -6,25 +6,8 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
-// MergeSchemas takes in a bunch of schemas and merges them into one. Types that
-// overlapping names are assumed to be contributions to the same type. ie,
-//
-// type User {
-//     firstName: String!
-// }
-//
-// and
-//
-// type User {
-//     lastName: String!
-// }
-//
-// get merged into
-//
-// type User {
-//     firstName: String!
-//     lastName: String!
-// }
+// MergeSchemas takes in a bunch of schemas and merges them into one. Following the strategies outlined here:
+// https://github.com/AlecAivazis/graphql-gateway/blob/master/docs/mergingStrategies.md
 func MergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	// a placeholder schema we will build up using the sources
 	result := &ast.Schema{
