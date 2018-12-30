@@ -33,7 +33,7 @@ results in a 2-step plan:
 [
   {
       url: location1,
-      query: gql`{
+      query: `{
          allUsers { 
              id
              firstName
@@ -43,7 +43,7 @@ results in a 2-step plan:
           // an entry for each user
           {
               url: location2,
-              query: gql`{
+              query: `{
                   node(id: "1234") {
                       lastName
                   }
