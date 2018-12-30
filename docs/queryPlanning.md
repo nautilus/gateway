@@ -28,3 +28,32 @@ query {
 }
 ```
 
+results in a 2-step plan:
+```json5
+[
+  {
+      url: location1,
+      query: gql`
+        {
+           allUsers { 
+               id
+               firstName
+           }
+        }
+      `
+  },
+  [
+    // an entry for each user
+    {
+        url: location2,
+        query: gql`
+            {
+                node(id: "1234") {
+                    lastName
+                }
+            }
+        `
+    }
+  ]
+]
+```
