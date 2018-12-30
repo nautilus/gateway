@@ -5,11 +5,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/ast"
+
+	gatewayTests "github.com/alecaivazis/graphql-gateway/testing"
 )
 
 func TestMergeSchema_fields(t *testing.T) {
 	// create the first schema
-	schema1, err := loadSchema(`
+	schema1, err := gatewayTests.LoadSchema(`
 			type User {
 				firstName: String!
 			}
@@ -19,7 +21,7 @@ func TestMergeSchema_fields(t *testing.T) {
 	assert.Nil(t, err)
 
 	// and the second schema we are going to make
-	schema2, err := loadSchema(`
+	schema2, err := gatewayTests.LoadSchema(`
 			type User {
 				lastName: String!
 			}
@@ -67,7 +69,7 @@ func TestMergeSchema_fields(t *testing.T) {
 
 func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	// create the first schema
-	schema1, err := loadSchema(`
+	schema1, err := gatewayTests.LoadSchema(`
 			type User {
 				firstName: String!
 			}
@@ -77,7 +79,7 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	assert.Nil(t, err)
 
 	// and the second schema we are going to make
-	schema2, err := loadSchema(`
+	schema2, err := gatewayTests.LoadSchema(`
 			type User {
 				firstName: Int
 			}
