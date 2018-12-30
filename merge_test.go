@@ -28,7 +28,7 @@ func TestMergeSchema_fields(t *testing.T) {
 	assert.Nil(t, err)
 
 	// merge the schemas together
-	schema, err := MergeSchemas([]*ast.Schema{schema1, schema2})
+	schema, err := mergeSchemas([]*ast.Schema{schema1, schema2})
 	// make sure nothing went wrong
 	assert.Nil(t, err)
 
@@ -86,7 +86,7 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	assert.Nil(t, err)
 
 	// merge the schemas together
-	_, err = MergeSchemas([]*ast.Schema{schema1, schema2})
+	_, err = mergeSchemas([]*ast.Schema{schema1, schema2})
 	// make sure nothing went wrong
 	if err == nil {
 		t.Error("didn't encounter error while merging schemas")

@@ -6,9 +6,9 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
-// MergeSchemas takes in a bunch of schemas and merges them into one. Following the strategies outlined here:
+// mergeSchemas takes in a bunch of schemas and merges them into one. Following the strategies outlined here:
 // https://github.com/AlecAivazis/graphql-gateway/blob/master/docs/mergingStrategies.md
-func MergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
+func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	// a placeholder schema we will build up using the sources
 	result := &ast.Schema{
 		Types: map[string]*ast.Definition{},
