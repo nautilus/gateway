@@ -1,8 +1,11 @@
 package gateway
 
+import "github.com/vektah/gqlparser/ast"
+
 // QueryPlanStep represents a step in the plan required to fulfill a query.
 type QueryPlanStep struct {
-	URL string
+	Location string
+	Query    *ast.QueryDocument
 }
 
 // QueryPlan is the full plan to resolve a particular query

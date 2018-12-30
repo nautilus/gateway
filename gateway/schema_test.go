@@ -63,5 +63,4 @@ func TestSchema_computeFieldLocations(t *testing.T) {
 	firstNameLocation, err := locations.LocationFor("User", "firstName")
 	assert.Nil(t, err)
 	assert.Equal(t, []string{"url1"}, firstNameLocation)
-
 }

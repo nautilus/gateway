@@ -2,6 +2,9 @@ package gateway
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/vektah/gqlparser/ast"
 )
 
 func TestPlanQuery_singleRootField(t *testing.T) {
@@ -27,11 +30,30 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 		t.Errorf("encountered error when building schema: %s", err.Error())
 		return
 	}
+
 	// make sure we got a plan
 	if plan == nil {
 		t.Error("generated a nil plan for a query")
 		return
 	}
+
+	// make sure the plan matches our expectation
+
+	// there is only one step
+	assert.Len(t, plan, 1)
+	firstStep := (*plan)[0]
+
+	// make sure the query was going to the location
+	assert.Equal(t, location, firstStep.Location)
+
+	// make sure the query of the step matches our expectations
+	targetQuery, _ := parseQuery(`
+		query {
+			allUsers { firstName }
+		}
+	`)
+	assert.Equal(t, ast.Dump(targetQuery), ast.Dump(firstStep.Query))
+
 }
 
 // func TestPlanQuery_multipleRootFields(t *testing.T) {
