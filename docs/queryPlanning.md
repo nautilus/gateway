@@ -40,20 +40,18 @@ results in a 2-step plan:
                firstName
            }
         }
-      `
+      `,
+      then: [
+          // an entry for each user
+          {
+              url: location2,
+              query: gql`{
+                  node(id: "1234") {
+                      lastName
+                  }
+              }`
+          }
+      ]
   },
-  [
-    // an entry for each user
-    {
-        url: location2,
-        query: gql`
-            {
-                node(id: "1234") {
-                    lastName
-                }
-            }
-        `
-    }
-  ]
 ]
 ```
