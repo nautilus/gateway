@@ -33,14 +33,12 @@ results in a 2-step plan:
 [
   {
       url: location1,
-      query: gql`
-        {
-           allUsers { 
-               id
-               firstName
-           }
-        }
-      `,
+      query: gql`{
+         allUsers { 
+             id
+             firstName
+         }
+      }`,
       then: [
           // an entry for each user
           {
