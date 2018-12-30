@@ -16,7 +16,6 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 
 	// we have to visit each source schema
 	for _, schema := range sources {
-
 		// add each type declared by the source schema to the one we are building up
 		for name, newDefinition := range schema.Types {
 			// look up if the type is already registered in the aggregate

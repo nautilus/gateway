@@ -5,13 +5,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/ast"
-
-	gatewayTests "github.com/alecaivazis/graphql-gateway/testing"
 )
 
 func TestMergeSchema_fields(t *testing.T) {
 	// create the first schema
-	schema1, err := gatewayTests.LoadSchema(`
+	schema1, err := loadSchema(`
 			type User {
 				firstName: String!
 			}
@@ -21,7 +19,7 @@ func TestMergeSchema_fields(t *testing.T) {
 	assert.Nil(t, err)
 
 	// and the second schema we are going to make
-	schema2, err := gatewayTests.LoadSchema(`
+	schema2, err := loadSchema(`
 			type User {
 				lastName: String!
 			}
@@ -30,12 +28,15 @@ func TestMergeSchema_fields(t *testing.T) {
 	assert.Nil(t, err)
 
 	// merge the schemas together
-	schema, err := mergeSchemas([]*ast.Schema{schema1, schema2})
+	schema, err := NewSchema([]RemoteSchema{
+		{Schema: schema1, Location: "url1"},
+		{Schema: schema2, Location: "url2"},
+	})
 	// make sure nothing went wrong
 	assert.Nil(t, err)
 
 	// look up the definition for the User type
-	definition, exists := schema.Types["User"]
+	definition, exists := schema.Schema.Types["User"]
 	// make sure the definition exists
 	assert.True(t, exists)
 
@@ -57,19 +58,19 @@ func TestMergeSchema_fields(t *testing.T) {
 		t.Error("could not find definition for first name")
 		return
 	}
-	assert.Equal(t, firstNameDefinition.Type.String(), "String!")
+	assert.Equal(t, "String!", firstNameDefinition.Type.String())
 
 	// make sure the lastName definition exists
 	if lastNameDefinition == nil {
 		t.Error("could not find definition for last name")
 		return
 	}
-	assert.Equal(t, lastNameDefinition.Type.String(), "String!")
+	assert.Equal(t, "String!", lastNameDefinition.Type.String())
 }
 
 func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	// create the first schema
-	schema1, err := gatewayTests.LoadSchema(`
+	schema1, err := loadSchema(`
 			type User {
 				firstName: String!
 			}
@@ -79,7 +80,7 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	assert.Nil(t, err)
 
 	// and the second schema we are going to make
-	schema2, err := gatewayTests.LoadSchema(`
+	schema2, err := loadSchema(`
 			type User {
 				firstName: Int
 			}
@@ -88,7 +89,10 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	assert.Nil(t, err)
 
 	// merge the schemas together
-	_, err = mergeSchemas([]*ast.Schema{schema1, schema2})
+	_, err = NewSchema([]RemoteSchema{
+		{Schema: schema1, Location: "url1"},
+		{Schema: schema2, Location: "url2"},
+	})
 	// make sure nothing went wrong
 	if err == nil {
 		t.Error("didn't encounter error while merging schemas")

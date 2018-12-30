@@ -1,11 +1,11 @@
-package gatewayTests
+package gateway
 
 import (
 	"github.com/vektah/gqlparser"
 	"github.com/vektah/gqlparser/ast"
 )
 
-func LoadSchema(typedef string) (*ast.Schema, error) {
+func loadSchema(typedef string) (*ast.Schema, error) {
 	return gqlparser.LoadSchema(&ast.Source{
 		Input: typedef,
 	})
