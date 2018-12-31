@@ -6,12 +6,8 @@ language: go
 go:
   - "1.11"
 
-# install task runner
-before_install:
-  - go get github.com/AlecAivazis/run
-
 install:
-  - go get ./...
+  - go get github.com/alecaivazis/graphql-gateway/...
 
 script:
   - go test ./...
