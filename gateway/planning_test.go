@@ -37,15 +37,16 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 
 	// the first selection is the only one we care about
 	root := plans[0].Steps[0]
+	rootField := applyDirectives(root.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
 	assert.Equal(t, location, root.URL)
 
 	// we need to be asking for allUsers
-	assert.Equal(t, root.Field.Name, "foo")
+	assert.Equal(t, rootField.Name, "foo")
 
 	// there should be anything selected underneath it
-	assert.Len(t, root.Field.SelectionSet, 0)
+	assert.Len(t, rootField.SelectionSet, 0)
 }
 
 func TestPlanQuery_singleRootObject(t *testing.T) {
@@ -88,16 +89,17 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	}
 
 	// the first selection is the only one we care about
-	root := selections[0].Steps[0]
+	rootStep := selections[0].Steps[0]
+	rootField := applyDirectives(rootStep.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
-	assert.Equal(t, location, root.URL)
+	assert.Equal(t, location, rootStep.URL)
 
 	// we need to be asking for allUsers
-	assert.Equal(t, root.Field.Name, "allUsers")
+	assert.Equal(t, rootField.Name, "allUsers")
 
 	// grab the field from the top level selection
-	field, ok := root.Field.SelectionSet[0].(*ast.Field)
+	field, ok := rootField.SelectionSet[0].(*ast.Field)
 	if !ok {
 		t.Error("Did not get a field out of the allUsers selection")
 	}
@@ -106,7 +108,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	assert.Equal(t, "String!", field.Definition.Type.Dump())
 
 	// we also should have asked for the friends object
-	field, ok = root.Field.SelectionSet[1].(*ast.Field)
+	field, ok = rootField.SelectionSet[1].(*ast.Field)
 	if !ok {
 		t.Error("Did not get a field out of the allUsers selection")
 	}
@@ -172,15 +174,16 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 
 	// the first step should have all users
 	firstStep := plans[0].Steps[0]
+	firstField := applyDirectives(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
 	assert.Equal(t, userLocation, firstStep.URL)
 
 	// make sure it is for allUsers
-	assert.Equal(t, firstStep.Field.Name, "allUsers")
+	assert.Equal(t, firstField.Name, "allUsers")
 
 	// all users should have only one selected value since `catPhotos` is from another service
-	if len(firstStep.Field.SelectionSet) > 1 {
-		for _, selection := range applyDirectives(firstStep.Field.SelectionSet) {
+	if len(firstField.SelectionSet) > 1 {
+		for _, selection := range applyDirectives(firstField.SelectionSet) {
 			fmt.Println(selection.Name)
 		}
 		t.Error("Encountered too many fields on allUsers selection set")
@@ -188,7 +191,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 
 	// grab the field from the top level selection
-	field, ok := firstStep.Field.SelectionSet[0].(*ast.Field)
+	field, ok := firstField.SelectionSet[0].(*ast.Field)
 	if !ok {
 		t.Error("Did not get a field out of the allUsers selection")
 	}

@@ -11,7 +11,7 @@ import (
 type QueryPlanStep struct {
 	URL            string
 	ParentType     string
-	Field          *ast.Field
+	SelectionSet   ast.SelectionSet
 	InsertLocation string
 	DependsOn      *QueryPlanStep
 }
@@ -52,49 +52,44 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// add the plan to the top level list
 		plans = append(plans, plan)
 
-		// for now, count each top level field as an independent step
-		for _, selection := range applyDirectives(operation.SelectionSet) {
-			// look up the url for this field
-			url, err := locations.URLFor("Query", selection.Name)
-			if err != nil {
-				return nil, err
-			}
+		// the list of fields we care about
+		fields := applyDirectives(operation.SelectionSet)
 
-			plan.Steps = append(plan.Steps, &QueryPlanStep{
-				URL:            url[0],
-				Field:          selection,
-				InsertLocation: "",
-				DependsOn:      nil,
-			})
+		// assume that the root location for this whole operation is the uniform
+		possibleLocations, err := locations.URLFor("Query", fields[0].Name)
+		if err != nil {
+			return nil, err
 		}
 
-		// we are going to start walking down the selection set for each top level step in our plan
-		// and let each step add more steps at the end if they want
+		currentLocation := possibleLocations[0]
 
-		// visit each step to make sure more steps are needed
-		for i := 0; i < len(plan.Steps); i++ {
-			// the step in question
-			step := plan.Steps[i]
+		// add a single step to track down this root query
+		plan.Steps = append(plan.Steps, &QueryPlanStep{
+			URL:            currentLocation,
+			SelectionSet:   ast.SelectionSet{},
+			InsertLocation: "",
+			DependsOn:      nil,
+		})
 
-			// grab a reference to the selection set
-			selectionSet := step.Field.SelectionSet
-
-			// clear the selection set for the field
-			step.Field.SelectionSet = ast.SelectionSet{}
-
-			// start walking down the selection set for the top level step and pass a reference to the
-			// accumulator so each step can add new steps at the end
-			err := walkSelectionSet(&planningWalkConfig{
-				stepAcc:           plan.Steps,
-				locations:         locations,
-				parentLocation:    step.URL,
-				parentType:        "Query",
-				potentialChildren: selectionSet,
-				targetField:       step.Field,
+		for _, selection := range applyDirectives(operation.SelectionSet) {
+			// we are going to start walking down the operations selection set and let
+			// the steps of the walk add any necessary selections
+			selection, err := extractSelection(&extractSelectionConfig{
+				stepAcc:        plan.Steps,
+				locations:      locations,
+				parentLocation: currentLocation,
+				parentType:     "Query",
+				field:          selection,
 			})
 			if err != nil {
 				return nil, err
 			}
+
+			// if we got a selection back
+			if selection != nil {
+				plan.Steps[0].SelectionSet = append(plan.Steps[0].SelectionSet, selection)
+			}
+
 		}
 
 	}
@@ -103,61 +98,68 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 	return plans, nil
 }
 
-type planningWalkConfig struct {
-	stepAcc           []*QueryPlanStep
-	locations         FieldURLMap
-	parentLocation    string
-	parentType        string
-	potentialChildren ast.SelectionSet
-	targetField       *ast.Field
+type extractSelectionConfig struct {
+	stepAcc        []*QueryPlanStep
+	locations      FieldURLMap
+	parentLocation string
+	parentType     string
+	field          *ast.Field
 }
 
-func walkSelectionSet(config *planningWalkConfig) error {
+func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 	// look up the current location
-	possibleLocations, err := config.locations.URLFor(config.parentType, config.targetField.Name)
+	possibleLocations, err := config.locations.URLFor(config.parentType, config.field.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// grab the current one
 	currentLocation := possibleLocations[0]
 
-	fmt.Println("looking at", config.parentType, config.targetField.Name)
+	fmt.Println("looking at", config.parentType, config.field.Name)
 
 	// get the current type we are resolving
-	currentType := coreFieldType(config.targetField).Name()
+	currentType := coreFieldType(config.field).Name()
 
 	// if the location of this targetField is the same as its parent
 	if config.parentLocation == currentLocation {
 		// if the targetField has subtargetFields and it cannot be added naively to the parent
-		if len(config.potentialChildren) > 0 {
+		if len(config.field.SelectionSet) > 0 {
+
+			// we are going to redefine this fields selection set
+			newSelection := ast.SelectionSet{}
 
 			// get the list of fields underneath the taret field
-			for _, selection := range applyDirectives(config.potentialChildren) {
-				// the list of possible children for this selection
-				potentialChildren := selection.SelectionSet
-
-				// clear the selection set for the config.targetField
-				selection.SelectionSet = ast.SelectionSet{}
-
+			for _, selection := range applyDirectives(config.field.SelectionSet) {
 				// add any possible selections provided by selections
-				walkSelectionSet(&planningWalkConfig{
-					stepAcc:           config.stepAcc,
-					locations:         config.locations,
-					parentLocation:    currentLocation,
-					parentType:        currentType,
-					potentialChildren: potentialChildren,
-					targetField:       selection,
+				subSelection, err := extractSelection(&extractSelectionConfig{
+					stepAcc:        config.stepAcc,
+					locations:      config.locations,
+					parentLocation: currentLocation,
+					parentType:     currentType,
+					field:          selection,
 				})
+				if err != nil {
+					return nil, err
+				}
 
-				// add any selections to this object that our children designate
-				config.targetField.SelectionSet = append(config.targetField.SelectionSet, selection)
+				// if we got a selection
+				if subSelection != nil {
+					// add it to the list
+					newSelection = append(newSelection, subSelection)
+				}
 			}
+
+			// overwrite the selection set for this selection
+			config.field.SelectionSet = newSelection
 		}
+
+		// we should include this field regardless
+		return config.field, nil
 	}
 
 	// we didn't encounter an error
-	return nil
+	return nil, nil
 }
 
 func coreFieldType(source *ast.Field) *ast.Type {
