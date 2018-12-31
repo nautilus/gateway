@@ -108,14 +108,14 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	assert.Equal(t, "String!", field.Definition.Type.Dump())
 
 	// we also should have asked for the friends object
-	field, ok = rootField.SelectionSet[1].(*ast.Field)
+	friendsField, ok := rootField.SelectionSet[1].(*ast.Field)
 	if !ok {
-		t.Error("Did not get a field out of the allUsers selection")
+		t.Error("Did not get a friends field out of the allUsers selection")
 	}
 	// and from all users we need to ask for their firstName
-	assert.Equal(t, "friends", field.Name)
+	assert.Equal(t, "friends", friendsField.Name)
 	// look at the selection we've made of friends
-	subField, ok := field.SelectionSet[0].(*ast.Field)
+	subField, ok := friendsField.SelectionSet[0].(*ast.Field)
 	if !ok {
 		t.Error("Did not get a field out of the allUsers selection")
 	}
