@@ -67,6 +67,7 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 			SelectionSet:   ast.SelectionSet{},
 			InsertLocation: "",
 			DependsOn:      nil,
+			ParentType:     "Query",
 		})
 
 		for _, selection := range applyDirectives(operation.SelectionSet) {
@@ -87,7 +88,6 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 			if selection != nil {
 				plan.Steps[0].SelectionSet = append(plan.Steps[0].SelectionSet, selection)
 			}
-
 		}
 
 	}

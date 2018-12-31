@@ -189,15 +189,22 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// there are 2 steps of a single plan that we care about
 	// the first step is grabbing allUsers and their firstName
 	// the second step is grabbing User catPhotos
+	if len(plans[0].Steps) != 2 {
+		t.Errorf("Encountered incorrect number of plans: %v", len(plans[0].Steps))
+		return
+	}
 
 	// the first step should have all users
 	firstStep := plans[0].Steps[0]
+	// make sure we are grabbing values off of Query since its the root
+	assert.Equal(t, "Query", firstStep.ParentType)
+
 	firstField := applyDirectives(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
 	assert.Equal(t, userLocation, firstStep.URL)
 
 	// make sure it is for allUsers
-	assert.Equal(t, firstField.Name, "allUsers")
+	assert.Equal(t, "allUsers", firstField.Name)
 
 	// all users should have only one selected value since `catPhotos` is from another service
 	if len(firstField.SelectionSet) > 1 {
@@ -217,6 +224,30 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, "firstName", field.Name)
 	assert.Equal(t, "String!", field.Definition.Type.Dump())
 
+	// the second step should be to ask for the
+	secondStep := plans[0].Steps[1]
+
+	// make sure we are grabbing values off of User since we asked for User.catPhotos
+	assert.Equal(t, "User", secondStep.ParentType)
+	// we should be going to the catePhoto servie
+	assert.Equal(t, catLocation, secondStep.URL)
+	// we should only want one field selected
+	if len(secondStep.SelectionSet) != 1 {
+		t.Error("Did not have the right number of subfields of User.catPhotos")
+		return
+	}
+
+	// make sure we selected the catPhotos field
+	selectedSecondField := applyDirectives(secondStep.SelectionSet)[0]
+	assert.Equal(t, "catPhotos", selectedSecondField.Name)
+
+	// we should have also asked for one field underneath
+	secondSubSelection := applyDirectives(selectedSecondField.SelectionSet)
+	if len(secondSubSelection) != 1 {
+		t.Error("Encountered the incorrect number of fields selected under User.catPhotos")
+	}
+	secondSubSelectionField := secondSubSelection[0]
+	assert.Equal(t, "URL", secondSubSelectionField.Name)
 }
 
 // func TestPlanQuery_multipleRootFields(t *testing.T) {
