@@ -11,7 +11,7 @@ type schemaTableRow struct {
 	query    string
 }
 
-func TestSchema_computeFieldLocations(t *testing.T) {
+func TestSchema_computeFieldURLs(t *testing.T) {
 	schemas := []schemaTableRow{
 		{
 			"url1",
@@ -44,23 +44,23 @@ func TestSchema_computeFieldLocations(t *testing.T) {
 		schema, _ := loadSchema(source.query)
 
 		// add the schema to list of sources
-		sources = append(sources, RemoteSchema{Schema: schema, Location: source.location})
+		sources = append(sources, RemoteSchema{Schema: schema, URL: source.location})
 	}
 
-	locations, err := fieldLocations(sources)
+	locations, err := fieldURLs(sources)
 	if err != nil {
 		t.Errorf("Encountered error building schema: %s", err.Error())
 	}
 
-	allUsersLocation, err := locations.LocationFor("Query", "allUsers")
+	allUsersURL, err := locations.URLFor("Query", "allUsers")
 	assert.Nil(t, err)
-	assert.Equal(t, []string{"url1"}, allUsersLocation)
+	assert.Equal(t, []string{"url1"}, allUsersURL)
 
-	lastNameLocation, err := locations.LocationFor("User", "lastName")
+	lastNameURL, err := locations.URLFor("User", "lastName")
 	assert.Nil(t, err)
-	assert.Equal(t, []string{"url1", "url2"}, lastNameLocation)
+	assert.Equal(t, []string{"url1", "url2"}, lastNameURL)
 
-	firstNameLocation, err := locations.LocationFor("User", "firstName")
+	firstNameURL, err := locations.URLFor("User", "firstName")
 	assert.Nil(t, err)
-	assert.Equal(t, []string{"url1"}, firstNameLocation)
+	assert.Equal(t, []string{"url1"}, firstNameURL)
 }

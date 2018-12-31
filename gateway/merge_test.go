@@ -29,8 +29,8 @@ func TestMergeSchema_fields(t *testing.T) {
 
 	// merge the schemas together
 	schema, err := NewSchema([]RemoteSchema{
-		{Schema: schema1, Location: "url1"},
-		{Schema: schema2, Location: "url2"},
+		{Schema: schema1, URL: "url1"},
+		{Schema: schema2, URL: "url2"},
 	})
 	// make sure nothing went wrong
 	assert.Nil(t, err)
@@ -90,8 +90,8 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 
 	// merge the schemas together
 	_, err = NewSchema([]RemoteSchema{
-		{Schema: schema1, Location: "url1"},
-		{Schema: schema2, Location: "url2"},
+		{Schema: schema1, URL: "url1"},
+		{Schema: schema2, URL: "url2"},
 	})
 	// make sure nothing went wrong
 	if err == nil {

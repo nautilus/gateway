@@ -15,19 +15,19 @@ type Schema struct {
 	Planner QueryPlanner
 
 	// the urls we have to visit to access certain fields
-	fieldLocations FieldLocationMap
+	fieldURLs FieldURLMap
 }
 
 // RemoteSchema encapsulates a particular schema that can be executed by sending network requests to the
 // specified URL.
 type RemoteSchema struct {
-	Schema   *ast.Schema
-	Location string
+	Schema *ast.Schema
+	URL    string
 }
 
 // Plan returns the query plan for the incoming query
-func (s *Schema) Plan(query string) (*QueryPlan, error) {
-	return s.Planner.Plan(query, s.fieldLocations)
+func (s *Schema) Plan(query string) ([]*QueryPlan, error) {
+	return s.Planner.Plan(query, s.Schema, s.fieldURLs)
 }
 
 // NewSchema instantiates a new schema with the required stuffs.
@@ -46,7 +46,7 @@ func NewSchema(sources []RemoteSchema) (*Schema, error) {
 	}
 
 	// compute the locations for each field
-	locations, err := fieldLocations(sources)
+	locations, err := fieldURLs(sources)
 	if err != nil {
 		// if something went wrong during the merge, return the result
 		return nil, err
@@ -59,22 +59,22 @@ func NewSchema(sources []RemoteSchema) (*Schema, error) {
 		Planner: &NaiveQueryPlanner{},
 
 		// internal fields
-		fieldLocations: locations,
+		fieldURLs: locations,
 	}, nil
 }
 
-func fieldLocations(schemas []RemoteSchema) (FieldLocationMap, error) {
+func fieldURLs(schemas []RemoteSchema) (FieldURLMap, error) {
 	// build the mapping of fields to urls
-	locations := FieldLocationMap{}
+	locations := FieldURLMap{}
 
 	// every schema we were given could define types
 	for _, remoteSchema := range schemas {
-		// each type defined by the schema can be found at remoteSchema.Location
+		// each type defined by the schema can be found at remoteSchema.URL
 		for name, typeDef := range remoteSchema.Schema.Types {
 			// each field of each type can be found here
 			for _, fieldDef := range typeDef.Fields {
 				// register the location for the field
-				locations.RegisterLocation(name, fieldDef.Name, remoteSchema.Location)
+				locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
 			}
 		}
 	}
@@ -83,11 +83,11 @@ func fieldLocations(schemas []RemoteSchema) (FieldLocationMap, error) {
 	return locations, nil
 }
 
-// FieldLocationMap holds the intformation for retrieving the valid locations one can find the value for the field
-type FieldLocationMap map[string][]string
+// FieldURLMap holds the intformation for retrieving the valid locations one can find the value for the field
+type FieldURLMap map[string][]string
 
-// LocationFor returns the list of locations one can find parent.field.
-func (m FieldLocationMap) LocationFor(parent string, field string) ([]string, error) {
+// URLFor returns the list of locations one can find parent.field.
+func (m FieldURLMap) URLFor(parent string, field string) ([]string, error) {
 	// compute the key for the field
 	key := m.keyFor(parent, field)
 
@@ -96,15 +96,15 @@ func (m FieldLocationMap) LocationFor(parent string, field string) ([]string, er
 
 	// if it doesn't exist
 	if !exists {
-		return []string{}, fmt.Errorf("Could not find location for key %s", key)
+		return []string{}, fmt.Errorf("Could not find location for %s", key)
 	}
 
 	// return the value to the caller
 	return value, nil
 }
 
-// RegisterLocation adds a new location to the list of possible places to find the value for parent.field
-func (m FieldLocationMap) RegisterLocation(parent string, field string, location string) {
+// RegisterURL adds a new location to the list of possible places to find the value for parent.field
+func (m FieldURLMap) RegisterURL(parent string, field string, location string) {
 	// compute the key for the field
 	key := m.keyFor(parent, field)
 
@@ -121,6 +121,6 @@ func (m FieldLocationMap) RegisterLocation(parent string, field string, location
 	}
 }
 
-func (m FieldLocationMap) keyFor(parent string, field string) string {
+func (m FieldURLMap) keyFor(parent string, field string) string {
 	return fmt.Sprintf("%s.%s", parent, field)
 }
