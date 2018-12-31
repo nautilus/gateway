@@ -85,6 +85,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 						selectionNames = append(selectionNames, selection.Name)
 					}
 					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery [%v] @ %v \n", step.ParentType, strings.Join(selectionNames, ","), step.URL))
+
 					// add it to the list of steps
 					plan.Steps = append(plan.Steps, step)
 
@@ -93,9 +94,9 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 					// for each field in the
 					for _, selectedField := range applyDirectives(step.SelectionSet) {
+						log.Debug("extracting selection", selectedField.Name)
 						// we are going to start walking down the operations selectedField set and let
 						// the steps of the walk add any necessary selectedFields
-						log.Debug("extracting selection", selectedField.Name)
 						newSelection, err := extractSelection(&extractSelectionConfig{
 							stepCh:         stepCh,
 							stepWg:         stepWg,
@@ -120,13 +121,13 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					// assign the new selection set
 					step.SelectionSet = selectionSet
 
+					// we're done processing this step
+					stepWg.Done()
+
 					log.Debug("Step selection set:")
 					for _, selection := range applyDirectives(step.SelectionSet) {
 						log.Debug(selection.Name)
 					}
-					log.Debug("     ")
-					// we're done processing this step
-					stepWg.Done()
 				}
 			}
 		}(stepCh)
@@ -157,9 +158,13 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		select {
 		// we are done
 		case <-doneCh:
+			close(errCh)
+			close(doneCh)
 			continue
 		// there was an error
 		case err := <-errCh:
+			close(errCh)
+			close(doneCh)
 			// bubble the error up
 			return nil, err
 		}

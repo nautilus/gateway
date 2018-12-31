@@ -12,6 +12,11 @@ func (l *Logger) Debug(args ...interface{}) {
 	logrus.Debug(args...)
 }
 
+// Warn should be used for logging that needs attention
+func (l *Logger) Warn(args ...interface{}) {
+	logrus.Warn(args...)
+}
+
 var log *Logger
 
 func init() {
@@ -21,5 +26,9 @@ func init() {
 	logrus.SetLevel(logrus.WarnLevel)
 
 	// configure the formatter
-	logrus.SetFormatter(&logrus.TextFormatter{DisableTimestamp: true, ForceColors: true, DisableLevelTruncation: true})
+	logrus.SetFormatter(&logrus.TextFormatter{
+		DisableTimestamp:       true,
+		ForceColors:            true,
+		DisableLevelTruncation: true,
+	})
 }
