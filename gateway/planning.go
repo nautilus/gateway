@@ -1,8 +1,6 @@
 package gateway
 
 import (
-	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/vektah/gqlparser"
@@ -84,15 +82,18 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					for _, selection := range applyDirectives(step.SelectionSet) {
 						selectionNames = append(selectionNames, selection.Name)
 					}
-					fmt.Printf("Encountered new step: %v with subquery [%v] @ %v \n", step.ParentType, strings.Join(selectionNames, ","), step.URL)
+					// fmt.Printf("Encountered new step: %v with subquery [%v] @ %v \n", step.ParentType, strings.Join(selectionNames, ","), step.URL)
 					// add it to the list of steps
 					plan.Steps = append(plan.Steps, step)
+
+					// the list of root selection steps
+					selectionSet := ast.SelectionSet{}
 
 					// for each field in the
 					for _, selectedField := range applyDirectives(step.SelectionSet) {
 						// we are going to start walking down the operations selectedField set and let
 						// the steps of the walk add any necessary selectedFields
-						fmt.Println("extracting selection", selectedField.Name)
+						// fmt.Println("extracting selection", selectedField.Name)
 						newSelection, err := extractSelection(&extractSelectionConfig{
 							stepCh:         stepCh,
 							stepWg:         stepWg,
@@ -110,15 +111,18 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 						if newSelection != nil {
 							// we have a selection set from one of the root operation fields in the same location
 							// so add it to the query we are sending to the service
-							step.SelectionSet = append(plan.Steps[0].SelectionSet, newSelection)
+							selectionSet = append(selectionSet, newSelection)
 						}
 					}
 
-					fmt.Println("Step selection set:")
-					for _, selection := range applyDirectives(step.SelectionSet) {
-						fmt.Println(selection.Name)
-					}
-					fmt.Println("     ")
+					// assign the new selection set
+					step.SelectionSet = selectionSet
+
+					// fmt.Println("Step selection set:")
+					// for _, selection := range applyDirectives(step.SelectionSet) {
+					// fmt.Println(selection.Name)
+					// }
+					// fmt.Println("     ")
 					// we're done processing this step
 					stepWg.Done()
 				}
@@ -187,14 +191,14 @@ func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 	// get the current type we are resolving
 	currentType := coreFieldType(config.field).Name()
 
-	fmt.Println("-----")
-	fmt.Println("Looking at", config.field.Name)
+	// fmt.Println("-----")
+	// fmt.Println("Looking at", config.field.Name)
 	// if the location of this targetField is the same as its parent
 	if config.parentLocation == currentLocation {
-		fmt.Println("same service")
+		// fmt.Println("same service")
 		// if the targetField has subtargetFields and it cannot be added naively to the parent
 		if len(config.field.SelectionSet) > 0 {
-			fmt.Println("found a thing with a selection")
+			// fmt.Println("found a thing with a selection")
 			// we are going to redefine this fields selection set
 			newSelection := ast.SelectionSet{}
 
@@ -220,12 +224,12 @@ func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 				}
 			}
 
-			fmt.Printf("final selection for %s.%s: %v\n", config.parentType, config.field.Name, newSelection)
+			// fmt.Printf("final selection for %s.%s: %v\n", config.parentType, config.field.Name, newSelection)
 
 			// overwrite the selection set for this selection
 			config.field.SelectionSet = newSelection
 		} else {
-			fmt.Println("found a scalar")
+			// fmt.Println("found a scalar")
 		}
 
 		// we should include this field regardless
@@ -236,7 +240,7 @@ func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 
 	// since we're adding another step we need to track at least one more execution
 	config.stepWg.Add(1)
-	fmt.Printf("Adding the new step to resolve %s.%s\n", config.parentType, config.field.Name)
+	// fmt.Printf("Adding the new step to resolve %s.%s\n", config.parentType, config.field.Name)
 
 	// add the new step
 	config.stepCh <- &QueryPlanStep{

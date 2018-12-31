@@ -37,12 +37,17 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 
 	// the first selection is the only one we care about
 	root := plans[0].Steps[0]
+	// there should only be one selection
+	if len(root.SelectionSet) != 1 {
+		t.Error("encounted the wrong number of selection sets under root step")
+		return
+	}
 	rootField := applyDirectives(root.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
 	assert.Equal(t, location, root.URL)
 
-	// we need to be asking for allUsers
+	// we need to be asking for Query.foo
 	assert.Equal(t, rootField.Name, "foo")
 
 	// there should be anything selected underneath it
@@ -157,6 +162,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 
 		type CatPhoto {
 			URL: String!
+			owner: User!
 		}
 
 		type Query {
@@ -176,6 +182,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	locations.RegisterURL("User", "firstName", userLocation)
 	locations.RegisterURL("User", "catPhotos", catLocation)
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
+	locations.RegisterURL("CatPhoto", "owner", userLocation)
 
 	plans, err := (&NaiveQueryPlanner{}).Plan(`
 		{
@@ -183,6 +190,9 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 				firstName
 				catPhotos {
 					URL
+					owner {
+						firstName
+					}
 				}
 			}
 		}
@@ -194,10 +204,12 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 		return
 	}
 
-	// there are 2 steps of a single plan that we care about
+	// there are 3 steps of a single plan that we care about
 	// the first step is grabbing allUsers and their firstName
 	// the second step is grabbing User catPhotos
-	if len(plans[0].Steps) != 2 {
+	// the third step is grabb CatPhoto.owner.firstName from the user service
+
+	if len(plans[0].Steps) != 3 {
 		t.Errorf("Encountered incorrect number of steps: %v", len(plans[0].Steps))
 		return
 	}
@@ -232,7 +244,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, "firstName", field.Name)
 	assert.Equal(t, "String!", field.Definition.Type.Dump())
 
-	// the second step should be to ask for the
+	// the second step should be to ask for the cat photo fields
 	secondStep := plans[0].Steps[1]
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
@@ -242,11 +254,6 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// we should only want one field selected
 	if len(secondStep.SelectionSet) != 1 {
 		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(secondStep.SelectionSet))
-		fmt.Println("--------------")
-		fmt.Println("Selection set for User.catPhotos")
-		for _, selection := range applyDirectives(secondStep.SelectionSet) {
-			fmt.Println(selection.Name)
-		}
 		return
 	}
 
@@ -261,6 +268,31 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 	secondSubSelectionField := secondSubSelection[0]
 	assert.Equal(t, "URL", secondSubSelectionField.Name)
+
+	// the third step should be to ask for the User.firstName
+	thirdStep := plans[0].Steps[2]
+
+	// make sure we are grabbing values off of User since we asked for User.catPhotos
+	assert.Equal(t, "CatPhoto", thirdStep.ParentType)
+	// we should be going to the catePhoto servie
+	assert.Equal(t, userLocation, thirdStep.URL)
+	// we should only want one field selected
+	if len(thirdStep.SelectionSet) != 1 {
+		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(thirdStep.SelectionSet))
+		return
+	}
+
+	// make sure we selected the catPhotos field
+	selectedThirdField := applyDirectives(thirdStep.SelectionSet)[0]
+	assert.Equal(t, "owner", selectedThirdField.Name)
+
+	// we should have also asked for one field underneath
+	thirdSubSelection := applyDirectives(selectedThirdField.SelectionSet)
+	if len(thirdSubSelection) != 1 {
+		t.Error("Encountered the incorrect number of fields selected under User.catPhotos")
+	}
+	thirdSubSelectionField := thirdSubSelection[0]
+	assert.Equal(t, "firstName", thirdSubSelectionField.Name)
 }
 
 // func TestPlanQuery_multipleRootFields(t *testing.T) {
