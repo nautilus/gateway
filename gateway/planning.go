@@ -1,8 +1,6 @@
 package gateway
 
 import (
-	"fmt"
-
 	"github.com/vektah/gqlparser"
 	"github.com/vektah/gqlparser/ast"
 )
@@ -115,8 +113,6 @@ func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 
 	// grab the current one
 	currentLocation := possibleLocations[0]
-
-	fmt.Println("looking at", config.parentType, config.field.Name)
 
 	// get the current type we are resolving
 	currentType := coreFieldType(config.field).Name()
