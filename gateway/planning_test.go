@@ -168,7 +168,6 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 		type Query {
 			allUsers: [User!]!
 		}
-
 	`)
 
 	// the location of the user service
@@ -205,9 +204,9 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 
 	// there are 3 steps of a single plan that we care about
-	// the first step is grabbing allUsers and their firstName
-	// the second step is grabbing User catPhotos
-	// the third step is grabb CatPhoto.owner.firstName from the user service
+	// the first step is grabbing allUsers and their firstName from the user service
+	// the second step is grabbing User catPhotos from the cat service
+	// the third step is grabb CatPhoto.owner.firstName from the user service from the user service
 
 	if len(plans[0].Steps) != 3 {
 		t.Errorf("Encountered incorrect number of steps: %v", len(plans[0].Steps))
@@ -244,7 +243,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, "firstName", field.Name)
 	assert.Equal(t, "String!", field.Definition.Type.Dump())
 
-	// the second step should be to ask for the cat photo fields
+	// the second step should ask for the cat photo fields
 	secondStep := plans[0].Steps[1]
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
@@ -269,7 +268,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	secondSubSelectionField := secondSubSelection[0]
 	assert.Equal(t, "URL", secondSubSelectionField.Name)
 
-	// the third step should be to ask for the User.firstName
+	// the third step should ask for the User.firstName
 	thirdStep := plans[0].Steps[2]
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
