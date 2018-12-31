@@ -3,6 +3,8 @@ sudo: required
 
 # setup language
 language: go
+go:
+  - "1.11"
 go_import_path: github.com/alecaivazis/graphql-gateway
 
 # install task runner
