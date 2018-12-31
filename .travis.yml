@@ -1,0 +1,13 @@
+# system setup
+sudo: required
+
+# setup language
+language: go
+go:
+  - "1.11"
+
+install:
+  - go get github.com/alecaivazis/graphql-gateway/...
+
+script:
+  - go test ./...
