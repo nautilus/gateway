@@ -77,6 +77,9 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 				firstName
 				friends {
 					firstName
+					friends {
+						firstName
+					}
 				}
 			}
 		}
@@ -115,11 +118,26 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	// and from all users we need to ask for their firstName
 	assert.Equal(t, "friends", friendsField.Name)
 	// look at the selection we've made of friends
-	subField, ok := friendsField.SelectionSet[0].(*ast.Field)
+	firstNameField, ok := friendsField.SelectionSet[0].(*ast.Field)
 	if !ok {
 		t.Error("Did not get a field out of the allUsers selection")
 	}
-	assert.Equal(t, "firstName", subField.Name)
+	assert.Equal(t, "firstName", firstNameField.Name)
+
+	// there should be a second field for friends
+	friendsInnerField, ok := friendsField.SelectionSet[1].(*ast.Field)
+	if !ok {
+		t.Error("Did not get an  inner friends out of the allUsers selection")
+	}
+	assert.Equal(t, "friends", friendsInnerField.Name)
+
+	// and a field below it for their firstName
+	firstNameInnerField, ok := friendsInnerField.SelectionSet[0].(*ast.Field)
+	if !ok {
+		t.Error("Did not get an  inner firstName out of the allUsers selection")
+	}
+	assert.Equal(t, "firstName", firstNameInnerField.Name)
+
 }
 
 func TestPlanQuery_subGraphs(t *testing.T) {
