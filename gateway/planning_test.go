@@ -93,6 +93,13 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 
 	// the first selection is the only one we care about
 	rootStep := selections[0].Steps[0]
+
+	// there should only be one selection
+	if len(rootStep.SelectionSet) != 1 {
+		t.Error("encounted the wrong number of selection sets under root step")
+		return
+	}
+
 	rootField := applyDirectives(rootStep.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
@@ -105,6 +112,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	field, ok := rootField.SelectionSet[0].(*ast.Field)
 	if !ok {
 		t.Error("Did not get a field out of the allUsers selection")
+		return
 	}
 	// and from all users we need to ask for their firstName
 	assert.Equal(t, "firstName", field.Name)
@@ -233,7 +241,12 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, catLocation, secondStep.URL)
 	// we should only want one field selected
 	if len(secondStep.SelectionSet) != 1 {
-		t.Error("Did not have the right number of subfields of User.catPhotos")
+		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(secondStep.SelectionSet))
+		fmt.Println("--------------")
+		fmt.Println("Selection set for User.catPhotos")
+		for _, selection := range applyDirectives(secondStep.SelectionSet) {
+			fmt.Println(selection.Name)
+		}
 		return
 	}
 
