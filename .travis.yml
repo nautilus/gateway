@@ -1,0 +1,16 @@
+# system setup
+sudo: required
+
+# setup language
+language: go
+go_import_path: github.com/alecaivazis/graphql-gateway
+
+# install task runner
+before_install:
+  - go get github.com/AlecAivazis/run
+
+install:
+  - go get ./...
+
+script:
+  - go test ./...
