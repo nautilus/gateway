@@ -32,8 +32,9 @@ var log *Logger
 func init() {
 	log = &Logger{}
 
-	// Only log the warning severity or above.
-	logrus.SetLevel(logrus.DebugLevel)
+	// only log the warning severity or above.
+	logrus.SetLevel(logrus.WarnLevel)
 
-	logrus.SetFormatter(&logrus.TextFormatter{DisableTimestamp: true})
+	// configure the formatter
+	logrus.SetFormatter(&logrus.TextFormatter{DisableTimestamp: true, ForceColors: true, DisableLevelTruncation: true})
 }
