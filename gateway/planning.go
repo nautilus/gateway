@@ -28,11 +28,11 @@ type QueryPlanner interface {
 	Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error)
 }
 
-// NaiveQueryPlanner does the most basic level of query planning
-type NaiveQueryPlanner struct{}
+// MinQueriesPlanner does the most basic level of query planning
+type MinQueriesPlanner struct{}
 
 // Plan computes the nested selections that will need to be performed
-func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
 	// the first thing to do is to parse the query
 	parsedQuery, err := gqlparser.LoadQuery(schema, query)
 	if err != nil {

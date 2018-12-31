@@ -23,7 +23,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	plans, err := (&NaiveQueryPlanner{}).Plan(`
+	plans, err := (&MinQueriesPlanner{}).Plan(`
 		{
 			foo
 		}
@@ -76,7 +76,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	selections, err := (&NaiveQueryPlanner{}).Plan(`
+	selections, err := (&MinQueriesPlanner{}).Plan(`
 		{
 			allUsers {
 				firstName
@@ -183,7 +183,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
 	locations.RegisterURL("CatPhoto", "owner", userLocation)
 
-	plans, err := (&NaiveQueryPlanner{}).Plan(`
+	plans, err := (&MinQueriesPlanner{}).Plan(`
 		{
 			allUsers {
 				firstName
