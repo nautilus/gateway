@@ -1,4 +1,6 @@
 # graphql-gateway
+[![Build Status](https://travis-ci.com/AlecAivazis/graphql-gateway.svg?branch=master)](https://travis-ci.com/AlecAivazis/graphql-gateway)
+
 An api gateway for graphql services
 
 # Motivation
