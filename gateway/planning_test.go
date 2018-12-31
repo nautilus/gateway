@@ -190,7 +190,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// the first step is grabbing allUsers and their firstName
 	// the second step is grabbing User catPhotos
 	if len(plans[0].Steps) != 2 {
-		t.Errorf("Encountered incorrect number of plans: %v", len(plans[0].Steps))
+		t.Errorf("Encountered incorrect number of steps: %v", len(plans[0].Steps))
 		return
 	}
 
