@@ -11,7 +11,8 @@ import (
 
 // QueryPlanStep represents a step in the plan required to fulfill a query.
 type QueryPlanStep struct {
-	URL          string
+	url          string
+	Queryer      Queryer
 	ParentType   string
 	SelectionSet ast.SelectionSet
 }
@@ -28,8 +29,29 @@ type QueryPlanner interface {
 	Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error)
 }
 
+// Planner is meant to be embedded in other QueryPlanners to share configuration
+type Planner struct {
+	QueryerFactory func(url string) Queryer
+}
+
+// GetQueryer returns the queryer that should be used to resolve the plan
+func (p *Planner) GetQueryer(url string) Queryer {
+	// if there is a queryer factory defined
+	if p.QueryerFactory != nil {
+		// use the factory
+		return p.QueryerFactory(url)
+	}
+
+	// otherwise return the network queryer
+	return &NetworkQueryer{
+		URL: url,
+	}
+}
+
 // MinQueriesPlanner does the most basic level of query planning
-type MinQueriesPlanner struct{}
+type MinQueriesPlanner struct {
+	Planner
+}
 
 // Plan computes the nested selections that will need to be performed
 func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
@@ -85,7 +107,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					for _, selection := range applyDirectives(step.SelectionSet) {
 						selectionNames = append(selectionNames, selection.Name)
 					}
-					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery [%v] @ %v \n", step.ParentType, strings.Join(selectionNames, ","), step.URL))
+					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery [%v] @ %v \n", step.ParentType, strings.Join(selectionNames, ","), step.url))
 
 					// add it to the list of steps
 					plan.Steps = append(plan.Steps, step)
@@ -98,11 +120,11 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 						log.Debug("extracting selection", selectedField.Name)
 						// we are going to start walking down the operations selectedField set and let
 						// the steps of the walk add any necessary selectedFields
-						newSelection, err := extractSelection(&extractSelectionConfig{
+						newSelection, err := p.extractSelection(&extractSelectionConfig{
 							stepCh:         stepCh,
 							stepWg:         stepWg,
 							locations:      locations,
-							parentLocation: step.URL,
+							parentLocation: step.url,
 							parentType:     step.ParentType,
 							field:          selectedField,
 						})
@@ -136,9 +158,10 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// we are garunteed at least one query
 		stepWg.Add(1)
 		stepCh <- &QueryPlanStep{
-			URL:          currentLocation,
+			Queryer:      p.GetQueryer(currentLocation),
 			SelectionSet: operation.SelectionSet,
 			ParentType:   "Query",
+			url:          currentLocation,
 		}
 
 		// there are 2 possible options:
@@ -175,16 +198,17 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 }
 
 type extractSelectionConfig struct {
-	stepCh         chan *QueryPlanStep
-	errCh          chan error
-	stepWg         *sync.WaitGroup
+	stepCh chan *QueryPlanStep
+	errCh  chan error
+	stepWg *sync.WaitGroup
+
 	locations      FieldURLMap
 	parentLocation string
 	parentType     string
 	field          *ast.Field
 }
 
-func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
+func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 	// look up the current location
 	possibleLocations, err := config.locations.URLFor(config.parentType, config.field.Name)
 	if err != nil {
@@ -211,7 +235,7 @@ func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 			// get the list of fields underneath the taret field
 			for _, selection := range applyDirectives(config.field.SelectionSet) {
 				// add any possible selections provided by selections
-				subSelection, err := extractSelection(&extractSelectionConfig{
+				subSelection, err := p.extractSelection(&extractSelectionConfig{
 					stepCh:         config.stepCh,
 					stepWg:         config.stepWg,
 					locations:      config.locations,
@@ -250,9 +274,10 @@ func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 
 	// add the new step
 	config.stepCh <- &QueryPlanStep{
-		URL:          currentLocation,
+		Queryer:      p.GetQueryer(currentLocation),
 		ParentType:   config.parentType,
 		SelectionSet: ast.SelectionSet{config.field},
+		url:          currentLocation,
 	}
 	// we didn't encounter an error and shouldn't continue down this path
 	return nil, nil

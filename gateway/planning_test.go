@@ -45,7 +45,8 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	rootField := applyDirectives(root.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
-	assert.Equal(t, location, root.URL)
+	queryer := root.Queryer.(*NetworkQueryer)
+	assert.Equal(t, location, queryer.URL)
 
 	// we need to be asking for Query.foo
 	assert.Equal(t, rootField.Name, "foo")
@@ -108,7 +109,8 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	rootField := applyDirectives(rootStep.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
-	assert.Equal(t, location, rootStep.URL)
+	queryer := rootStep.Queryer.(*NetworkQueryer)
+	assert.Equal(t, location, queryer.URL)
 
 	// we need to be asking for allUsers
 	assert.Equal(t, rootField.Name, "allUsers")
@@ -220,7 +222,8 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 
 	firstField := applyDirectives(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
-	assert.Equal(t, userLocation, firstStep.URL)
+	queryer := firstStep.Queryer.(*NetworkQueryer)
+	assert.Equal(t, userLocation, queryer.URL)
 
 	// make sure it is for allUsers
 	assert.Equal(t, "allUsers", firstField.Name)
@@ -249,7 +252,8 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "User", secondStep.ParentType)
 	// we should be going to the catePhoto servie
-	assert.Equal(t, catLocation, secondStep.URL)
+	queryer = secondStep.Queryer.(*NetworkQueryer)
+	assert.Equal(t, catLocation, queryer.URL)
 	// we should only want one field selected
 	if len(secondStep.SelectionSet) != 1 {
 		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(secondStep.SelectionSet))
@@ -273,8 +277,9 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "CatPhoto", thirdStep.ParentType)
-	// we should be going to the catePhoto servie
-	assert.Equal(t, userLocation, thirdStep.URL)
+	// we should be going to the catePhoto service
+	queryer = thirdStep.Queryer.(*NetworkQueryer)
+	assert.Equal(t, userLocation, queryer.URL)
 	// we should only want one field selected
 	if len(thirdStep.SelectionSet) != 1 {
 		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(thirdStep.SelectionSet))

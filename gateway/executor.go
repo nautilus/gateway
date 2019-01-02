@@ -6,6 +6,10 @@ type Executor interface {
 	Execute(*QueryPlan) map[interface{}]interface{}
 }
 
+// Notes:
+// 	- Don't have to worry about aliases. The backend server will handle the renaming
+//	- Planner currently doesn't provide steps with multiple dependencies
+
 // SerialExecutor executes the query plan without worrying about which network requests
 // can be parallelized
 type SerialExecutor struct{}
