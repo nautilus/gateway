@@ -53,7 +53,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface
 			select {
 			// we have a new result
 			case payload := <-resultCh:
-				log.Debug("New result ", payload.InsertionPoint)
+				log.Debug("Recieved result for ", payload.InsertionPoint)
 
 				// if there is a deep insertion point
 				if len(payload.InsertionPoint) > 1 {
@@ -105,6 +105,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface
 							return
 						}
 
+						// use that value in the right spot
 						objMap[key] = realValue
 					}
 
@@ -159,6 +160,61 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface
 }
 
 func executeStep(step *QueryPlanStep, resultCh chan queryExecutionResult, errCh chan error, stepWg *sync.WaitGroup) {
+	// each selection set that is the parent of another query must ask for the id
+	for _, nextStep := range step.Then {
+		// the next query will go
+		path := nextStep.InsertionPoint[:len(nextStep.InsertionPoint)-1]
+
+		// the selection set we need to add `id` to
+		target := step.SelectionSet
+		var targetField *ast.Field
+
+		for i, point := range path {
+			// look for the selection with that name
+			for _, selection := range applyDirectives(target) {
+				// if we still have to walk down the selection but we found the right branch
+				if selection.Name == point && i != len(path)-1 {
+					target = selection.SelectionSet
+					targetField = selection
+					// stop looking because we have our selection set
+					break
+					// otherwise we could be at the target selection set
+				} else if selection.Name == point && i == len(path)-1 {
+					target = selection.SelectionSet
+					targetField = selection
+					break
+				}
+			}
+		}
+
+		// if we couldn't find the target
+		if target == nil {
+			errCh <- fmt.Errorf("Could not find field to add id to: %v", path)
+			return
+		}
+
+		// if the target does not currently ask for id we need to add it
+		addID := true
+		for _, selection := range applyDirectives(target) {
+			if selection.Name == "id" {
+				addID = false
+				break
+			}
+		}
+
+		// add the ID to the selection set if necessary
+		if addID {
+			target = append(target, &ast.Field{
+				Name: "id",
+			})
+		}
+
+		// make sure the selection set contains the id
+		targetField.SelectionSet = target
+	}
+
+	// log the query
+	log.QueryPlanStep(step)
 
 	// generate the query that we have to send for this step
 	query := buildQueryForExecution(step.ParentType, step.SelectionSet)

@@ -104,6 +104,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
+		return
 	}
 
 	// make sure we got the right values back
