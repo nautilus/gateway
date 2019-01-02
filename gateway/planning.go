@@ -13,6 +13,7 @@ import (
 type QueryPlanStep struct {
 	Queryer        Queryer
 	ParentType     string
+	ParentID       string
 	SelectionSet   ast.SelectionSet
 	InsertionPoint []string
 	Then           []*QueryPlanStep

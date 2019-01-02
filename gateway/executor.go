@@ -156,7 +156,6 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface
 		// we're done here
 		return result, nil
 	}
-
 }
 
 func executeStep(step *QueryPlanStep, resultCh chan queryExecutionResult, errCh chan error, stepWg *sync.WaitGroup) {
@@ -237,7 +236,6 @@ func executeStep(step *QueryPlanStep, resultCh chan queryExecutionResult, errCh 
 		stepWg.Add(1)
 		go executeStep(dependent, resultCh, errCh, stepWg)
 	}
-
 }
 
 func buildQueryForExecution(objectType string, selectionSet ast.SelectionSet) *ast.QueryDocument {
