@@ -9,7 +9,7 @@ type Queryer interface {
 
 // MockQueryer responds with pre-defined known values when executing a query
 type MockQueryer struct {
-	Values map[string]map[interface{}]interface{}
+	Value map[interface{}]interface{}
 }
 
 // Query looks up the name of the query in the map of responses and returns the value

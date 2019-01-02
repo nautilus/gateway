@@ -11,16 +11,23 @@ import (
 
 // QueryPlanStep represents a step in the plan required to fulfill a query.
 type QueryPlanStep struct {
-	url          string
 	Queryer      Queryer
 	ParentType   string
 	SelectionSet ast.SelectionSet
+	Then         []*QueryPlanStep
 }
 
 // QueryPlan is the full plan to resolve a particular query
 type QueryPlan struct {
-	Name  string
-	Steps []*QueryPlanStep
+	Operation string
+	RootStep  *QueryPlanStep
+}
+
+type newQueryPlanStepPayload struct {
+	ServiceName  string
+	SelectionSet ast.SelectionSet
+	ParentType   string
+	Parent       *QueryPlanStep
 }
 
 // QueryPlanner is responsible for taking a parsed graphql string, and returning the steps to
@@ -67,8 +74,8 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 	for _, operation := range parsedQuery.Operations {
 		// each operation results in a new query
 		plan := &QueryPlan{
-			Name:  operation.Name,
-			Steps: []*QueryPlanStep{},
+			Operation: operation.Name,
+			RootStep:  &QueryPlanStep{},
 		}
 
 		// add the plan to the top level list
@@ -86,7 +93,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		currentLocation := possibleLocations[0]
 
 		// a channel to register new steps
-		stepCh := make(chan *QueryPlanStep, 10)
+		stepCh := make(chan *newQueryPlanStepPayload, 10)
 
 		// a chan to get errors
 		errCh := make(chan error)
@@ -95,22 +102,44 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// a wait group to track the progress of goroutines
 		stepWg := &sync.WaitGroup{}
 
+		// we are garunteed at least one query
+		stepWg.Add(1)
+
+		// start a new step
+		stepCh <- &newQueryPlanStepPayload{
+			SelectionSet: operation.SelectionSet,
+			ParentType:   "Query",
+			ServiceName:  currentLocation,
+			Parent:       plan.RootStep,
+		}
+
 		// start waiting for steps to be added
 		// NOTE: i dont think this closure is necessary ¯\_(ツ)_/¯
-		go func(newSteps chan *QueryPlanStep) {
+		go func(newSteps chan *newQueryPlanStepPayload) {
 		SelectLoop:
 			// contineously drain the step channel
 			for {
 				select {
-				case step := <-newSteps:
+				case payload := <-newSteps:
+					step := &QueryPlanStep{
+						Queryer:      p.GetQueryer(payload.ServiceName),
+						ParentType:   payload.ParentType,
+						SelectionSet: payload.SelectionSet,
+					}
+
+					// if there is a parent to this query
+					if payload.Parent != nil {
+						log.Debug(fmt.Sprintf("Adding step as dependency"))
+						// add the new step to the Then of the parent
+						payload.Parent.Then = append(payload.Parent.Then, step)
+					}
+
+					// log some stuffs
 					selectionNames := []string{}
 					for _, selection := range applyDirectives(step.SelectionSet) {
 						selectionNames = append(selectionNames, selection.Name)
 					}
-					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery [%v] @ %v \n", step.ParentType, strings.Join(selectionNames, ","), step.url))
-
-					// add it to the list of steps
-					plan.Steps = append(plan.Steps, step)
+					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery [%v] @ %v \n", step.ParentType, strings.Join(selectionNames, ","), payload.ServiceName))
 
 					// the list of root selection steps
 					selectionSet := ast.SelectionSet{}
@@ -124,9 +153,10 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 							stepCh:         stepCh,
 							stepWg:         stepWg,
 							locations:      locations,
-							parentLocation: step.url,
+							parentLocation: payload.ServiceName,
 							parentType:     step.ParentType,
 							field:          selectedField,
+							step:           step,
 						})
 						if err != nil {
 							errCh <- err
@@ -154,15 +184,6 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 				}
 			}
 		}(stepCh)
-
-		// we are garunteed at least one query
-		stepWg.Add(1)
-		stepCh <- &QueryPlanStep{
-			Queryer:      p.GetQueryer(currentLocation),
-			SelectionSet: operation.SelectionSet,
-			ParentType:   "Query",
-			url:          currentLocation,
-		}
 
 		// there are 2 possible options:
 		// - either the wait group finishes
@@ -198,13 +219,14 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 }
 
 type extractSelectionConfig struct {
-	stepCh chan *QueryPlanStep
+	stepCh chan *newQueryPlanStepPayload
 	errCh  chan error
 	stepWg *sync.WaitGroup
 
 	locations      FieldURLMap
 	parentLocation string
 	parentType     string
+	step           *QueryPlanStep
 	field          *ast.Field
 }
 
@@ -238,6 +260,7 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 				subSelection, err := p.extractSelection(&extractSelectionConfig{
 					stepCh:         config.stepCh,
 					stepWg:         config.stepWg,
+					step:           config.step,
 					locations:      config.locations,
 					parentLocation: currentLocation,
 					parentType:     currentType,
@@ -273,11 +296,11 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 	log.Debug(fmt.Sprintf("Adding the new step to resolve %s.%s\n", config.parentType, config.field.Name))
 
 	// add the new step
-	config.stepCh <- &QueryPlanStep{
-		Queryer:      p.GetQueryer(currentLocation),
+	config.stepCh <- &newQueryPlanStepPayload{
+		ServiceName:  currentLocation,
 		ParentType:   config.parentType,
 		SelectionSet: ast.SelectionSet{config.field},
-		url:          currentLocation,
+		Parent:       config.step,
 	}
 	// we didn't encounter an error and shouldn't continue down this path
 	return nil, nil

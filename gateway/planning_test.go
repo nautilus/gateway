@@ -36,10 +36,10 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	}
 
 	// the first selection is the only one we care about
-	root := plans[0].Steps[0]
+	root := plans[0].RootStep.Then[0]
 	// there should only be one selection
 	if len(root.SelectionSet) != 1 {
-		t.Error("encounted the wrong number of selection sets under root step")
+		t.Error("encounted the wrong number of selections under root step")
 		return
 	}
 	rootField := applyDirectives(root.SelectionSet)[0]
@@ -98,11 +98,11 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	}
 
 	// the first selection is the only one we care about
-	rootStep := selections[0].Steps[0]
+	rootStep := selections[0].RootStep.Then[0]
 
 	// there should only be one selection
 	if len(rootStep.SelectionSet) != 1 {
-		t.Error("encounted the wrong number of selection sets under root step")
+		t.Error("encounted the wrong number of selections under root step")
 		return
 	}
 
@@ -210,16 +210,16 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// the second step is grabbing User catPhotos from the cat service
 	// the third step is grabb CatPhoto.owner.firstName from the user service from the user service
 
-	if len(plans[0].Steps) != 3 {
-		t.Errorf("Encountered incorrect number of steps: %v", len(plans[0].Steps))
-		return
-	}
-
 	// the first step should have all users
-	firstStep := plans[0].Steps[0]
+	firstStep := plans[0].RootStep.Then[0]
 	// make sure we are grabbing values off of Query since its the root
 	assert.Equal(t, "Query", firstStep.ParentType)
 
+	// make sure there's a selection set
+	if len(firstStep.SelectionSet) != 1 {
+		t.Error("first strep did not have a selection set")
+		return
+	}
 	firstField := applyDirectives(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
 	queryer := firstStep.Queryer.(*NetworkQueryer)
@@ -241,13 +241,18 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	field, ok := firstField.SelectionSet[0].(*ast.Field)
 	if !ok {
 		t.Error("Did not get a field out of the allUsers selection")
+		return
 	}
 	// and from all users we need to ask for their firstName
 	assert.Equal(t, "firstName", field.Name)
 	assert.Equal(t, "String!", field.Definition.Type.Dump())
 
 	// the second step should ask for the cat photo fields
-	secondStep := plans[0].Steps[1]
+	if len(firstStep.Then) != 1 {
+		t.Errorf("Encountered the wrong number of steps after the first one %v", len(firstStep.Then))
+		return
+	}
+	secondStep := firstStep.Then[0]
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "User", secondStep.ParentType)
@@ -273,7 +278,11 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, "URL", secondSubSelectionField.Name)
 
 	// the third step should ask for the User.firstName
-	thirdStep := plans[0].Steps[2]
+	if len(secondStep.Then) != 1 {
+		t.Errorf("Encountered the wrong number of steps after the second one %v", len(secondStep.Then))
+		return
+	}
+	thirdStep := secondStep.Then[0]
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "CatPhoto", thirdStep.ParentType)
