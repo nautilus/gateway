@@ -23,7 +23,7 @@ func init() {
 	log = &Logger{}
 
 	// only log the warning severity or above.
-	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetLevel(logrus.WarnLevel)
 
 	// configure the formatter
 	logrus.SetFormatter(&logrus.TextFormatter{

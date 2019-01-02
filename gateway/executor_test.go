@@ -73,8 +73,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 			// return a known value we can test against
 			Queryer: &MockQueryer{map[string]interface{}{
 				"user": map[string]interface{}{
-					"firstName": "Hello",
-					"id":        1,
+					"firstName": "hello",
 				},
 			}},
 			// then we have to ask for the users favorite cat photo and its url

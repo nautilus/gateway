@@ -19,6 +19,7 @@ type ParallelExecutor struct{}
 
 type queryExecutionResult struct {
 	InsertionPoint []string
+	ParentType     string
 	Result         map[string]interface{}
 }
 
@@ -48,7 +49,6 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface
 
 	// start a goroutine to add results to the list
 	go func() {
-	ResultLoop:
 		for {
 			select {
 			// we have a new result
@@ -77,14 +77,36 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface
 					// make sure its a real object
 					objMap, ok := obj.(map[string]interface{})
 					if !ok {
-						if !ok {
-							errCh <- fmt.Errorf("Could not find value to insert: %v", payload.InsertionPoint)
-							return
-						}
+						errCh <- fmt.Errorf("Could not find value to insert: %v", payload.InsertionPoint)
+						return
 					}
 
 					// assign the result of the query to the final result
 					objMap[key] = payload.Result
+
+					// if we are inserting something other than a top level query
+					if payload.ParentType != "Query" {
+						// look up the node field
+						nodeValue, ok := payload.Result["node"]
+						if !ok {
+							errCh <- fmt.Errorf("Could not find node")
+							return
+						}
+						nodeMap, ok := nodeValue.(map[string]interface{})
+						if !ok {
+							errCh <- fmt.Errorf("Could not find node")
+							return
+						}
+
+						// grab the field underneath node that we care about to do the stitching
+						realValue, ok := nodeMap[key]
+						if !ok {
+							errCh <- fmt.Errorf("Could not find %s field under node", key)
+							return
+						}
+
+						objMap[key] = realValue
+					}
 
 				} else {
 					// there isn't a deep insertion point so we can just merge the result with our accumulator
@@ -95,9 +117,6 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface
 
 				// one of the queries is done
 				stepWg.Done()
-
-				// we're done here
-				continue ResultLoop
 
 			// we're done
 			case <-closeCh:
@@ -154,6 +173,7 @@ func executeStep(step *QueryPlanStep, resultCh chan queryExecutionResult, errCh 
 	resultCh <- queryExecutionResult{
 		InsertionPoint: step.InsertionPoint,
 		Result:         queryResult,
+		ParentType:     step.ParentType,
 	}
 
 	// kick off any dependencies
