@@ -68,6 +68,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 		// a chan to get errors
 		errCh := make(chan error)
+		defer close(errCh)
 
 		// a wait group to track the progress of goroutines
 		stepWg := &sync.WaitGroup{}
@@ -145,8 +146,10 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// - we get a messsage over the error chan
 
 		// in order to wait for either, let's spawn a go routine
-		// that waits for us, and notifies us when its done
+		// that waits until all of the steps are built and notifies us when its done
 		doneCh := make(chan bool)
+		defer close(doneCh)
+
 		go func() {
 			// when the wait group is finished
 			stepWg.Wait()
@@ -158,13 +161,9 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		select {
 		// we are done
 		case <-doneCh:
-			close(errCh)
-			close(doneCh)
 			continue
 		// there was an error
 		case err := <-errCh:
-			close(errCh)
-			close(doneCh)
 			// bubble the error up
 			return nil, err
 		}
