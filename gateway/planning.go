@@ -11,10 +11,11 @@ import (
 
 // QueryPlanStep represents a step in the plan required to fulfill a query.
 type QueryPlanStep struct {
-	Queryer      Queryer
-	ParentType   string
-	SelectionSet ast.SelectionSet
-	Then         []*QueryPlanStep
+	Queryer        Queryer
+	ParentType     string
+	SelectionSet   ast.SelectionSet
+	InsertionPoint []string
+	Then           []*QueryPlanStep
 }
 
 // QueryPlan is the full plan to resolve a particular query
@@ -24,10 +25,11 @@ type QueryPlan struct {
 }
 
 type newQueryPlanStepPayload struct {
-	ServiceName  string
-	SelectionSet ast.SelectionSet
-	ParentType   string
-	Parent       *QueryPlanStep
+	ServiceName    string
+	SelectionSet   ast.SelectionSet
+	ParentType     string
+	Parent         *QueryPlanStep
+	InsertionPoint []string
 }
 
 // QueryPlanner is responsible for taking a parsed graphql string, and returning the steps to
@@ -107,10 +109,11 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 		// start a new step
 		stepCh <- &newQueryPlanStepPayload{
-			SelectionSet: operation.SelectionSet,
-			ParentType:   "Query",
-			ServiceName:  currentLocation,
-			Parent:       plan.RootStep,
+			SelectionSet:   operation.SelectionSet,
+			ParentType:     "Query",
+			ServiceName:    currentLocation,
+			Parent:         plan.RootStep,
+			InsertionPoint: []string{},
 		}
 
 		// start waiting for steps to be added
@@ -121,10 +124,12 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 			for {
 				select {
 				case payload := <-newSteps:
+
 					step := &QueryPlanStep{
-						Queryer:      p.GetQueryer(payload.ServiceName),
-						ParentType:   payload.ParentType,
-						SelectionSet: payload.SelectionSet,
+						Queryer:        p.GetQueryer(payload.ServiceName),
+						ParentType:     payload.ParentType,
+						SelectionSet:   payload.SelectionSet,
+						InsertionPoint: payload.InsertionPoint,
 					}
 
 					// if there is a parent to this query
@@ -139,14 +144,23 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					for _, selection := range applyDirectives(step.SelectionSet) {
 						selectionNames = append(selectionNames, selection.Name)
 					}
-					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery [%v] @ %v \n", step.ParentType, strings.Join(selectionNames, ","), payload.ServiceName))
+
+					log.Debug("")
+					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery (%v) @ %v \n", step.ParentType, strings.Join(selectionNames, ","), payload.InsertionPoint))
 
 					// the list of root selection steps
 					selectionSet := ast.SelectionSet{}
 
 					// for each field in the
 					for _, selectedField := range applyDirectives(step.SelectionSet) {
-						log.Debug("extracting selection", selectedField.Name)
+						log.Debug("extracting selection ", selectedField.Name)
+						// we always ignore the latest insertion point since we will add it to the list
+						// in the extracts
+						insertionPoint := []string{}
+						if len(payload.InsertionPoint) != 0 {
+							insertionPoint = payload.InsertionPoint[:len(payload.InsertionPoint)-1]
+						}
+
 						// we are going to start walking down the operations selectedField set and let
 						// the steps of the walk add any necessary selectedFields
 						newSelection, err := p.extractSelection(&extractSelectionConfig{
@@ -157,6 +171,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 							parentType:     step.ParentType,
 							field:          selectedField,
 							step:           step,
+							insertionPoint: insertionPoint,
 						})
 						if err != nil {
 							errCh <- err
@@ -228,6 +243,7 @@ type extractSelectionConfig struct {
 	parentType     string
 	step           *QueryPlanStep
 	field          *ast.Field
+	insertionPoint []string
 }
 
 func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
@@ -245,6 +261,14 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 
 	log.Debug("-----")
 	log.Debug("Looking at ", config.field.Name)
+
+	// the insertion point for this field is the previous one with the new field name
+	insertionPoint := make([]string, len(config.insertionPoint))
+	copy(insertionPoint, config.insertionPoint)
+	insertionPoint = append(insertionPoint, config.field.Name)
+
+	log.Debug(fmt.Sprintf("Insertion point: %v", insertionPoint))
+
 	// if the location of this targetField is the same as its parent
 	if config.parentLocation == currentLocation {
 		log.Debug("same service")
@@ -265,6 +289,7 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 					parentLocation: currentLocation,
 					parentType:     currentType,
 					field:          selection,
+					insertionPoint: insertionPoint,
 				})
 				if err != nil {
 					return nil, err
@@ -297,12 +322,13 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 
 	// add the new step
 	config.stepCh <- &newQueryPlanStepPayload{
-		ServiceName:  currentLocation,
-		ParentType:   config.parentType,
-		SelectionSet: ast.SelectionSet{config.field},
-		Parent:       config.step,
+		ServiceName:    currentLocation,
+		ParentType:     config.parentType,
+		SelectionSet:   ast.SelectionSet{config.field},
+		Parent:         config.step,
+		InsertionPoint: insertionPoint,
 	}
-	// we didn't encounter an error and shouldn't continue down this path
+	// we didn't encounter an error and dont have any fields to add
 	return nil, nil
 }
 

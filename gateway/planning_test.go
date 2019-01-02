@@ -253,6 +253,8 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 		return
 	}
 	secondStep := firstStep.Then[0]
+	// make sure we will insert the step in the right place
+	assert.Equal(t, []string{"allUsers", "catPhotos"}, secondStep.InsertionPoint)
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "User", secondStep.ParentType)
@@ -283,6 +285,8 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 		return
 	}
 	thirdStep := secondStep.Then[0]
+	// make sure we will insert the step in the right place
+	assert.Equal(t, []string{"allUsers", "catPhotos", "owner"}, thirdStep.InsertionPoint)
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "CatPhoto", thirdStep.ParentType)
@@ -307,6 +311,10 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	thirdSubSelectionField := thirdSubSelection[0]
 	assert.Equal(t, "firstName", thirdSubSelectionField.Name)
 }
+
+// func TestPlanQuery_insertionPointFragments(t *testing.T) {
+//
+// }
 
 // func TestPlanQuery_multipleRootFields(t *testing.T) {
 // 	t.Error("Not implemented")
