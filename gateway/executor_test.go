@@ -46,7 +46,6 @@ func TestExecutor_plansOfOne(t *testing.T) {
 }
 
 func TestExecutor_plansWithDependencies(t *testing.T) {
-	// t.Skip()
 	// the query we want to execute is
 	// {
 	// 		user {                   <- from serviceA
@@ -83,6 +82,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 			// return a known value we can test against
 			Queryer: &MockQueryer{JSONObject{
 				"user": JSONObject{
+					"id":        "1",
 					"firstName": "hello",
 				},
 			}},
@@ -126,6 +126,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	// make sure we got the right values back
 	assert.Equal(t, JSONObject{
 		"user": JSONObject{
+			"id":        "1",
 			"firstName": "hello",
 			"favoriteCatPhoto": JSONObject{
 				"url": "hello world",
@@ -135,7 +136,6 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 }
 
 func TestExecutor_insertIntoLists(t *testing.T) {
-	t.Skip()
 	// the query we want to execute is
 	// {
 	// 		users {                  	<- Query.services @ serviceA
@@ -168,7 +168,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 				&ast.Field{
 					Name: "users",
 					Definition: &ast.FieldDefinition{
-						Type: ast.NamedType("User", &ast.Position{}),
+						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 					},
 					SelectionSet: ast.SelectionSet{
 						&ast.Field{
@@ -245,6 +245,13 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 										Type: ast.NamedType("String", &ast.Position{}),
 									},
 								},
+								&ast.Field{
+									Name: "followers",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("User", &ast.Position{}),
+									},
+									SelectionSet: ast.SelectionSet{},
+								},
 							},
 						},
 					},
@@ -252,8 +259,15 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					// for testing we can just return a known value
 					Queryer: &MockQueryer{JSONObject{
 						"node": JSONObject{
-							"photoGallery": JSONObject{
-								"url": photoGalleryURL,
+							"photoGallery": []JSONObject{
+								{
+									"url": photoGalleryURL,
+									"followers": []JSONObject{
+										{
+											"id": "1",
+										},
+									},
+								},
 							},
 						},
 					}},
@@ -370,7 +384,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 	planInsertionPoint := []string{"users", "photoGallery", "likedBy", "firstName"}
 
 	// pretend we are in the middle of stitching a larger object
-	startingPoint := [][]string{{"users:0"}}
+	startingPoint := [][]string{}
 
 	// there are 6 total insertion points in this example
 	finalInsertionPoint := [][]string{
@@ -388,27 +402,35 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 	// the selection we're going to make
 	stepSelectionSet := ast.SelectionSet{
 		&ast.Field{
-			Name: "photoGallery",
+			Name: "users",
 			Definition: &ast.FieldDefinition{
-				Type: ast.ListType(ast.NamedType("Photo", &ast.Position{}), &ast.Position{}),
+				Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 			},
 			SelectionSet: ast.SelectionSet{
 				&ast.Field{
-					Name: "likedBy",
+					Name: "photoGallery",
 					Definition: &ast.FieldDefinition{
-						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+						Type: ast.ListType(ast.NamedType("Photo", &ast.Position{}), &ast.Position{}),
 					},
 					SelectionSet: ast.SelectionSet{
 						&ast.Field{
-							Name: "totalLikes",
+							Name: "likedBy",
 							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("Int", &ast.Position{}),
+								Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 							},
-						},
-						&ast.Field{
-							Name: "id",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("ID", &ast.Position{}),
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "totalLikes",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("Int", &ast.Position{}),
+									},
+								},
+								&ast.Field{
+									Name: "id",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("ID", &ast.Position{}),
+									},
+								},
 							},
 						},
 					},
@@ -419,50 +441,54 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 
 	// the result of the step
 	result := JSONObject{
-		"photoGallery": []JSONObject{
+		"users": []JSONObject{
 			{
-				"likedBy": []JSONObject{
+				"photoGallery": []JSONObject{
 					{
-						"totalLikes": 10,
-						"id":         "1",
+						"likedBy": []JSONObject{
+							{
+								"totalLikes": 10,
+								"id":         "1",
+							},
+							{
+								"totalLikes": 10,
+								"id":         "2",
+							},
+						},
 					},
 					{
-						"totalLikes": 10,
-						"id":         "2",
+						"likedBy": []JSONObject{
+							{
+								"totalLikes": 10,
+								"id":         "3",
+							},
+							{
+								"totalLikes": 10,
+								"id":         "4",
+							},
+							{
+								"totalLikes": 10,
+								"id":         "5",
+							},
+						},
+					},
+					{
+						"likedBy": []JSONObject{
+							{
+								"totalLikes": 10,
+								"id":         "6",
+							},
+						},
+					},
+					{
+						"likedBy": []JSONObject{},
 					},
 				},
-			},
-			{
-				"likedBy": []JSONObject{
-					{
-						"totalLikes": 10,
-						"id":         "3",
-					},
-					{
-						"totalLikes": 10,
-						"id":         "4",
-					},
-					{
-						"totalLikes": 10,
-						"id":         "5",
-					},
-				},
-			},
-			{
-				"likedBy": []JSONObject{
-					{
-						"totalLikes": 10,
-						"id":         "6",
-					},
-				},
-			},
-			{
-				"likedBy": []JSONObject{},
 			},
 		},
 	}
 
-	generatedPoint, err := findInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint)
+	generatedPoint, err := findInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -541,7 +567,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := findInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint)
+	generatedPoint, err := findInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
 	if err != nil {
 		t.Error(t, err)
 		return
