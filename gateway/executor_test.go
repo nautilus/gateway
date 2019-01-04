@@ -8,7 +8,6 @@ import (
 )
 
 func TestExecutor_plansOfOne(t *testing.T) {
-	t.Skip()
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
 		RootStep: &QueryPlanStep{
@@ -47,7 +46,7 @@ func TestExecutor_plansOfOne(t *testing.T) {
 }
 
 func TestExecutor_plansWithDependencies(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 	// the query we want to execute is
 	// {
 	// 		user {                   <- from serviceA

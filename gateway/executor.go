@@ -62,8 +62,8 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 				if len(payload.InsertionPoint) > 1 {
 					path := payload.InsertionPoint[:len(payload.InsertionPoint)-1]
 					key := payload.InsertionPoint[len(payload.InsertionPoint)-1]
+					fmt.Println(path, key)
 
-					return
 					// the object we are accessing
 					var obj interface{}
 
@@ -241,6 +241,7 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
 		// insertion point. For lists, insertion points look like: ["user", "friends:0", "catPhotos:0", "owner"]
 		for _, dependent := range step.Then {
+
 			insertPoints, err := findInsertionPoints(step.InsertionPoint, step.SelectionSet, queryResult, [][]string{step.InsertionPoint})
 			if err != nil {
 				errCh <- err
@@ -249,8 +250,8 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 			// this dependent needs to fire for every object that the insertion point references
 			for _, insertionPoint := range insertPoints {
 				fmt.Println(insertionPoint)
-				// stepWg.Add(1)
-				// go executeStep(dependent, dependent.InsertionPoint, resultCh, errCh, stepWg)
+				stepWg.Add(1)
+				go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
 			}
 
 			// look up the id of the object we are inserting into
