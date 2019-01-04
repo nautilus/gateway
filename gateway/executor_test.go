@@ -457,6 +457,9 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 					},
 				},
 			},
+			{
+				"likedBy": []JSONObject{},
+			},
 		},
 	}
 
@@ -547,4 +550,8 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 
 	assert.Equal(t, finalInsertionPoint, generatedPoint)
 
+}
+
+func TestFindInsertionPoint_handlesNullObjects(t *testing.T) {
+	t.Skip("Not yet implemented")
 }

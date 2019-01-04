@@ -57,7 +57,6 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 			select {
 			// we have a new result
 			case payload := <-resultCh:
-				log.Debug("Received result to be inserted at ", payload.InsertionPoint)
 
 				// if there is a deep insertion point
 				if len(payload.InsertionPoint) > 1 {
@@ -282,19 +281,14 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 	// a place to refer to parts of the results
 	resultChunk := result
 
-	log.Debug("Starting with ", oldBranch)
-
 	// if our starting point is []string{"users:0", "photoGallery"} then we know everything up until photoGallery
 	// is along the path of the steps insertion point
 	for pointI := len(oldBranch[0]); pointI < len(targetPoints); pointI++ {
 		// the point in the steps insertion path that we want to add
 		point := targetPoints[pointI]
 
-		log.Debug("Looking for ", point)
-
 		// if we are at the last field, just add it
 		if pointI == len(targetPoints)-1 {
-			log.Debug("Pushing final point on ends ", point)
 			for i, points := range oldBranch {
 				oldBranch[i] = append(points, point)
 			}
@@ -312,14 +306,11 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 						return nil, errors.New("Root value of result chunk could not be found")
 					}
 
-					log.Debug("Found selection for ", point)
 					// get the type of the object in question
 					selectionType := selection.Definition.Type
 
 					// if the type is a list
 					if selectionType.Elem != nil {
-						log.Debug("Selection is a list")
-						log.Debug(resultChunk)
 
 						// make sure the root value is a list
 						rootList, ok := rootValue.([]JSONObject)
@@ -335,7 +326,6 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 
 							newBranchSet := make([][]string, len(oldBranch))
 							copy(newBranchSet, oldBranch)
-							log.Debug("previous list before adding list branch -> ", newBranchSet)
 
 							// add the path to the end of this for the entry we just added
 							for i, newBranch := range newBranchSet {
@@ -352,10 +342,9 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 									// add the id to the entry so that the executor can use it to form its query
 									entryPoint = fmt.Sprintf("%s#%v", entryPoint, id)
 
-									fmt.Println("FINAL", point, entryPoint, id)
 								}
 
-								log.Debug("Adding ", entryPoint, " to list")
+								// add the point for this entry in the list
 								newBranchSet[i] = append(newBranch, entryPoint)
 							}
 
