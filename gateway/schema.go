@@ -10,9 +10,10 @@ import (
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
 type Schema struct {
-	Sources []RemoteSchema
-	Schema  *ast.Schema
-	Planner QueryPlanner
+	Sources  []RemoteSchema
+	Schema   *ast.Schema
+	Planner  QueryPlanner
+	Executor Executor
 
 	// the urls we have to visit to access certain fields
 	fieldURLs FieldURLMap
@@ -54,9 +55,10 @@ func NewSchema(sources []RemoteSchema) (*Schema, error) {
 
 	// return the resulting schema
 	return &Schema{
-		Sources: sources,
-		Schema:  schema,
-		Planner: &MinQueriesPlanner{},
+		Sources:  sources,
+		Schema:   schema,
+		Planner:  &MinQueriesPlanner{},
+		Executor: &ParallelExecutor{},
 
 		// internal fields
 		fieldURLs: locations,
