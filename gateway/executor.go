@@ -559,7 +559,6 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 			}
 
 			if len(valueList) <= pointData.Index {
-				fmt.Println("adding entries")
 				// make sure that the list has enough entries
 				for i := max(len(valueList)-1, 0); i <= pointData.Index; i++ {
 					valueList = append(valueList, JSONObject{})
@@ -568,14 +567,11 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 
 			objValue, ok := value.(JSONObject)
 			if ok {
-				fmt.Println(len(valueList))
 				// make sure we update the object at that location with each value
 				for k, v := range objValue {
 					valueList[pointData.Index][k] = v
 				}
 			}
-
-			fmt.Println(len(valueList), pointData.Index)
 
 			// re-assign the list back to the object
 			valueObj[pointData.Field] = valueList

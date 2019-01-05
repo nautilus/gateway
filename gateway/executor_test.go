@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -301,78 +300,6 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 		return
 	}
-
-	fmt.Println(JSONObject{
-		"users": []JSONObject{
-			{
-				"firstName": "hello",
-				"friends": []JSONObject{
-					{
-						"firstName": "John",
-						"id":        "1",
-						"photoGallery": []JSONObject{
-							{
-								"url": "photoGalleryURL",
-								"followers": []JSONObject{
-									{
-										"id":        "1",
-										"firstName": "John",
-									},
-								},
-							},
-						},
-					},
-					{
-						"firstName": "Jacob",
-						"id":        "2",
-						"photoGallery": []JSONObject{
-							{
-								"followers": []JSONObject{
-									{
-										"id":        "1",
-										"firstName": "John",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			{
-				"firstName": "goodbye",
-				"friends": []JSONObject{
-					{
-						"firstName": "Jingleheymer",
-						"id":        "1",
-						"photoGallery": []JSONObject{
-							{
-								"url": "photoGalleryURL",
-								"followers": []JSONObject{
-									{
-										"firstName": "John",
-										"id":        "1",
-									},
-								},
-							},
-						},
-					},
-					{
-						"id": "2",
-						"photoGallery": []JSONObject{
-							{
-								"url": "photoGalleryURL",
-								"followers": []JSONObject{
-									{
-										"id":        "1",
-										"firstName": "John",
-									},
-								},
-							},
-						}, "firstName": "Schmidt"},
-				},
-			},
-		},
-	})
 
 	// atm the mock queryer always returns the same value so we will end up with
 	// the same User.favoritePhoto and User.photoGallery
