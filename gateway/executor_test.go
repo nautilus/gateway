@@ -137,7 +137,6 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 }
 
 func TestExecutor_insertIntoLists(t *testing.T) {
-	// t.Skip()
 	// the query we want to execute is
 	// {
 	// 		users {                  	<- Query.services @ serviceA
