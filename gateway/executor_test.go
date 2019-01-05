@@ -696,7 +696,46 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 	assert.Equal(t, inserted, list[5])
 }
 
-func TestGetPointData(t *testing.T) {
+func TestExecutorBuildQuery_query(t *testing.T) {
+	// if we pass a query on Query to the builder we should get that same
+	// selection set present in the operation without any nesting
+	selection := ast.SelectionSet{
+		&ast.Field{
+			Name: "allUsers",
+			Definition: &ast.FieldDefinition{
+				Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+			},
+			SelectionSet: ast.SelectionSet{
+				&ast.Field{
+					Name: "firstName",
+				},
+			},
+		},
+	}
+
+	// the query we're building goes to the top level Query object
+	query := executorBuildQuery("Query", "", selection)
+	if query == nil {
+		t.Error("Did not receive a query.")
+		return
+	}
+
+	// grab the first operation
+	operation := query.Operations[0]
+
+	// it should be a query
+	assert.Equal(t, ast.Query, operation.Operation)
+
+	// the selection set should be the same as what we passed in
+	assert.Equal(t, selection, operation.SelectionSet)
+
+}
+
+func TestExecutorBuildQuery_node(t *testing.T) {
+
+}
+
+func TestExecutorGetPointData(t *testing.T) {
 	table := []struct {
 		point string
 		data  *extractorPointData
@@ -707,7 +746,7 @@ func TestGetPointData(t *testing.T) {
 	}
 
 	for _, row := range table {
-		pointData, err := getPointData(row.point)
+		pointData, err := executorGetPointData(row.point)
 		if err != nil {
 			t.Error(err.Error())
 			return

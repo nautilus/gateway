@@ -121,7 +121,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// NOTE: i dont think this closure is necessary ¯\_(ツ)_/¯
 		go func(newSteps chan *newQueryPlanStepPayload) {
 		SelectLoop:
-			// contineously drain the step channel
+			// continuously drain the step channel
 			for {
 				select {
 				case payload := <-newSteps:
