@@ -639,5 +639,23 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 
 func executorBuildQuery(parentType string, parentID string, selectionSet ast.SelectionSet) *ast.QueryDocument {
 	log.Debug("Querying ", parentType, " ", parentID)
-	return nil
+	// build up an operation for the query
+	operation := &ast.OperationDefinition{
+		Operation: ast.Query,
+	}
+
+	// if we are querying the top level Query all we need to do is add
+	// the selection set at the root
+	if parentType == "Query" {
+		operation.SelectionSet = selectionSet
+	} else {
+		// if we are not querying the top level then we have to nest the selection set
+		// under the node query with the right id as the argument
+
+	}
+
+	// add the operation to a QueryDocument
+	return &ast.QueryDocument{
+		Operations: ast.OperationList{operation},
+	}
 }
