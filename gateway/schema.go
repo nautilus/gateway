@@ -56,7 +56,7 @@ func NewSchema(sources []RemoteSchema) (*Schema, error) {
 	return &Schema{
 		Sources: sources,
 		Schema:  schema,
-		Planner: &NaiveQueryPlanner{},
+		Planner: &MinQueriesPlanner{},
 
 		// internal fields
 		fieldURLs: locations,

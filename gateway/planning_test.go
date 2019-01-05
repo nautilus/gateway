@@ -23,7 +23,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	plans, err := (&NaiveQueryPlanner{}).Plan(`
+	plans, err := (&MinQueriesPlanner{}).Plan(`
 		{
 			foo
 		}
@@ -36,16 +36,17 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	}
 
 	// the first selection is the only one we care about
-	root := plans[0].Steps[0]
+	root := plans[0].RootStep.Then[0]
 	// there should only be one selection
 	if len(root.SelectionSet) != 1 {
-		t.Error("encounted the wrong number of selection sets under root step")
+		t.Error("encounted the wrong number of selections under root step")
 		return
 	}
 	rootField := applyDirectives(root.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
-	assert.Equal(t, location, root.URL)
+	queryer := root.Queryer.(*NetworkQueryer)
+	assert.Equal(t, location, queryer.URL)
 
 	// we need to be asking for Query.foo
 	assert.Equal(t, rootField.Name, "foo")
@@ -76,7 +77,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	selections, err := (&NaiveQueryPlanner{}).Plan(`
+	selections, err := (&MinQueriesPlanner{}).Plan(`
 		{
 			allUsers {
 				firstName
@@ -97,18 +98,19 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	}
 
 	// the first selection is the only one we care about
-	rootStep := selections[0].Steps[0]
+	rootStep := selections[0].RootStep.Then[0]
 
 	// there should only be one selection
 	if len(rootStep.SelectionSet) != 1 {
-		t.Error("encounted the wrong number of selection sets under root step")
+		t.Error("encounted the wrong number of selections under root step")
 		return
 	}
 
 	rootField := applyDirectives(rootStep.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
-	assert.Equal(t, location, rootStep.URL)
+	queryer := rootStep.Queryer.(*NetworkQueryer)
+	assert.Equal(t, location, queryer.URL)
 
 	// we need to be asking for allUsers
 	assert.Equal(t, rootField.Name, "allUsers")
@@ -183,7 +185,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
 	locations.RegisterURL("CatPhoto", "owner", userLocation)
 
-	plans, err := (&NaiveQueryPlanner{}).Plan(`
+	plans, err := (&MinQueriesPlanner{}).Plan(`
 		{
 			allUsers {
 				firstName
@@ -208,19 +210,20 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// the second step is grabbing User catPhotos from the cat service
 	// the third step is grabb CatPhoto.owner.firstName from the user service from the user service
 
-	if len(plans[0].Steps) != 3 {
-		t.Errorf("Encountered incorrect number of steps: %v", len(plans[0].Steps))
-		return
-	}
-
 	// the first step should have all users
-	firstStep := plans[0].Steps[0]
+	firstStep := plans[0].RootStep.Then[0]
 	// make sure we are grabbing values off of Query since its the root
 	assert.Equal(t, "Query", firstStep.ParentType)
 
+	// make sure there's a selection set
+	if len(firstStep.SelectionSet) != 1 {
+		t.Error("first strep did not have a selection set")
+		return
+	}
 	firstField := applyDirectives(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
-	assert.Equal(t, userLocation, firstStep.URL)
+	queryer := firstStep.Queryer.(*NetworkQueryer)
+	assert.Equal(t, userLocation, queryer.URL)
 
 	// make sure it is for allUsers
 	assert.Equal(t, "allUsers", firstField.Name)
@@ -238,18 +241,26 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	field, ok := firstField.SelectionSet[0].(*ast.Field)
 	if !ok {
 		t.Error("Did not get a field out of the allUsers selection")
+		return
 	}
 	// and from all users we need to ask for their firstName
 	assert.Equal(t, "firstName", field.Name)
 	assert.Equal(t, "String!", field.Definition.Type.Dump())
 
 	// the second step should ask for the cat photo fields
-	secondStep := plans[0].Steps[1]
+	if len(firstStep.Then) != 1 {
+		t.Errorf("Encountered the wrong number of steps after the first one %v", len(firstStep.Then))
+		return
+	}
+	secondStep := firstStep.Then[0]
+	// make sure we will insert the step in the right place
+	assert.Equal(t, []string{"allUsers", "catPhotos"}, secondStep.InsertionPoint)
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "User", secondStep.ParentType)
 	// we should be going to the catePhoto servie
-	assert.Equal(t, catLocation, secondStep.URL)
+	queryer = secondStep.Queryer.(*NetworkQueryer)
+	assert.Equal(t, catLocation, queryer.URL)
 	// we should only want one field selected
 	if len(secondStep.SelectionSet) != 1 {
 		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(secondStep.SelectionSet))
@@ -269,12 +280,19 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, "URL", secondSubSelectionField.Name)
 
 	// the third step should ask for the User.firstName
-	thirdStep := plans[0].Steps[2]
+	if len(secondStep.Then) != 1 {
+		t.Errorf("Encountered the wrong number of steps after the second one %v", len(secondStep.Then))
+		return
+	}
+	thirdStep := secondStep.Then[0]
+	// make sure we will insert the step in the right place
+	assert.Equal(t, []string{"allUsers", "catPhotos", "owner"}, thirdStep.InsertionPoint)
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "CatPhoto", thirdStep.ParentType)
-	// we should be going to the catePhoto servie
-	assert.Equal(t, userLocation, thirdStep.URL)
+	// we should be going to the catePhoto service
+	queryer = thirdStep.Queryer.(*NetworkQueryer)
+	assert.Equal(t, userLocation, queryer.URL)
 	// we should only want one field selected
 	if len(thirdStep.SelectionSet) != 1 {
 		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(thirdStep.SelectionSet))
@@ -293,6 +311,10 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	thirdSubSelectionField := thirdSubSelection[0]
 	assert.Equal(t, "firstName", thirdSubSelectionField.Name)
 }
+
+// func TestPlanQuery_insertionPointFragments(t *testing.T) {
+//
+// }
 
 // func TestPlanQuery_multipleRootFields(t *testing.T) {
 // 	t.Error("Not implemented")

@@ -11,15 +11,26 @@ import (
 
 // QueryPlanStep represents a step in the plan required to fulfill a query.
 type QueryPlanStep struct {
-	URL          string
-	ParentType   string
-	SelectionSet ast.SelectionSet
+	Queryer        Queryer
+	ParentType     string
+	ParentID       string
+	SelectionSet   ast.SelectionSet
+	InsertionPoint []string
+	Then           []*QueryPlanStep
 }
 
 // QueryPlan is the full plan to resolve a particular query
 type QueryPlan struct {
-	Name  string
-	Steps []*QueryPlanStep
+	Operation string
+	RootStep  *QueryPlanStep
+}
+
+type newQueryPlanStepPayload struct {
+	ServiceName    string
+	SelectionSet   ast.SelectionSet
+	ParentType     string
+	Parent         *QueryPlanStep
+	InsertionPoint []string
 }
 
 // QueryPlanner is responsible for taking a parsed graphql string, and returning the steps to
@@ -28,11 +39,32 @@ type QueryPlanner interface {
 	Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error)
 }
 
-// NaiveQueryPlanner does the most basic level of query planning
-type NaiveQueryPlanner struct{}
+// Planner is meant to be embedded in other QueryPlanners to share configuration
+type Planner struct {
+	QueryerFactory func(url string) Queryer
+}
+
+// GetQueryer returns the queryer that should be used to resolve the plan
+func (p *Planner) GetQueryer(url string) Queryer {
+	// if there is a queryer factory defined
+	if p.QueryerFactory != nil {
+		// use the factory
+		return p.QueryerFactory(url)
+	}
+
+	// otherwise return the network queryer
+	return &NetworkQueryer{
+		URL: url,
+	}
+}
+
+// MinQueriesPlanner does the most basic level of query planning
+type MinQueriesPlanner struct {
+	Planner
+}
 
 // Plan computes the nested selections that will need to be performed
-func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
 	// the first thing to do is to parse the query
 	parsedQuery, err := gqlparser.LoadQuery(schema, query)
 	if err != nil {
@@ -45,8 +77,8 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 	for _, operation := range parsedQuery.Operations {
 		// each operation results in a new query
 		plan := &QueryPlan{
-			Name:  operation.Name,
-			Steps: []*QueryPlanStep{},
+			Operation: operation.Name,
+			RootStep:  &QueryPlanStep{},
 		}
 
 		// add the plan to the top level list
@@ -64,45 +96,83 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		currentLocation := possibleLocations[0]
 
 		// a channel to register new steps
-		stepCh := make(chan *QueryPlanStep, 10)
+		stepCh := make(chan *newQueryPlanStepPayload, 10)
 
 		// a chan to get errors
 		errCh := make(chan error)
+		defer close(errCh)
 
 		// a wait group to track the progress of goroutines
 		stepWg := &sync.WaitGroup{}
 
+		// we are garunteed at least one query
+		stepWg.Add(1)
+
+		// start a new step
+		stepCh <- &newQueryPlanStepPayload{
+			SelectionSet:   operation.SelectionSet,
+			ParentType:     "Query",
+			ServiceName:    currentLocation,
+			Parent:         plan.RootStep,
+			InsertionPoint: []string{},
+		}
+
 		// start waiting for steps to be added
 		// NOTE: i dont think this closure is necessary ¯\_(ツ)_/¯
-		go func(newSteps chan *QueryPlanStep) {
+		go func(newSteps chan *newQueryPlanStepPayload) {
 		SelectLoop:
 			// contineously drain the step channel
 			for {
 				select {
-				case step := <-newSteps:
+				case payload := <-newSteps:
+
+					step := &QueryPlanStep{
+						Queryer:        p.GetQueryer(payload.ServiceName),
+						ParentType:     payload.ParentType,
+						SelectionSet:   payload.SelectionSet,
+						InsertionPoint: payload.InsertionPoint,
+					}
+
+					// if there is a parent to this query
+					if payload.Parent != nil {
+						log.Debug(fmt.Sprintf("Adding step as dependency"))
+						// add the new step to the Then of the parent
+						payload.Parent.Then = append(payload.Parent.Then, step)
+					}
+
+					// log some stuffs
 					selectionNames := []string{}
 					for _, selection := range applyDirectives(step.SelectionSet) {
 						selectionNames = append(selectionNames, selection.Name)
 					}
-					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery [%v] @ %v \n", step.ParentType, strings.Join(selectionNames, ","), step.URL))
-					// add it to the list of steps
-					plan.Steps = append(plan.Steps, step)
+
+					log.Debug("")
+					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery (%v) @ %v \n", step.ParentType, strings.Join(selectionNames, ","), payload.InsertionPoint))
 
 					// the list of root selection steps
 					selectionSet := ast.SelectionSet{}
 
 					// for each field in the
 					for _, selectedField := range applyDirectives(step.SelectionSet) {
+						log.Debug("extracting selection ", selectedField.Name)
+						// we always ignore the latest insertion point since we will add it to the list
+						// in the extracts
+						insertionPoint := []string{}
+						if len(payload.InsertionPoint) != 0 {
+							insertionPoint = payload.InsertionPoint[:len(payload.InsertionPoint)-1]
+						}
+
 						// we are going to start walking down the operations selectedField set and let
 						// the steps of the walk add any necessary selectedFields
-						log.Debug("extracting selection", selectedField.Name)
-						newSelection, err := extractSelection(&extractSelectionConfig{
+						newSelection, err := p.extractSelection(&extractSelectionConfig{
 							stepCh:         stepCh,
 							stepWg:         stepWg,
 							locations:      locations,
-							parentLocation: step.URL,
+							parentLocation: payload.ServiceName,
 							parentType:     step.ParentType,
 							field:          selectedField,
+							step:           step,
+							insertionPoint: insertionPoint,
 						})
 						if err != nil {
 							errCh <- err
@@ -120,32 +190,26 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					// assign the new selection set
 					step.SelectionSet = selectionSet
 
+					// we're done processing this step
+					stepWg.Done()
+
 					log.Debug("Step selection set:")
 					for _, selection := range applyDirectives(step.SelectionSet) {
 						log.Debug(selection.Name)
 					}
-					log.Debug("     ")
-					// we're done processing this step
-					stepWg.Done()
 				}
 			}
 		}(stepCh)
-
-		// we are garunteed at least one query
-		stepWg.Add(1)
-		stepCh <- &QueryPlanStep{
-			URL:          currentLocation,
-			SelectionSet: operation.SelectionSet,
-			ParentType:   "Query",
-		}
 
 		// there are 2 possible options:
 		// - either the wait group finishes
 		// - we get a messsage over the error chan
 
 		// in order to wait for either, let's spawn a go routine
-		// that waits for us, and notifies us when its done
+		// that waits until all of the steps are built and notifies us when its done
 		doneCh := make(chan bool)
+		defer close(doneCh)
+
 		go func() {
 			// when the wait group is finished
 			stepWg.Wait()
@@ -171,16 +235,19 @@ func (p *NaiveQueryPlanner) Plan(query string, schema *ast.Schema, locations Fie
 }
 
 type extractSelectionConfig struct {
-	stepCh         chan *QueryPlanStep
-	errCh          chan error
-	stepWg         *sync.WaitGroup
+	stepCh chan *newQueryPlanStepPayload
+	errCh  chan error
+	stepWg *sync.WaitGroup
+
 	locations      FieldURLMap
 	parentLocation string
 	parentType     string
+	step           *QueryPlanStep
 	field          *ast.Field
+	insertionPoint []string
 }
 
-func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
+func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 	// look up the current location
 	possibleLocations, err := config.locations.URLFor(config.parentType, config.field.Name)
 	if err != nil {
@@ -195,6 +262,14 @@ func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 
 	log.Debug("-----")
 	log.Debug("Looking at ", config.field.Name)
+
+	// the insertion point for this field is the previous one with the new field name
+	insertionPoint := make([]string, len(config.insertionPoint))
+	copy(insertionPoint, config.insertionPoint)
+	insertionPoint = append(insertionPoint, config.field.Name)
+
+	log.Debug(fmt.Sprintf("Insertion point: %v", insertionPoint))
+
 	// if the location of this targetField is the same as its parent
 	if config.parentLocation == currentLocation {
 		log.Debug("same service")
@@ -207,13 +282,15 @@ func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 			// get the list of fields underneath the taret field
 			for _, selection := range applyDirectives(config.field.SelectionSet) {
 				// add any possible selections provided by selections
-				subSelection, err := extractSelection(&extractSelectionConfig{
+				subSelection, err := p.extractSelection(&extractSelectionConfig{
 					stepCh:         config.stepCh,
 					stepWg:         config.stepWg,
+					step:           config.step,
 					locations:      config.locations,
 					parentLocation: currentLocation,
 					parentType:     currentType,
 					field:          selection,
+					insertionPoint: insertionPoint,
 				})
 				if err != nil {
 					return nil, err
@@ -245,12 +322,14 @@ func extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
 	log.Debug(fmt.Sprintf("Adding the new step to resolve %s.%s\n", config.parentType, config.field.Name))
 
 	// add the new step
-	config.stepCh <- &QueryPlanStep{
-		URL:          currentLocation,
-		ParentType:   config.parentType,
-		SelectionSet: ast.SelectionSet{config.field},
+	config.stepCh <- &newQueryPlanStepPayload{
+		ServiceName:    currentLocation,
+		ParentType:     config.parentType,
+		SelectionSet:   ast.SelectionSet{config.field},
+		Parent:         config.step,
+		InsertionPoint: insertionPoint,
 	}
-	// we didn't encounter an error and shouldn't continue down this path
+	// we didn't encounter an error and dont have any fields to add
 	return nil, nil
 }
 

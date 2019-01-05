@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/vektah/gqlparser/ast"
 )
@@ -37,7 +38,8 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 					field := previousFields.ForName(newField.Name)
 					// if we already have that field defined and it has a different type and the one from the source schema
 					if field != nil && field.Type.String() != newField.Type.String() {
-						return nil, errors.New("schema merge conflict:" + "Two schemas cannot the same field defined for the same type")
+						log.Warn(fmt.Sprintf("Could not merge schemas together. Conflicting definitions of %s", field.Name))
+						return nil, errors.New("schema merge conflict: Two schemas cannot the same field defined for the same type")
 					}
 
 					// its safe to copy over the definition
