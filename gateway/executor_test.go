@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -154,7 +155,6 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 	// }
 
 	// values to test against
-	favoritePhotoURL := "favorite-photo-url"
 	photoGalleryURL := "photoGalleryURL"
 	followerName := "John"
 
@@ -303,6 +303,78 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 		return
 	}
 
+	fmt.Println(JSONObject{
+		"users": []JSONObject{
+			{
+				"firstName": "hello",
+				"friends": []JSONObject{
+					{
+						"firstName": "John",
+						"id":        "1",
+						"photoGallery": []JSONObject{
+							{
+								"url": "photoGalleryURL",
+								"followers": []JSONObject{
+									{
+										"id":        "1",
+										"firstName": "John",
+									},
+								},
+							},
+						},
+					},
+					{
+						"firstName": "Jacob",
+						"id":        "2",
+						"photoGallery": []JSONObject{
+							{
+								"followers": []JSONObject{
+									{
+										"id":        "1",
+										"firstName": "John",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				"firstName": "goodbye",
+				"friends": []JSONObject{
+					{
+						"firstName": "Jingleheymer",
+						"id":        "1",
+						"photoGallery": []JSONObject{
+							{
+								"url": "photoGalleryURL",
+								"followers": []JSONObject{
+									{
+										"firstName": "John",
+										"id":        "1",
+									},
+								},
+							},
+						},
+					},
+					{
+						"id": "2",
+						"photoGallery": []JSONObject{
+							{
+								"url": "photoGalleryURL",
+								"followers": []JSONObject{
+									{
+										"id":        "1",
+										"firstName": "John",
+									},
+								},
+							},
+						}, "firstName": "Schmidt"},
+				},
+			},
+		},
+	})
+
 	// atm the mock queryer always returns the same value so we will end up with
 	// the same User.favoritePhoto and User.photoGallery
 	assert.Equal(t, JSONObject{
@@ -312,11 +384,13 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 				"friends": []JSONObject{
 					{
 						"firstName": "John",
+						"id":        "1",
 						"photoGallery": []JSONObject{
 							{
 								"url": photoGalleryURL,
 								"followers": []JSONObject{
 									{
+										"id":        "1",
 										"firstName": followerName,
 									},
 								},
@@ -325,11 +399,13 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 					{
 						"firstName": "Jacob",
+						"id":        "2",
 						"photoGallery": []JSONObject{
 							{
 								"url": photoGalleryURL,
 								"followers": []JSONObject{
 									{
+										"id":        "1",
 										"firstName": followerName,
 									},
 								},
@@ -337,20 +413,19 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 						},
 					},
 				},
-				"favoritePhoto": JSONObject{
-					"url": favoritePhotoURL,
-				},
 			},
 			{
 				"firstName": "goodbye",
 				"friends": []JSONObject{
 					{
 						"firstName": "Jingleheymer",
+						"id":        "1",
 						"photoGallery": []JSONObject{
 							{
 								"url": photoGalleryURL,
 								"followers": []JSONObject{
 									{
+										"id":        "1",
 										"firstName": followerName,
 									},
 								},
@@ -359,11 +434,13 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 					{
 						"firstName": "Schmidt",
+						"id":        "2",
 						"photoGallery": []JSONObject{
 							{
 								"url": photoGalleryURL,
 								"followers": []JSONObject{
 									{
+										"id":        "1",
 										"firstName": followerName,
 									},
 								},

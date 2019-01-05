@@ -216,19 +216,20 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 				return
 			}
 
-			if len(insertPoints) > 0 {
-				log.Debug("Insertion points ", insertPoints)
-				insertionPoint := insertPoints[0]
-				log.Info("Spawn ", insertionPoint)
-				stepWg.Add(1)
-				go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
-			}
-			// // this dependent needs to fire for every object that the insertion point references
-			// for _, insertionPoint := range insertPoints {
+			// if len(insertPoints) > 0 {
+			// 	log.Debug("Insertion points ", insertPoints)
+			// 	insertionPoint := insertPoints[0]
 			// 	log.Info("Spawn ", insertionPoint)
 			// 	stepWg.Add(1)
 			// 	go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
 			// }
+
+			// this dependent needs to fire for every object that the insertion point references
+			for _, insertionPoint := range insertPoints {
+				log.Info("Spawn ", insertionPoint)
+				stepWg.Add(1)
+				go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
+			}
 
 		}
 	}
@@ -557,19 +558,27 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 				return errors.New("Found a non-list at the insertion point")
 			}
 
+			if len(valueList) <= pointData.Index {
+				fmt.Println("adding entries")
+				// make sure that the list has enough entries
+				for i := max(len(valueList)-1, 0); i <= pointData.Index; i++ {
+					valueList = append(valueList, JSONObject{})
+				}
+			}
+
+			objValue, ok := value.(JSONObject)
+			if ok {
+				fmt.Println(len(valueList))
+				// make sure we update the object at that location with each value
+				for k, v := range objValue {
+					valueList[pointData.Index][k] = v
+				}
+			}
+
 			fmt.Println(len(valueList), pointData.Index)
-			// make sure that the list has enough entries
-			for i := max(len(valueList)-1, 0); i <= pointData.Index; i++ {
-				fmt.Println("Adding entry")
-				valueList = append(valueList, JSONObject{})
-			}
 
-			sameValue, ok := valueObj[pointData.Field].([]JSONObject)
-			if !ok {
-				return errors.New("Not okay")
-			}
-
-			fmt.Println(len(sameValue), pointData.Index)
+			// re-assign the list back to the object
+			valueObj[pointData.Field] = valueList
 
 		} else {
 			// we are just assigning a value
