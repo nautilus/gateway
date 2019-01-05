@@ -136,6 +136,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 }
 
 func TestExecutor_insertIntoLists(t *testing.T) {
+	// t.Skip()
 	// the query we want to execute is
 	// {
 	// 		users {                  	<- Query.services @ serviceA
@@ -495,6 +496,222 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 	}
 
 	assert.Equal(t, finalInsertionPoint, generatedPoint)
+}
+
+func TestFindObject(t *testing.T) {
+	// create an object we want to extract
+	source := JSONObject{
+		"hello": []JSONObject{
+			{
+				"firstName": "0",
+				"friends": []JSONObject{
+					{
+						"firstName": "2",
+					},
+					{
+						"firstName": "3",
+					},
+				},
+			},
+			{
+				"firstName": "4",
+				"friends": []JSONObject{
+					{
+						"firstName": "5",
+					},
+					{
+						"firstName": "6",
+					},
+				},
+			},
+		},
+	}
+
+	value, err := executorExtractValue(source, []string{"hello:0", "friends:1"})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	assert.Equal(t, JSONObject{
+		"firstName": "3",
+	}, value)
+}
+
+func TestFindString(t *testing.T) {
+	// create an object we want to extract
+	source := JSONObject{
+		"hello": []JSONObject{
+			{
+				"firstName": "0",
+				"friends": []JSONObject{
+					{
+						"firstName": "2",
+					},
+					{
+						"firstName": "3",
+					},
+				},
+			},
+			{
+				"firstName": "4",
+				"friends": []JSONObject{
+					{
+						"firstName": "5",
+					},
+					{
+						"firstName": "6",
+					},
+				},
+			},
+		},
+	}
+
+	value, err := executorExtractValue(source, []string{"hello:0", "friends:1", "firstName"})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	assert.Equal(t, "3", value)
+}
+
+func TestExecutorInsertObject_insertValue(t *testing.T) {
+	// the object to mutate
+	source := JSONObject{}
+
+	// the object to insert
+	inserted := "world"
+
+	// insert the object deeeeep down
+	err := executorInsertObject(source, []string{"hello:5#1", "message", "body:2", "hello"}, inserted)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	// there should be a list under the key "hello"
+	rootList, ok := source["hello"]
+	if !ok {
+		t.Error("Did not add root list")
+		return
+	}
+	list, ok := rootList.([]JSONObject)
+	if !ok {
+		t.Error("root list is not a list")
+		return
+	}
+
+	if len(list) != 6 {
+		t.Errorf("Root list did not have enough entries.")
+		assert.Equal(t, 6, len(list))
+		return
+	}
+
+	// the object we care about is index 5
+	message := list[5]["message"]
+	if message == nil {
+		t.Error("Did not add message to object")
+		return
+	}
+
+	msgObj, ok := message.(JSONObject)
+	if !ok {
+		t.Error("message is not a list")
+		return
+	}
+
+	// there should be a list under it called body
+	bodiesList, ok := msgObj["body"]
+	if !ok {
+		t.Error("Did not add body list")
+		return
+	}
+	bodies, ok := bodiesList.([]JSONObject)
+	if !ok {
+		t.Error("bodies list is not a list")
+		return
+	}
+
+	if len(bodies) != 3 {
+		t.Error("bodies list did not have enough entries")
+	}
+	body := bodies[2]
+
+	// make sure that the value is what we expect
+	assert.Equal(t, inserted, body["hello"])
+}
+
+func TestExecutorInsertObject_insertListElements(t *testing.T) {
+	// the object to mutate
+	source := JSONObject{}
+
+	// the object to insert
+	inserted := JSONObject{
+		"hello": "world",
+	}
+
+	// insert the object deeeeep down
+	err := executorInsertObject(source, []string{"hello", "objects:5"}, inserted)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	// there should be an object under the key "hello"
+	rootEntry, ok := source["hello"]
+	if !ok {
+		t.Error("Did not add root entry")
+		return
+	}
+
+	root, ok := rootEntry.(JSONObject)
+	if !ok {
+		t.Error("root object is not an object")
+		return
+	}
+
+	rootList, ok := root["objects"]
+	if !ok {
+		t.Error("did not add objects list")
+		return
+	}
+
+	list, ok := rootList.([]JSONObject)
+	if !ok {
+		t.Error("objects is not a list")
+		return
+	}
+
+	if len(list) != 6 {
+		t.Errorf("Root list did not have enough entries.")
+		assert.Equal(t, 6, len(list))
+		return
+	}
+
+	// make sure that the value is what we expect
+	assert.Equal(t, inserted, list[5])
+}
+
+func TestGetPointData(t *testing.T) {
+	table := []struct {
+		point string
+		data  *extractorPointData
+	}{
+		{"foo:2", &extractorPointData{Field: "foo", Index: 2, ID: ""}},
+		{"foo#3", &extractorPointData{Field: "foo", Index: -1, ID: "3"}},
+		{"foo:2#3", &extractorPointData{Field: "foo", Index: 2, ID: "3"}},
+	}
+
+	for _, row := range table {
+		pointData, err := getPointData(row.point)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		assert.Equal(t, row.data, pointData)
+	}
 }
 
 func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {

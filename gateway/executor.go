@@ -25,7 +25,6 @@ type ParallelExecutor struct{}
 
 type queryExecutionResult struct {
 	InsertionPoint []string
-	ParentType     string
 	Result         JSONObject
 	StripNode      bool
 }
@@ -61,160 +60,31 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 			select {
 			// we have a new result
 			case payload := <-resultCh:
-				log.Debug("inserting result in ", payload.InsertionPoint)
+				log.Debug("Inserting result into ", payload.InsertionPoint)
+				log.Debug("Result: ", payload.Result)
+				// we have to grab the value in the result and write it to the appropriate spot in the
+				// acumulator.
 
-				// if there is a deep insertion point
-				if len(payload.InsertionPoint) > 1 {
-					path := payload.InsertionPoint[:len(payload.InsertionPoint)-1]
-					keyPath := payload.InsertionPoint[len(payload.InsertionPoint)-1]
-					keyIndex := -1
-					key := keyPath
-
-					// if we are inserting in a list
-					if strings.Contains(key, ":") {
-						log.Debug("Encountered insert into list")
-						indexData := strings.Split(key, ":")
-						idData := strings.Split(indexData[1], "#")
-						index, err := strconv.ParseInt(idData[0], 0, 32)
-						if err != nil {
-							errCh <- err
-							continue ConsumptionLoop
-						}
-
-						keyIndex = int(index)
-						key = indexData[0]
-					}
-
-					// the object we are accessing
-					var obj interface{}
-
-					// find the object indicated by the path
-					for _, point := range path {
-						log.Debug("Looking at point ", point)
-						// if the point designates a list
-						if strings.Contains(point, ":") {
-							log.Debug("Encountered insert into list")
-
-							data := strings.Split(point, ":")
-
-							// look at the right field
-							_, ok := result[data[0]]
-							// if we haven't seen this field before
-							if !ok {
-								result[data[0]] = []JSONObject{}
-							}
-							value, _ := result[data[0]]
-
-							idData := strings.Split(data[1], "#")
-
-							listValue, ok := value.([]JSONObject)
-							if !ok {
-								errCh <- fmt.Errorf("Could not find list to insert: %v", payload.InsertionPoint)
-								continue ConsumptionLoop
-							}
-
-							// but we need to modify the object at the right index
-							entryIndex, err := strconv.ParseInt(idData[0], 0, 32)
-							if err != nil {
-								errCh <- err
-								continue ConsumptionLoop
-							}
-
-							// if the list has less entries than we can add
-							if len(listValue) <= int(entryIndex) {
-								// we have to make sure there are placeholders for every entry up until this point
-								for i := 0; i <= int(entryIndex); i++ {
-									// if the length of the list is below this value
-									if i <= len(listValue) {
-										listValue = append(listValue, JSONObject{})
-									}
-								}
-							}
-
-							// reassign the value
-							obj = listValue[entryIndex]
-						} else {
-							log.Debug("Inserting object value")
-							// the key to look up in the result
-							resultKey := point
-							if strings.Contains(point, "#") {
-								resultKey = strings.Split(point, "#")[0]
-							}
-							// look at the result for the same key
-							value, ok := result[resultKey]
-							if !ok {
-								errCh <- fmt.Errorf("Could not find value to insert: %v", payload.InsertionPoint)
-								continue ConsumptionLoop
-							}
-
-							// reassign the value
-							obj = value
-						}
-					}
-
-					// make sure its a real object
-					objMap, ok := obj.(JSONObject)
-					if !ok {
-						errCh <- fmt.Errorf("Could not find value to insert: %v", payload.InsertionPoint)
-
-						continue ConsumptionLoop
-					}
-
-					// assign the result of the query to the final result
-					objMap[key] = payload.Result
-
-					// the actual value we need to assign to the key
-					var result interface{}
-
-					// if we are inserting something other than a top level query
-					if payload.StripNode {
-						// look up the node field
-						nodeValue, ok := payload.Result["node"]
-						if !ok {
-							errCh <- fmt.Errorf("Could not find node")
-							continue ConsumptionLoop
-						}
-						nodeMap, ok := nodeValue.(JSONObject)
-						if !ok {
-							errCh <- fmt.Errorf("Could not find node")
-							continue ConsumptionLoop
-						}
-						// grab the field underneath node that we care about to do the stitching
-						realValue, ok := nodeMap[key]
-						if !ok {
-							errCh <- fmt.Errorf("Could not find %s field under node", key)
-							continue ConsumptionLoop
-						}
-
-						// if we are looking to insert at a list
-						if keyIndex >= 0 {
-							fmt.Println("Have to insert into ", keyIndex)
-							listValue, ok := realValue.([]JSONObject)
-							if !ok {
-								errCh <- fmt.Errorf("Field under node isn't a list")
-								continue ConsumptionLoop
-							}
-
-							realValue = listValue[keyIndex]
-						}
-
-						log.Debug("Result value ", realValue)
-
-						// use that value in the right spot
-						result = realValue
-					}
-
-					// add the
-					objMap[key] = result
-
-				} else {
-					// there isn't a deep insertion point so we can just merge the result with our accumulator
-					for key, value := range payload.Result {
-						result[key] = value
-					}
+				// the path that we want out of the result
+				path := []string{}
+				// if we want to strip node from the response
+				if payload.StripNode {
+					path = append(path, "node")
+					path = append(path, payload.InsertionPoint[max(len(payload.InsertionPoint)-1, 0):][0])
 				}
 
-				fmt.Println("Done")
+				// get the result from the response that we have to stitch there
+				queryResult, err := executorExtractValue(payload.Result, path)
+				if err != nil {
+					errCh <- err
+					continue ConsumptionLoop
+				}
+				log.Debug("raw value: ", queryResult)
+
+				// copy the result into the accumulator
+				executorInsertObject(result, payload.InsertionPoint, queryResult)
+
+				log.Debug("Done")
 				// one of the queries is done
 				stepWg.Done()
 
@@ -315,7 +185,7 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 	// step for
 
 	// generate the query that we have to send for this step
-	query := buildQueryForExecution(step.ParentType, step.SelectionSet)
+	query := executorBuildQuery(step.ParentType, step.SelectionSet)
 
 	// execute the query
 	queryResult, err := step.Queryer.Query(query)
@@ -326,7 +196,6 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 	// NOTE: this insertion point could point to a list of values. If it did, we have to have
 	//       passed it to the this invocation of this function. It is safe to trust this
 	//       InsertionPoint as the right place to insert this result.
-	log.Debug("Pushing Result ", insertionPoint)
 
 	// this is the only place we know for sure if we have to strip the node
 	stripNode := step.ParentType != "Query"
@@ -339,33 +208,36 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 		for _, dependent := range step.Then {
 			// the insertion point for this step needs to go one behind so we can build up a list if the root is one
 			clip := max(len(insertionPoint)-1, 0)
+
+			// log.Debug("Looking for insertion points for ", dependent.InsertionPoint, "\n\n")
 			insertPoints, err := findInsertionPoints(dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint[:clip]}, stripNode)
 			if err != nil {
 				errCh <- err
 				return
 			}
 
-			// if len(insertPoints) > 0 {
-			// 	insertionPoint := insertPoints[0]
-			// 	log.Info("Spawn ", insertionPoint)
-			// 	stepWg.Add(1)
-			// 	go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
-			// }
-			// // this dependent needs to fire for every object that the insertion point references
-			for _, insertionPoint := range insertPoints {
+			if len(insertPoints) > 0 {
+				log.Debug("Insertion points ", insertPoints)
+				insertionPoint := insertPoints[0]
 				log.Info("Spawn ", insertionPoint)
 				stepWg.Add(1)
 				go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
 			}
+			// // this dependent needs to fire for every object that the insertion point references
+			// for _, insertionPoint := range insertPoints {
+			// 	log.Info("Spawn ", insertionPoint)
+			// 	stepWg.Add(1)
+			// 	go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
+			// }
 
 		}
 	}
 
+	log.Debug("Pushing Result ", insertionPoint)
 	// send the result to be stitched in with our accumulator
 	resultCh <- queryExecutionResult{
 		InsertionPoint: insertionPoint,
 		Result:         queryResult,
-		ParentType:     step.ParentType,
 		StripNode:      stripNode,
 	}
 }
@@ -379,8 +251,8 @@ func max(a, b int) int {
 
 // findInsertionPoints returns the list of insertion points where this step should be executed.
 func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result JSONObject, startingPoints [][]string, stripNode bool) ([][]string, error) {
-	log.Debug("")
-	log.Debug("Looking for insertion points. target: ", targetPoints)
+
+	// log.Debug("Looking for insertion points. target: ", targetPoints)
 	oldBranch := startingPoints
 	for _, branch := range oldBranch {
 		if len(branch) > 1 {
@@ -400,7 +272,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 		startingIndex = len(oldBranch[0])
 	}
 
-	log.Debug("Starting at ", startingIndex, oldBranch)
+	// log.Debug("Starting at ", startingIndex, oldBranch)
 
 	// if our starting point is []string{"users:0", "photoGallery"} then we know everything up until photoGallery
 	// is along the path of the steps insertion point
@@ -408,7 +280,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 		// the point in the steps insertion path that we want to add
 		point := targetPoints[pointI]
 
-		log.Debug("Looking for ", point)
+		// log.Debug("Looking for ", point)
 
 		// if we are at the last field, just add it
 		if pointI == len(targetPoints)-1 {
@@ -423,9 +295,9 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 			for _, selection := range applyDirectives(selectionSetRoot) {
 				// if the selection has the right name we need to add it to the list
 				if selection.Alias == point || selection.Name == point {
-					log.Debug("Found Selection for: ", point)
-					log.Debug("Strip node: ", stripNode)
-					log.Debug("Result Chunk: ", resultChunk)
+					// log.Debug("Found Selection for: ", point)
+					// log.Debug("Strip node: ", stripNode)
+					// log.Debug("Result Chunk: ", resultChunk)
 					// make sure we are looking at the top of the selection set next time
 					selectionSetRoot = selection.SelectionSet
 
@@ -456,7 +328,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 					selectionType := selection.Definition.Type
 					// if the type is a list
 					if selectionType.Elem != nil {
-						log.Debug("Selection is a list")
+						// log.Debug("Selection is a list")
 						// make sure the root value is a list
 						rootList, ok := rootValue.([]JSONObject)
 						if !ok {
@@ -470,7 +342,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 						for entryI, resultEntry := range rootList {
 							// the point we are going to add to the list
 							entryPoint := fmt.Sprintf("%s:%v", selection.Name, entryI)
-							log.Debug("Adding ", entryPoint, " to list")
+							// log.Debug("Adding ", entryPoint, " to list")
 
 							newBranchSet := make([][]string, len(oldBranch))
 							copy(newBranchSet, oldBranch)
@@ -536,7 +408,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 									return nil, errors.New("Could not find the id for the object")
 								}
 
-								log.Debug("Adding id to ", oldBranch[i][pointI])
+								// log.Debug("Adding id to ", oldBranch[i][pointI])
 
 								oldBranch[i][pointI] = fmt.Sprintf("%s:%v#%v", oldBranch[i][pointI], i, id)
 
@@ -576,6 +448,186 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 	return oldBranch, nil
 }
 
-func buildQueryForExecution(objectType string, selectionSet ast.SelectionSet) *ast.QueryDocument {
+func executorExtractValue(source JSONObject, path []string) (interface{}, error) {
+	// a pointer to the objects we are modifying
+	var recent interface{} = source
+
+	for i, point := range path[:len(path)] {
+		// if the point designates an element in the list
+		if strings.Contains(point, ":") {
+			// extract the index of the element we need to insert into
+			indexData := strings.Split(point, ":")
+
+			// grab the field name and the index
+			field := indexData[0]
+			idData := strings.Split(indexData[1], "#")
+			index, err := strconv.ParseInt(idData[0], 0, 32)
+			if err != nil {
+				return nil, err
+			}
+
+			recentObj, ok := recent.(JSONObject)
+			if !ok {
+				return nil, errors.New("List was not of objects?")
+			}
+
+			// if the field does not exist
+			if recentObj[field] == nil {
+				recentObj[field] = []JSONObject{}
+			}
+			// it should be a list
+			targetList, ok := recentObj[field].([]JSONObject)
+			if !ok {
+				return nil, errors.New("Did not encounter a list when expected")
+			}
+			// if the field exists but does not have enough spots
+			if len(targetList) <= int(index) {
+				for i := len(targetList) - 1; i < int(index); i++ {
+					targetList = append(targetList, JSONObject{})
+				}
+
+				// update the list with what we just made
+				recentObj[field] = targetList
+			}
+
+			// focus on the right element
+			recent = targetList[index]
+		} else {
+			// it's possible that there's an id
+			pointData := strings.Split(point, "#")
+			pointField := pointData[0]
+
+			recentObj, ok := recent.(JSONObject)
+			if !ok {
+				return nil, errors.New("List was not of objects?")
+			}
+
+			// we are add an object value
+			targetObject := recentObj[pointField]
+
+			if i != len(path)-1 && targetObject == nil {
+				recentObj[pointField] = JSONObject{}
+			}
+			// if we haven't created an object there with that field
+			if targetObject == nil {
+				recentObj[pointField] = JSONObject{}
+			}
+
+			// look there next
+			recent = recentObj[pointField]
+		}
+	}
+
+	return recent, nil
+}
+
+func executorInsertObject(target JSONObject, path []string, value interface{}) error {
+	if len(path) > 0 {
+		head := path[len(path)-1]
+		// the path to the key we want to set
+		tail := path[:max(len(path)-1, 0)]
+
+		// a pointer to the objects we are modifying
+		obj, err := executorExtractValue(target, tail)
+		if err != nil {
+			return err
+		}
+
+		valueObj, ok := obj.(JSONObject)
+		if !ok {
+			return errors.New("something went wrong")
+		}
+
+		// if the head points to a list
+		if strings.Contains(head, ":") {
+			// {head} is a key for a list, and value needs to go in the right place
+			pointData, err := getPointData(head)
+			if err != nil {
+				return err
+			}
+
+			// if there is no list at that location
+			if _, ok := valueObj[pointData.Field]; !ok {
+				valueObj[pointData.Field] = []JSONObject{}
+			}
+
+			// if its not a list
+			valueList, ok := valueObj[pointData.Field].([]JSONObject)
+			if !ok {
+				return errors.New("Found a non-list at the insertion point")
+			}
+
+			fmt.Println(len(valueList), pointData.Index)
+			// make sure that the list has enough entries
+			for i := max(len(valueList)-1, 0); i <= pointData.Index; i++ {
+				fmt.Println("Adding entry")
+				valueList = append(valueList, JSONObject{})
+			}
+
+			sameValue, ok := valueObj[pointData.Field].([]JSONObject)
+			if !ok {
+				return errors.New("Not okay")
+			}
+
+			fmt.Println(len(sameValue), pointData.Index)
+
+		} else {
+			// we are just assigning a value
+			valueObj[head] = value
+		}
+	} else {
+		valueObj, ok := value.(JSONObject)
+		if !ok {
+			return errors.New("something went wrong")
+		}
+
+		for key, value := range valueObj {
+			target[key] = value
+		}
+	}
+	return nil
+}
+
+type extractorPointData struct {
+	Field string
+	Index int
+	ID    string
+}
+
+func getPointData(point string) (*extractorPointData, error) {
+	field := point
+	index := -1
+	id := ""
+
+	// points come in the form <field>:<index>#<id> and each of index or id is optional
+	if strings.Contains(point, "#") {
+		idData := strings.Split(point, "#")
+		if len(idData) == 2 {
+			id = idData[1]
+		}
+
+		// use the index data without the id
+		field = idData[0]
+	}
+
+	if strings.Contains(field, ":") {
+		indexData := strings.Split(field, ":")
+		indexValue, err := strconv.ParseInt(indexData[1], 0, 32)
+		if err != nil {
+			return nil, err
+		}
+
+		index = int(indexValue)
+		field = indexData[0]
+	}
+
+	return &extractorPointData{
+		Field: field,
+		Index: index,
+		ID:    id,
+	}, nil
+}
+
+func executorBuildQuery(objectType string, selectionSet ast.SelectionSet) *ast.QueryDocument {
 	return nil
 }
