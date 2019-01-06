@@ -1,6 +1,10 @@
 package gateway
 
-import "github.com/vektah/gqlparser/ast"
+import (
+	"fmt"
+
+	"github.com/vektah/gqlparser/ast"
+)
 
 // Queryer is a interface for objects that can perform
 type Queryer interface {
@@ -9,7 +13,7 @@ type Queryer interface {
 
 // MockQueryer responds with pre-defined known values when executing a query
 type MockQueryer struct {
-	Value map[string]interface{}
+	Value JSONObject
 }
 
 // Query looks up the name of the query in the map of responses and returns the value
@@ -24,5 +28,7 @@ type NetworkQueryer struct {
 
 // Query sends the query to the designated url and returns the response.
 func (q *NetworkQueryer) Query(query *ast.QueryDocument) (map[string]interface{}, error) {
-	return map[string]interface{}{}, nil
+	fmt.Println(query)
+
+	return nil, nil
 }
