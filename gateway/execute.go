@@ -649,9 +649,36 @@ func executorBuildQuery(parentType string, parentID string, selectionSet ast.Sel
 	if parentType == "Query" {
 		operation.SelectionSet = selectionSet
 	} else {
-		// if we are not querying the top level then we have to nest the selection set
+		// if we are not querying the top level then we have to embed the selection set
 		// under the node query with the right id as the argument
 
+		// we want the operation to have the equivalent of
+		// {
+		//	 	node(id: parentID) {
+		//	 		... on parentType {
+		//	 			selection
+		//	 		}
+		//	 	}
+		// }
+		operation.SelectionSet = ast.SelectionSet{
+			&ast.Field{
+				Name: "node",
+				Arguments: ast.ArgumentList{
+					&ast.Argument{
+						Name: "id",
+						Value: &ast.Value{
+							Raw: parentID,
+						},
+					},
+				},
+				SelectionSet: ast.SelectionSet{
+					&ast.InlineFragment{
+						TypeCondition: parentType,
+						SelectionSet:  selectionSet,
+					},
+				},
+			},
+		}
 	}
 
 	// add the operation to a QueryDocument

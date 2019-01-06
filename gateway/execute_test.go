@@ -728,11 +728,96 @@ func TestExecutorBuildQuery_query(t *testing.T) {
 
 	// the selection set should be the same as what we passed in
 	assert.Equal(t, selection, operation.SelectionSet)
-
 }
 
 func TestExecutorBuildQuery_node(t *testing.T) {
+	// if we are querying a specific type/id then we need to perform a query similar to
+	// {
+	// 		node(id: "1234") {
+	// 			... on User {
+	// 				firstName
+	// 			}
+	// 		}
+	// }
 
+	// the type we are querying
+	objType := "User"
+	// the id of the object
+	objID := "1234"
+
+	// we only need the first name for this query
+	selection := ast.SelectionSet{
+		&ast.Field{
+			Name: "firstName",
+			Definition: &ast.FieldDefinition{
+				Type: ast.NamedType("String", &ast.Position{}),
+			},
+		},
+	}
+
+	// the query we're building goes to the User object
+	query := executorBuildQuery(objType, objID, selection)
+	if query == nil {
+		t.Error("Did not receive a query.")
+		return
+	}
+
+	// grab the first operation
+	operation := query.Operations[0]
+
+	// it should be a query
+	assert.Equal(t, ast.Query, operation.Operation)
+
+	// there should be one selection (node) with an argument for the id
+	if len(operation.SelectionSet) != 1 {
+		t.Error("Did not find the right number of fields on the top query")
+		return
+	}
+
+	// grab the node field
+	node, ok := operation.SelectionSet[0].(*ast.Field)
+	if !ok {
+		t.Error("root is not a field")
+		return
+	}
+	if node.Name != "node" {
+		t.Error("Did not ask for node at the top")
+		return
+	}
+	// there should be one argument (id)
+	if len(node.Arguments) != 1 {
+		t.Error("Found the wrong number of arguments for the node field")
+		return
+	}
+	argument := node.Arguments[0]
+	if argument.Name != "id" {
+		t.Error("Did not pass id to the node field")
+		return
+	}
+	if argument.Value.Raw != objID {
+		t.Error("Did not pass the right id value to the node field")
+		return
+	}
+
+	// make sure the field has an inline fragment for the type
+	if len(node.SelectionSet) != 1 {
+		t.Error("Did not have any sub selection of the node field")
+		return
+	}
+	fragment, ok := node.SelectionSet[0].(*ast.InlineFragment)
+	if !ok {
+		t.Error("Could not find inline fragment under node")
+		return
+	}
+
+	// make sure its for the right type
+	if fragment.TypeCondition != objType {
+		t.Error("Inline fragment was for wrong type")
+		return
+	}
+
+	// make sure the selection set is what we expected
+	assert.Equal(t, selection, fragment.SelectionSet)
 }
 
 func TestExecutorGetPointData(t *testing.T) {
