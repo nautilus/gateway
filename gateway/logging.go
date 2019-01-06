@@ -10,6 +10,7 @@ type Logger struct {
 	fields logrus.Fields
 }
 
+// LoggerFields is a wrapper over a map of key,value pairs to associate with the log
 type LoggerFields map[string]interface{}
 
 // Debug should be used for any logging that would be useful for debugging
@@ -48,6 +49,7 @@ func (l *Logger) Warn(args ...interface{}) {
 	entry.Warn(args...)
 }
 
+// WithFields adds the provided fields to the Log
 func (l *Logger) WithFields(fields LoggerFields) *Logger {
 	// build up the logrus fields
 	logrusFields := logrus.Fields{}

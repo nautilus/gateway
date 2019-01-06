@@ -39,7 +39,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	root := plans[0].RootStep.Then[0]
 	// there should only be one selection
 	if len(root.SelectionSet) != 1 {
-		t.Error("encounted the wrong number of selections under root step")
+		t.Error("encountered the wrong number of selections under root step")
 		return
 	}
 	rootField := applyDirectives(root.SelectionSet)[0]
@@ -102,7 +102,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 
 	// there should only be one selection
 	if len(rootStep.SelectionSet) != 1 {
-		t.Error("encounted the wrong number of selections under root step")
+		t.Error("encountered the wrong number of selections under root step")
 		return
 	}
 

@@ -34,7 +34,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 	// a place to store the result
 	result := JSONObject{}
 
-	// a channel to recieve query results
+	// a channel to receive query results
 	resultCh := make(chan queryExecutionResult, 10)
 	// defer close(resultCh)
 
@@ -181,16 +181,29 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 	// log the query
 	log.QueryPlanStep(step)
 
-	// TODO: using the insertion point, find the id of the object we are resolving this
-	// step for
+	// the id of the object we are query is defined by the last step in the realized insertion point
+	id := ""
+	if len(insertionPoint) > 1 {
+		head := insertionPoint[max(len(insertionPoint)-2, 0)]
 
+		// get the data of the point
+		pointData, err := executorGetPointData(head)
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		// reassign the id
+		id = pointData.ID
+	}
 	// generate the query that we have to send for this step
-	query := executorBuildQuery(step.ParentType, step.SelectionSet)
+	query := executorBuildQuery(step.ParentType, id, step.SelectionSet)
 
 	// execute the query
 	queryResult, err := step.Queryer.Query(query)
 	if err != nil {
 		errCh <- err
+		return
 	}
 
 	// NOTE: this insertion point could point to a list of values. If it did, we have to have
@@ -216,21 +229,12 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 				return
 			}
 
-			// if len(insertPoints) > 0 {
-			// 	log.Debug("Insertion points ", insertPoints)
-			// 	insertionPoint := insertPoints[0]
-			// 	log.Info("Spawn ", insertionPoint)
-			// 	stepWg.Add(1)
-			// 	go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
-			// }
-
 			// this dependent needs to fire for every object that the insertion point references
 			for _, insertionPoint := range insertPoints {
 				log.Info("Spawn ", insertionPoint)
 				stepWg.Add(1)
 				go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
 			}
-
 		}
 	}
 
@@ -542,7 +546,7 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 		// if the head points to a list
 		if strings.Contains(head, ":") {
 			// {head} is a key for a list, and value needs to go in the right place
-			pointData, err := getPointData(head)
+			pointData, err := executorGetPointData(head)
 			if err != nil {
 				return err
 			}
@@ -599,7 +603,7 @@ type extractorPointData struct {
 	ID    string
 }
 
-func getPointData(point string) (*extractorPointData, error) {
+func executorGetPointData(point string) (*extractorPointData, error) {
 	field := point
 	index := -1
 	id := ""
@@ -633,6 +637,52 @@ func getPointData(point string) (*extractorPointData, error) {
 	}, nil
 }
 
-func executorBuildQuery(objectType string, selectionSet ast.SelectionSet) *ast.QueryDocument {
-	return nil
+func executorBuildQuery(parentType string, parentID string, selectionSet ast.SelectionSet) *ast.QueryDocument {
+	log.Debug("Querying ", parentType, " ", parentID)
+	// build up an operation for the query
+	operation := &ast.OperationDefinition{
+		Operation: ast.Query,
+	}
+
+	// if we are querying the top level Query all we need to do is add
+	// the selection set at the root
+	if parentType == "Query" {
+		operation.SelectionSet = selectionSet
+	} else {
+		// if we are not querying the top level then we have to embed the selection set
+		// under the node query with the right id as the argument
+
+		// we want the operation to have the equivalent of
+		// {
+		//	 	node(id: parentID) {
+		//	 		... on parentType {
+		//	 			selection
+		//	 		}
+		//	 	}
+		// }
+		operation.SelectionSet = ast.SelectionSet{
+			&ast.Field{
+				Name: "node",
+				Arguments: ast.ArgumentList{
+					&ast.Argument{
+						Name: "id",
+						Value: &ast.Value{
+							Raw: parentID,
+						},
+					},
+				},
+				SelectionSet: ast.SelectionSet{
+					&ast.InlineFragment{
+						TypeCondition: parentType,
+						SelectionSet:  selectionSet,
+					},
+				},
+			},
+		}
+	}
+
+	// add the operation to a QueryDocument
+	return &ast.QueryDocument{
+		Operations: ast.OperationList{operation},
+	}
 }
