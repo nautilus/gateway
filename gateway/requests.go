@@ -63,15 +63,15 @@ func (q *NetworkQueryer) Query(query *ast.QueryDocument) (map[string]interface{}
 	defer resp.Body.Close()
 
 	// parse the response as json
-	response := &JSONObject{}
+	response := JSONObject{}
 
-	err = json.Unmarshal(body, response)
+	err = json.Unmarshal(body, &response)
 	if err != nil {
 		return nil, err
 	}
 
 	// pass the result along
-	return *response, nil
+	return response, nil
 }
 
 // NewNetworkQueryer returns a NetworkQueryer pointed to the given url
