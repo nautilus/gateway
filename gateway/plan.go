@@ -85,7 +85,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		plans = append(plans, plan)
 
 		// the list of fields we care about
-		fields := applyDirectives(operation.SelectionSet)
+		fields := applyFragments(operation.SelectionSet)
 
 		// assume that the root location for this whole operation is the uniform
 		possibleLocations, err := locations.URLFor("Query", fields[0].Name)
@@ -142,7 +142,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 					// log some stuffs
 					selectionNames := []string{}
-					for _, selection := range applyDirectives(step.SelectionSet) {
+					for _, selection := range applyFragments(step.SelectionSet) {
 						selectionNames = append(selectionNames, selection.Name)
 					}
 
@@ -153,7 +153,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					selectionSet := ast.SelectionSet{}
 
 					// for each field in the
-					for _, selectedField := range applyDirectives(step.SelectionSet) {
+					for _, selectedField := range applyFragments(step.SelectionSet) {
 						log.Debug("extracting selection ", selectedField.Name)
 						// we always ignore the latest insertion point since we will add it to the list
 						// in the extracts
@@ -194,7 +194,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					stepWg.Done()
 
 					log.Debug("Step selection set:")
-					for _, selection := range applyDirectives(step.SelectionSet) {
+					for _, selection := range applyFragments(step.SelectionSet) {
 						log.Debug(selection.Name)
 					}
 				}
@@ -280,7 +280,7 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 			newSelection := ast.SelectionSet{}
 
 			// get the list of fields underneath the taret field
-			for _, selection := range applyDirectives(config.field.SelectionSet) {
+			for _, selection := range applyFragments(config.field.SelectionSet) {
 				// add any possible selections provided by selections
 				subSelection, err := p.extractSelection(&extractSelectionConfig{
 					stepCh:         config.stepCh,
@@ -338,7 +338,7 @@ func coreFieldType(source *ast.Field) *ast.Type {
 	return source.Definition.Type
 }
 
-func applyDirectives(source ast.SelectionSet) []*ast.Field {
+func applyFragments(source ast.SelectionSet) []*ast.Field {
 	// build up a list of fields
 	fields := []*ast.Field{}
 

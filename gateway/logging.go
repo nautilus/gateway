@@ -76,7 +76,7 @@ func logPlanStep(level int, selectionSet ast.SelectionSet) {
 		prefix += "    "
 	}
 	prefix += "|- "
-	for _, selection := range applyDirectives(selectionSet) {
+	for _, selection := range applyFragments(selectionSet) {
 		log.Info(prefix, selection.Name)
 		logPlanStep(level+1, selection.SelectionSet)
 	}
@@ -98,7 +98,6 @@ func newLogEntry() *logrus.Entry {
 	})
 
 	return logrus.NewEntry(entry)
-
 }
 func init() {
 	log = &Logger{}

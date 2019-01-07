@@ -27,6 +27,22 @@ func TestPrintQuery(t *testing.T) {
 				},
 			},
 		},
+		// variable values
+		{
+			`{
+  hello(foo: $foo)
+}
+`,
+			&ast.OperationDefinition{
+				Operation: ast.Query,
+				SelectionSet: ast.SelectionSet{
+					&ast.Field{
+						Name:      "hello",
+						Arguments: ast.ArgumentList{},
+					},
+				},
+			},
+		},
 		// multiple root fields
 		{
 			`{

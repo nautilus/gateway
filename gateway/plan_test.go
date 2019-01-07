@@ -42,7 +42,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 		t.Error("encountered the wrong number of selections under root step")
 		return
 	}
-	rootField := applyDirectives(root.SelectionSet)[0]
+	rootField := applyFragments(root.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
 	queryer := root.Queryer.(*NetworkQueryer)
@@ -106,7 +106,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 		return
 	}
 
-	rootField := applyDirectives(rootStep.SelectionSet)[0]
+	rootField := applyFragments(rootStep.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
 	queryer := rootStep.Queryer.(*NetworkQueryer)
@@ -220,7 +220,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 		t.Error("first strep did not have a selection set")
 		return
 	}
-	firstField := applyDirectives(firstStep.SelectionSet)[0]
+	firstField := applyFragments(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
 	queryer := firstStep.Queryer.(*NetworkQueryer)
 	assert.Equal(t, userLocation, queryer.URL)
@@ -230,7 +230,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 
 	// all users should have only one selected value since `catPhotos` is from another service
 	if len(firstField.SelectionSet) > 1 {
-		for _, selection := range applyDirectives(firstField.SelectionSet) {
+		for _, selection := range applyFragments(firstField.SelectionSet) {
 			fmt.Println(selection.Name)
 		}
 		t.Error("Encountered too many fields on allUsers selection set")
@@ -268,11 +268,11 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 
 	// make sure we selected the catPhotos field
-	selectedSecondField := applyDirectives(secondStep.SelectionSet)[0]
+	selectedSecondField := applyFragments(secondStep.SelectionSet)[0]
 	assert.Equal(t, "catPhotos", selectedSecondField.Name)
 
 	// we should have also asked for one field underneath
-	secondSubSelection := applyDirectives(selectedSecondField.SelectionSet)
+	secondSubSelection := applyFragments(selectedSecondField.SelectionSet)
 	if len(secondSubSelection) != 1 {
 		t.Error("Encountered the incorrect number of fields selected under User.catPhotos")
 	}
@@ -300,11 +300,11 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 
 	// make sure we selected the catPhotos field
-	selectedThirdField := applyDirectives(thirdStep.SelectionSet)[0]
+	selectedThirdField := applyFragments(thirdStep.SelectionSet)[0]
 	assert.Equal(t, "owner", selectedThirdField.Name)
 
 	// we should have also asked for one field underneath
-	thirdSubSelection := applyDirectives(selectedThirdField.SelectionSet)
+	thirdSubSelection := applyFragments(selectedThirdField.SelectionSet)
 	if len(thirdSubSelection) != 1 {
 		t.Error("Encountered the incorrect number of fields selected under User.catPhotos")
 	}
