@@ -410,6 +410,36 @@ func TestPrintQuery(t *testing.T) {
 				},
 			},
 		},
+		// single mutation field
+		{
+			`mutation {
+  hello
+}
+`,
+			&ast.OperationDefinition{
+				Operation: ast.Mutation,
+				SelectionSet: ast.SelectionSet{
+					&ast.Field{
+						Name: "hello",
+					},
+				},
+			},
+		},
+		// single subscription field
+		{
+			`subscription {
+  hello
+}
+`,
+			&ast.OperationDefinition{
+				Operation: ast.Subscription,
+				SelectionSet: ast.SelectionSet{
+					&ast.Field{
+						Name: "hello",
+					},
+				},
+			},
+		},
 	}
 
 	for _, row := range table {
