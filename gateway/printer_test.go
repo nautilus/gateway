@@ -434,6 +434,55 @@ func TestPrintQuery(t *testing.T) {
 				},
 			},
 		},
+		// anonymous variables to query
+		{
+			`query ($id: ID!) {
+  hello
+}
+`,
+			&ast.OperationDefinition{
+				Operation: ast.Query,
+				SelectionSet: ast.SelectionSet{
+					&ast.Field{
+						Name: "hello",
+					},
+				},
+				VariableDefinitions: ast.VariableDefinitionList{
+					&ast.VariableDefinition{
+						Variable: "id",
+						Type: &ast.Type{
+							NamedType: "ID",
+							NonNull:   true,
+						},
+					},
+				},
+			},
+		},
+		// named query with variables
+		{
+			`query foo($id: ID!) {
+  hello
+}
+`,
+			&ast.OperationDefinition{
+				Operation: ast.Query,
+				Name:      "foo",
+				SelectionSet: ast.SelectionSet{
+					&ast.Field{
+						Name: "hello",
+					},
+				},
+				VariableDefinitions: ast.VariableDefinitionList{
+					&ast.VariableDefinition{
+						Variable: "id",
+						Type: &ast.Type{
+							NamedType: "ID",
+							NonNull:   true,
+						},
+					},
+				},
+			},
+		},
 		// single mutation field
 		{
 			`mutation {

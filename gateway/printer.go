@@ -29,22 +29,52 @@ func PrintQuery(operation *ast.OperationDefinition) (string, error) {
 		opName = gAst.OperationTypeSubscription
 	}
 
-	newValue := &gAst.Document{
-		Kind: "Document",
-		Definitions: []gAst.Node{
-			&gAst.OperationDefinition{
-				Kind:      "OperationDefinition",
-				Operation: opName,
-				Name: &gAst.Name{
-					Kind:  "Name",
-					Value: operation.Name,
-				},
-				SelectionSet: selectionSet,
-			},
+	gOperation := &gAst.OperationDefinition{
+		Kind:      "OperationDefinition",
+		Operation: opName,
+		Name: &gAst.Name{
+			Kind:  "Name",
+			Value: operation.Name,
 		},
+		SelectionSet: selectionSet,
 	}
 
-	result, ok := printer.Print(newValue).(string)
+	// if we have variables to define
+	if len(operation.VariableDefinitions) > 0 {
+		// build up a list of variable definitions
+		gVarDefs := []*gAst.VariableDefinition{}
+
+		for _, variable := range operation.VariableDefinitions {
+			gVarDefs = append(gVarDefs, &gAst.VariableDefinition{
+				Kind: "VariableDefinition",
+				Variable: &gAst.Variable{
+					Kind: "Variable",
+					Name: &gAst.Name{
+						Kind:  "Name",
+						Value: variable.Variable,
+					},
+				},
+				Type: &gAst.NonNull{
+					Kind: "NonNull",
+					Type: &gAst.Named{
+						Kind: "Named",
+						Name: &gAst.Name{
+							Kind:  "Name",
+							Value: "ID",
+						},
+					},
+				},
+			})
+		}
+
+		// set the
+		gOperation.VariableDefinitions = gVarDefs
+	}
+
+	result, ok := printer.Print(&gAst.Document{
+		Kind:        "Document",
+		Definitions: []gAst.Node{gOperation},
+	}).(string)
 	if !ok {
 		return "", errors.New("Did not return a string")
 	}
