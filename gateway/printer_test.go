@@ -37,8 +37,16 @@ func TestPrintQuery(t *testing.T) {
 				Operation: ast.Query,
 				SelectionSet: ast.SelectionSet{
 					&ast.Field{
-						Name:      "hello",
-						Arguments: ast.ArgumentList{},
+						Name: "hello",
+						Arguments: ast.ArgumentList{
+							&ast.Argument{
+								Name: "foo",
+								Value: &ast.Value{
+									Kind: ast.Variable,
+									Raw:  "foo",
+								},
+							},
+						},
 					},
 				},
 			},

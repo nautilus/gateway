@@ -201,7 +201,7 @@ func printerBuildValue(from *ast.Value) (gAst.Value, error) {
 		return &gAst.Variable{
 			Kind: "Variable",
 			Name: &gAst.Name{
-				Kind:  "Valure",
+				Kind:  "Name",
 				Value: from.Raw,
 			},
 		}, nil
