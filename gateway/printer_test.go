@@ -208,6 +208,30 @@ func TestPrintQuery(t *testing.T) {
 				},
 			},
 		},
+		// boolean arguments
+		{
+			`{
+  hello(hello: true)
+}
+`,
+			&ast.OperationDefinition{
+				Operation: ast.Query,
+				SelectionSet: ast.SelectionSet{
+					&ast.Field{
+						Name: "hello",
+						Arguments: ast.ArgumentList{
+							{
+								Name: "hello",
+								Value: &ast.Value{
+									Kind: ast.BooleanValue,
+									Raw:  "true",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		// variable arguments
 		{
 			`{
