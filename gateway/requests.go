@@ -28,7 +28,14 @@ type NetworkQueryer struct {
 
 // Query sends the query to the designated url and returns the response.
 func (q *NetworkQueryer) Query(query *ast.QueryDocument) (map[string]interface{}, error) {
-	fmt.Println(query)
+	// turn the query into a string
+	queryStr, err := PrintQuery(query.Operations[0])
+	if err != nil {
+		return nil, err
+	}
 
+	fmt.Println(queryStr)
+
+	// pass the result along
 	return nil, nil
 }
