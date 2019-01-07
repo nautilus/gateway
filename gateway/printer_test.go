@@ -51,6 +51,35 @@ func TestPrintQuery(t *testing.T) {
 				},
 			},
 		},
+		// directives
+		{
+			`{
+  hello @foo(bar: "baz")
+}
+`,
+			&ast.OperationDefinition{
+				Operation: ast.Query,
+				SelectionSet: ast.SelectionSet{
+					&ast.Field{
+						Name: "hello",
+						Directives: ast.DirectiveList{
+							&ast.Directive{
+								Name: "foo",
+								Arguments: ast.ArgumentList{
+									&ast.Argument{
+										Name: "bar",
+										Value: &ast.Value{
+											Kind: ast.StringValue,
+											Raw:  "baz",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		// multiple root fields
 		{
 			`{
