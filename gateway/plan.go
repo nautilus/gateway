@@ -53,9 +53,7 @@ func (p *Planner) GetQueryer(url string) Queryer {
 	}
 
 	// otherwise return the network queryer
-	return &NetworkQueryer{
-		URL: url,
-	}
+	return NewNetworkQueryer(url)
 }
 
 // MinQueriesPlanner does the most basic level of query planning
