@@ -23,7 +23,7 @@ type QueryVariables map[string]interface{}
 
 // Queryer is a interface for objects that can perform
 type Queryer interface {
-	Query(string, QueryVariables, string) (map[string]interface{}, error)
+	Query(query string, variables QueryVariables, operationName string) (map[string]interface{}, error)
 }
 
 // MockQueryer responds with pre-defined known values when executing a query
