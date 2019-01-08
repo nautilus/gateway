@@ -21,7 +21,7 @@ type JSONObject map[string]interface{}
 
 // Queryer is a interface for objects that can perform
 type Queryer interface {
-	Query(*ast.QueryDocument) (map[string]interface{}, error)
+	Query(string) (map[string]interface{}, error)
 }
 
 // MockQueryer responds with pre-defined known values when executing a query
@@ -30,7 +30,7 @@ type MockQueryer struct {
 }
 
 // Query looks up the name of the query in the map of responses and returns the value
-func (q *MockQueryer) Query(query *ast.QueryDocument) (map[string]interface{}, error) {
+func (q *MockQueryer) Query(query string) (map[string]interface{}, error) {
 	return q.Value, nil
 }
 
@@ -41,20 +41,10 @@ type NetworkQueryer struct {
 }
 
 // Query sends the query to the designated url and returns the response.
-func (q *NetworkQueryer) Query(query *ast.QueryDocument) (map[string]interface{}, error) {
-	// grab the operation
-	operation := query.Operations[0]
-
-	// turn the query into a string
-	queryStr, err := PrintQuery(operation)
-	if err != nil {
-		return nil, err
-	}
-
+func (q *NetworkQueryer) Query(query string) (map[string]interface{}, error) {
 	// the payload
 	payload, err := json.Marshal(JSONObject{
-		"operationName": operation.Name,
-		"query":         queryStr,
+		"query": query,
 	})
 	if err != nil {
 		return nil, err

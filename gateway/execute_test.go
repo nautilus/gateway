@@ -715,14 +715,11 @@ func TestExecutorBuildQuery_query(t *testing.T) {
 	}
 
 	// the query we're building goes to the top level Query object
-	query := executorBuildQuery("Query", "", selection)
-	if query == nil {
+	operation := executorBuildQuery("Query", "", selection)
+	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
 	}
-
-	// grab the first operation
-	operation := query.Operations[0]
 
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operation)
@@ -757,14 +754,11 @@ func TestExecutorBuildQuery_node(t *testing.T) {
 	}
 
 	// the query we're building goes to the User object
-	query := executorBuildQuery(objType, objID, selection)
-	if query == nil {
+	operation := executorBuildQuery(objType, objID, selection)
+	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
 	}
-
-	// grab the first operation
-	operation := query.Operations[0]
 
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operation)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/alecaivazis/graphql-gateway/graphql"
 	"github.com/vektah/gqlparser/ast"
 )
 
@@ -198,9 +199,13 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 	}
 	// generate the query that we have to send for this step
 	query := executorBuildQuery(step.ParentType, id, step.SelectionSet)
-
+	queryStr, err := graphql.PrintQuery(query)
+	if err != nil {
+		errCh <- err
+		return
+	}
 	// execute the query
-	queryResult, err := step.Queryer.Query(query)
+	queryResult, err := step.Queryer.Query(queryStr)
 	if err != nil {
 		errCh <- err
 		return
@@ -637,7 +642,7 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 	}, nil
 }
 
-func executorBuildQuery(parentType string, parentID string, selectionSet ast.SelectionSet) *ast.QueryDocument {
+func executorBuildQuery(parentType string, parentID string, selectionSet ast.SelectionSet) *ast.OperationDefinition {
 	log.Debug("Querying ", parentType, " ", parentID)
 	// build up an operation for the query
 	operation := &ast.OperationDefinition{
@@ -682,7 +687,5 @@ func executorBuildQuery(parentType string, parentID string, selectionSet ast.Sel
 	}
 
 	// add the operation to a QueryDocument
-	return &ast.QueryDocument{
-		Operations: ast.OperationList{operation},
-	}
+	return operation
 }

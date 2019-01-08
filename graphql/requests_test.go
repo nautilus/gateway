@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/vektah/gqlparser/ast"
 )
 
 type roundTripFunc func(req *http.Request) *http.Response
@@ -58,33 +57,13 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 	}
 
 	// the corresponding query document
-	query := &ast.QueryDocument{
-		Operations: ast.OperationList{
-			{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name:  "hello",
-						Alias: "Goodbye",
-						SelectionSet: ast.SelectionSet{
-							&ast.Field{
-								Name: "world",
-							},
-						},
-						Arguments: ast.ArgumentList{
-							&ast.Argument{
-								Name: "world",
-								Value: &ast.Value{
-									Kind: ast.NullValue,
-									Raw:  "",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
+	query := `
+		{
+			hello(world: "hello") {
+				world
+			}
+		}
+	`
 
 	queryer := &NetworkQueryer{
 		URL:    "hello",
@@ -120,18 +99,11 @@ func TestNetworkQueryer_respondsWithErr(t *testing.T) {
 	}
 
 	// the corresponding query document
-	query := &ast.QueryDocument{
-		Operations: ast.OperationList{
-			{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-					},
-				},
-			},
-		},
-	}
+	query := `
+		{
+			hello
+		}
+	`
 
 	queryer := &NetworkQueryer{
 		URL:    "hello",
