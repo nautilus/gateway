@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 
 	"github.com/vektah/gqlparser/ast"
 )
@@ -19,11 +20,15 @@ type RemoteSchema struct {
 // JSONObject is a typdef for map[string]interface{} to make structuring json responses easier.
 type JSONObject map[string]interface{}
 
-type QueryVariables map[string]interface{}
+type QueryInput struct {
+	Query         string
+	OperationName string
+	Variables     map[string]interface{}
+}
 
 // Queryer is a interface for objects that can perform
 type Queryer interface {
-	Query(query string, variables QueryVariables, operationName string) (map[string]interface{}, error)
+	Query(*QueryInput, interface{}) error
 }
 
 // MockQueryer responds with pre-defined known values when executing a query
@@ -32,8 +37,9 @@ type MockQueryer struct {
 }
 
 // Query looks up the name of the query in the map of responses and returns the value
-func (q *MockQueryer) Query(query string, variables QueryVariables, operationName string) (map[string]interface{}, error) {
-	return q.Value, nil
+func (q *MockQueryer) Query(input *QueryInput, receiver interface{}) error {
+	reflect.ValueOf(receiver).Elem().Set(reflect.ValueOf(q.Value))
+	return nil
 }
 
 // NetworkQueryer sends the query to a url and returns the response
@@ -43,39 +49,36 @@ type NetworkQueryer struct {
 }
 
 // Query sends the query to the designated url and returns the response.
-func (q *NetworkQueryer) Query(query string, variables QueryVariables, operationName string) (map[string]interface{}, error) {
+func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 	// the payload
 	payload, err := json.Marshal(JSONObject{
-		"query":         query,
-		"variables":     variables,
-		"operationName": operationName,
+		"query":         input.Query,
+		"variables":     input.Variables,
+		"operationName": input.OperationName,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// fire the response to the queryer's url
 	resp, err := q.Client.Post(q.URL, "application/json", bytes.NewBuffer(payload))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// read the full body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 
-	// parse the response as json
-	response := JSONObject{}
-
-	err = json.Unmarshal(body, &response)
+	err = json.Unmarshal(body, receiver)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// pass the result along
-	return response, nil
+	return nil
 }
 
 // NewNetworkQueryer returns a NetworkQueryer pointed to the given url

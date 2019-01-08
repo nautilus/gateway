@@ -71,7 +71,8 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 	}
 
 	// get the response of the query
-	result, err := queryer.Query(query, nil, "")
+	result := map[string]interface{}{}
+	err := queryer.Query(&QueryInput{Query: query}, &result)
 	if err != nil {
 		t.Error(err)
 		return
@@ -111,7 +112,8 @@ func TestNetworkQueryer_respondsWithErr(t *testing.T) {
 	}
 
 	// get the response of the query
-	_, err := queryer.Query(query, nil, "")
+	var result interface{}
+	err := queryer.Query(&QueryInput{Query: query}, result)
 	if err == nil {
 		t.Error("Did not receive an error")
 		return

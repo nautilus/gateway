@@ -1,12 +1,24 @@
 package graphql
 
 import (
+	"fmt"
+
 	"github.com/vektah/gqlparser/ast"
 )
 
 // IntrospectAPI send the introspection query to a Queryer and builds up the
 // schema object described by the result
 func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
+	// a place to hold the result of firing the introspection query
+	result := IntrospectionQueryResult{}
+	// fire the introspection query
+	err := queryer.Query(&QueryInput{Query: IntrospectionQuery}, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println(result)
+
 	return nil, nil
 }
 
@@ -67,8 +79,8 @@ type IntrospectionTypeRef struct {
 	OfType *IntrospectionTypeRef `json:"ofType"`
 }
 
-// IntrospectionQueryContent is the query that is fired at an API to reconstruct its schema
-var IntrospectionQueryContent = `
+// IntrospectionQuery is the query that is fired at an API to reconstruct its schema
+var IntrospectionQuery = `
 	query IntrospectionQuery {
 		__schema {
 			queryType { name }
