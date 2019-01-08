@@ -90,7 +90,15 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 	}
 
 	// assign the result under the data key to the receiver
-	err = mapstructure.Decode(result["data"], receiver)
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName: "json",
+		Result:  receiver,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = decoder.Decode(result["data"])
 	if err != nil {
 		return err
 	}
