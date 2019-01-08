@@ -2,7 +2,6 @@ package graphql
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/vektah/gqlparser/ast"
 )
@@ -23,12 +22,18 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 	remoteSchema := result.Schema
 
 	// create a schema we will build up over time
-	schema := &ast.Schema{}
+	schema := &ast.Schema{
+		Types: map[string]*ast.Definition{},
+	}
 
 	// if we dont have a name on the response
 	if remoteSchema.QueryType.Name == "" {
 		return nil, errors.New("Could not find the root query")
 	}
+
+	// reconstructing the schema happens in a few pass throughs
+	// the first builds a map of type names to their definition
+	// the second pass goes over the definitions and reconstructs the types
 
 	// add each type to the schema
 	for _, remoteType := range remoteSchema.Types {
@@ -36,7 +41,6 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 		schemaType := introspectionUnmarshalType(remoteType)
 
 		// check if this type is the QueryType
-		fmt.Println(remoteType.Name, remoteSchema.QueryType.Name)
 		if remoteType.Name == remoteSchema.QueryType.Name {
 			schema.Query = schemaType
 		} else if remoteSchema.MutationType != nil && schemaType.Name == remoteSchema.MutationType.Name {
@@ -44,6 +48,45 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 		} else if remoteSchema.SubscriptionType != nil && schemaType.Name == remoteSchema.SubscriptionType.Name {
 			schema.Subscription = schemaType
 		}
+
+		// register the type with the schema
+		schema.Types[schemaType.Name] = schemaType
+	}
+
+	// the second pass constructs the fields and
+	for _, remoteType := range remoteSchema.Types {
+		// a reference to the type
+		storedType, ok := schema.Types[remoteType.Name]
+		if !ok {
+			return nil, err
+		}
+
+		// build up a list of fields associated with the type
+		fields := ast.FieldList{}
+		for _, field := range remoteType.Fields {
+			// build up the field for this one
+			schemaField := &ast.FieldDefinition{
+				Name:        field.Name,
+				Type:        ast.NamedType(field.Type.Name, &ast.Position{}),
+				Description: field.Description,
+				Arguments:   ast.ArgumentDefinitionList{},
+			}
+
+			// we need to add each argument to the field
+			for _, argument := range field.Args {
+				schemaField.Arguments = append(schemaField.Arguments, &ast.ArgumentDefinition{
+					Name:        argument.Name,
+					Description: argument.Description,
+					Type:        ast.NamedType(argument.Type.Name, &ast.Position{}),
+				})
+			}
+
+			// add the field to the list
+			fields = append(fields, schemaField)
+		}
+
+		// save the list of fields in the schema type
+		storedType.Fields = fields
 	}
 
 	// we're done here
@@ -51,8 +94,26 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 }
 
 func introspectionUnmarshalType(schemaType IntrospectionQueryFullType) *ast.Definition {
+
+	// the kind of type
+	var kind ast.DefinitionKind
+	switch schemaType.Kind {
+	case "OBJECT":
+		kind = ast.Object
+	case "SCALAR":
+		kind = ast.Scalar
+	case "INTERFACE":
+		kind = ast.Interface
+	case "UNION":
+		kind = ast.Union
+	case "ENUM":
+		kind = ast.Enum
+	}
+
 	return &ast.Definition{
-		Name: schemaType.Name,
+		Kind:        kind,
+		Name:        schemaType.Name,
+		Description: schemaType.Description,
 	}
 }
 
@@ -103,10 +164,10 @@ type IntrospectionQueryFullType struct {
 }
 
 type IntrospectionInputValue struct {
-	Name         string                `json:"name"`
-	Description  string                `json:"description"`
-	DefaultValue string                `json:"defaultValue"`
-	Type         *IntrospectionTypeRef `json:"type"`
+	Name         string               `json:"name"`
+	Description  string               `json:"description"`
+	DefaultValue string               `json:"defaultValue"`
+	Type         IntrospectionTypeRef `json:"type"`
 }
 
 type IntrospectionTypeRef struct {
