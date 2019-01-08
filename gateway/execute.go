@@ -205,7 +205,7 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 		return
 	}
 	// execute the query
-	queryResult, err := step.Queryer.Query(queryStr)
+	queryResult, err := step.Queryer.Query(queryStr, nil, "")
 	if err != nil {
 		errCh <- err
 		return

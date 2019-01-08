@@ -6,8 +6,8 @@ import (
 
 // IntrospectAPI send the introspection query to a Queryer and builds up the
 // schema object described by the result
-func IntrospectAPI(queryer Queryer) *ast.Schema {
-	return nil
+func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
+	return nil, nil
 }
 
 type IntrospectionQueryResult struct {
