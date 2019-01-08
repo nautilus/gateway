@@ -11,15 +11,26 @@ func IntrospectAPI(queryer Queryer) *ast.Schema {
 }
 
 type IntrospectionQueryResult struct {
-	Schema IntrospectionQuerySchema `json:"__schema"`
+	Schema *IntrospectionQuerySchema `json:"__schema"`
 }
 
 type IntrospectionQuerySchema struct {
-	QueryType        IntrospectionQueryRootType              `json:"queryType"`
-	MutationType     IntrospectionQueryRootType              `json:"mutationType"`
-	SubscriptionType IntrospectionQueryRootType              `json:"subscriptionType"`
-	Types            []IntrospectionQueryFullType            `json:"types"`
-	Directives       []introspectiveQueryDirectiveDefinition `json:"directives"`
+	QueryType        *IntrospectionQueryRootType  `json:"queryType"`
+	MutationType     *IntrospectionQueryRootType  `json:"mutationType"`
+	SubscriptionType *IntrospectionQueryRootType  `json:"subscriptionType"`
+	Types            []IntrospectionQueryFullType `json:"types"`
+	Directives       []struct {
+		Name        string                    `json:"name"`
+		Description string                    `json:"description"`
+		Locations   []string                  `json:"locations"`
+		Args        []IntrospectionInputValue `json:"args"`
+	} `json:"directives"`
+	EnumValues []struct {
+		Name              string `json:"name"`
+		Description       string `json:"description"`
+		IsDeprecated      bool   `json:"isDeprecated"`
+		DeprecationReason string `json:"deprecationReason"`
+	} `json:"enumValues"`
 }
 
 type IntrospectionQueryRootType struct {
@@ -27,12 +38,33 @@ type IntrospectionQueryRootType struct {
 }
 
 type IntrospectionQueryFullType struct {
-	Kind string `json:"kind"`
+	Kind          string                    `json:"kind"`
+	Name          string                    `json:"name"`
+	Description   string                    `json:"description"`
+	InputFields   []IntrospectionInputValue `json:"inputFields"`
+	Interfaces    []IntrospectionTypeRef    `json:"interfaces"`
+	PossibleTypes []IntrospectionTypeRef    `json:"possibleTypes"`
+	Fields        []struct {
+		Name              string                    `json:"name"`
+		Description       string                    `json:"description"`
+		Args              []IntrospectionInputValue `json:"args"`
+		Type              *IntrospectionTypeRef     `json:"type"`
+		IsDeprecated      bool                      `json:"isDeprecated"`
+		DeprecationReason string                    `json:"deprecationReason"`
+	} `json:"fields"`
 }
 
-type introspectiveQueryDirectiveDefinition struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+type IntrospectionInputValue struct {
+	Name         string                `json:"name"`
+	Description  string                `json:"description"`
+	DefaultValue string                `json:"defaultValue"`
+	Type         *IntrospectionTypeRef `json:"type"`
+}
+
+type IntrospectionTypeRef struct {
+	Kind   string                `json:"kind"`
+	Name   string                `json:"name"`
+	OfType *IntrospectionTypeRef `json:"ofType"`
 }
 
 // IntrospectionQueryContent is the query that is fired at an API to reconstruct its schema
