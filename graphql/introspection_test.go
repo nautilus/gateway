@@ -11,8 +11,22 @@ func TestIntrospectQuery_savesQueryType(t *testing.T) {
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
-				QueryType: &IntrospectionQueryRootType{
+				QueryType: IntrospectionQueryRootType{
 					Name: "Query",
+				},
+				Types: []IntrospectionQueryFullType{
+					{
+						Kind: "OBJECT",
+						Name: "Query",
+						Fields: []IntrospectionQueryFullTypeField{
+							{
+								Name: "Hello",
+								Type: IntrospectionTypeRef{
+									Kind: "SCALAR",
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -26,6 +40,10 @@ func TestIntrospectQuery_savesQueryType(t *testing.T) {
 	// make sure we got a schema back
 	if schema == nil {
 		t.Error("Received nil schema")
+		return
+	}
+	if schema.Query == nil {
+		t.Error("Query was nil")
 		return
 	}
 
