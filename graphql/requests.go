@@ -1,4 +1,4 @@
-package gateway
+package graphql
 
 import (
 	"bytes"
@@ -9,6 +9,9 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
+// JSONObject is a typdef for map[string]interface{} to make structuring json responses easier.
+type JSONObject map[string]interface{}
+
 // Queryer is a interface for objects that can perform
 type Queryer interface {
 	Query(*ast.QueryDocument) (map[string]interface{}, error)
@@ -16,7 +19,7 @@ type Queryer interface {
 
 // MockQueryer responds with pre-defined known values when executing a query
 type MockQueryer struct {
-	Value JSONObject
+	Value map[string]interface{}
 }
 
 // Query looks up the name of the query in the map of responses and returns the value
