@@ -17,7 +17,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	locations := FieldURLMap{}
 	locations.RegisterURL("Query", "foo", location)
 
-	schema, _ := loadSchema(`
+	schema, _ := graphql.LoadSchema(`
 		type Query {
 			foo: Boolean
 		}
@@ -66,7 +66,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	locations.RegisterURL("User", "firstName", location)
 	locations.RegisterURL("User", "friends", location)
 
-	schema, _ := loadSchema(`
+	schema, _ := graphql.LoadSchema(`
 		type User {
 			firstName: String!
 			friends: [User!]!
@@ -157,7 +157,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 }
 
 func TestPlanQuery_subGraphs(t *testing.T) {
-	schema, _ := loadSchema(`
+	schema, _ := graphql.LoadSchema(`
 		type User {
 			firstName: String!
 			catPhotos: [CatPhoto!]!

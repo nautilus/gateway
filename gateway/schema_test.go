@@ -42,7 +42,7 @@ func TestSchema_computeFieldURLs(t *testing.T) {
 
 	for _, source := range schemas {
 		// turn the combo into a remote schema
-		schema, _ := loadSchema(source.query)
+		schema, _ := graphql.LoadSchema(source.query)
 
 		// add the schema to list of sources
 		sources = append(sources, graphql.RemoteSchema{Schema: schema, URL: source.location})
