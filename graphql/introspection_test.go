@@ -7,7 +7,7 @@ import (
 )
 
 func TestIntrospectQuery_savesQueryType(t *testing.T) {
-	// introspect the api with a known response
+	// introspect tIhe api with a known response
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
@@ -49,4 +49,52 @@ func TestIntrospectQuery_savesQueryType(t *testing.T) {
 
 	// make sure the query type has the right name
 	assert.Equal(t, "Query", schema.Query.Name)
+}
+
+func TestIntrospectQuery_savesMutationType(t *testing.T) {
+	// introspect tIhe api with a known response
+	schema, err := IntrospectAPI(&MockQueryer{
+		IntrospectionQueryResult{
+			Schema: &IntrospectionQuerySchema{
+				QueryType: IntrospectionQueryRootType{
+					Name: "Query",
+				},
+				MutationType: &IntrospectionQueryRootType{
+					Name: "Mutation",
+				},
+				Types: []IntrospectionQueryFullType{
+					{
+						Kind: "OBJECT",
+						Name: "Mutation",
+						Fields: []IntrospectionQueryFullTypeField{
+							{
+								Name: "Hello",
+								Type: IntrospectionTypeRef{
+									Kind: "SCALAR",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	// if something went wrong
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// make sure we got a schema back
+	if schema == nil {
+		t.Error("Received nil schema")
+		return
+	}
+	if schema.Mutation == nil {
+		t.Error("Mutation was nil")
+		return
+	}
+
+	// make sure the query type has the right name
+	assert.Equal(t, "Mutation", schema.Mutation.Name)
 }

@@ -19,23 +19,28 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 		return nil, err
 	}
 
+	// grab the schema
+	remoteSchema := result.Schema
+
 	// create a schema we will build up over time
 	schema := &ast.Schema{}
 
 	// if we dont have a name on the response
-	if result.Schema.QueryType.Name == "" {
+	if remoteSchema.QueryType.Name == "" {
 		return nil, errors.New("Could not find the root query")
 	}
 
 	// add each type to the schema
-	for _, schemaType := range result.Schema.Types {
+	for _, remoteType := range remoteSchema.Types {
 		// convert turn the API payload into a schema type
-		queryType := introspectionUnmarshalType(schemaType)
+		schemaType := introspectionUnmarshalType(remoteType)
 
 		// check if this type is the QueryType
-		fmt.Println(schemaType.Name, result.Schema.QueryType.Name)
-		if schemaType.Name == result.Schema.QueryType.Name {
-			schema.Query = queryType
+		fmt.Println(remoteType.Name, remoteSchema.QueryType.Name)
+		if remoteType.Name == remoteSchema.QueryType.Name {
+			schema.Query = schemaType
+		} else if remoteSchema.MutationType != nil && schemaType.Name == remoteSchema.MutationType.Name {
+			schema.Mutation = schemaType
 		}
 	}
 
