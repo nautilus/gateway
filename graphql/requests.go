@@ -40,7 +40,10 @@ type MockQueryer struct {
 
 // Query looks up the name of the query in the map of responses and returns the value
 func (q *MockQueryer) Query(input *QueryInput, receiver interface{}) error {
+	// assume the mock is writing the same kind as the receiver
 	reflect.ValueOf(receiver).Elem().Set(reflect.ValueOf(q.Value))
+
+	// this will panic if something goes wrong
 	return nil
 }
 
