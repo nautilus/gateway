@@ -9,6 +9,13 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
+// RemoteSchema encapsulates a particular schema that can be executed by sending network requests to the
+// specified URL.
+type RemoteSchema struct {
+	Schema *ast.Schema
+	URL    string
+}
+
 // JSONObject is a typdef for map[string]interface{} to make structuring json responses easier.
 type JSONObject map[string]interface{}
 

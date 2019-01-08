@@ -3,6 +3,7 @@ package gateway
 import (
 	"testing"
 
+	"github.com/alecaivazis/graphql-gateway/graphql"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,14 +38,14 @@ func TestSchema_computeFieldURLs(t *testing.T) {
 	}
 
 	// the list of remote schemas
-	sources := []RemoteSchema{}
+	sources := []graphql.RemoteSchema{}
 
 	for _, source := range schemas {
 		// turn the combo into a remote schema
 		schema, _ := loadSchema(source.query)
 
 		// add the schema to list of sources
-		sources = append(sources, RemoteSchema{Schema: schema, URL: source.location})
+		sources = append(sources, graphql.RemoteSchema{Schema: schema, URL: source.location})
 	}
 
 	locations, err := fieldURLs(sources)

@@ -4,13 +4,15 @@ import (
 	"fmt"
 
 	"github.com/vektah/gqlparser/ast"
+
+	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
 // Schema is the top level entry for interacting with a gateway. It is responsible for merging a list of
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
 type Schema struct {
-	Sources  []RemoteSchema
+	Sources  []graphql.RemoteSchema
 	Schema   *ast.Schema
 	Planner  QueryPlanner
 	Executor Executor
@@ -19,20 +21,13 @@ type Schema struct {
 	fieldURLs FieldURLMap
 }
 
-// RemoteSchema encapsulates a particular schema that can be executed by sending network requests to the
-// specified URL.
-type RemoteSchema struct {
-	Schema *ast.Schema
-	URL    string
-}
-
 // Plan returns the query plan for the incoming query
 func (s *Schema) Plan(query string) ([]*QueryPlan, error) {
 	return s.Planner.Plan(query, s.Schema, s.fieldURLs)
 }
 
 // NewSchema instantiates a new schema with the required stuffs.
-func NewSchema(sources []RemoteSchema) (*Schema, error) {
+func NewSchema(sources []graphql.RemoteSchema) (*Schema, error) {
 	// grab the schemas to compute the sources
 	sourceSchemas := []*ast.Schema{}
 	for _, source := range sources {
@@ -65,18 +60,18 @@ func NewSchema(sources []RemoteSchema) (*Schema, error) {
 	}, nil
 }
 
-func fieldURLs(schemas []RemoteSchema) (FieldURLMap, error) {
+func fieldURLs(schemas []graphql.RemoteSchema) (FieldURLMap, error) {
 	// build the mapping of fields to urls
 	locations := FieldURLMap{}
 
 	// every schema we were given could define types
-	for _, remoteSchema := range schemas {
-		// each type defined by the schema can be found at remoteSchema.URL
-		for name, typeDef := range remoteSchema.Schema.Types {
+	for _, removeSchema := range schemas {
+		// each type defined by the schema can be found at removeSchema.URL
+		for name, typeDef := range removeSchema.Schema.Types {
 			// each field of each type can be found here
 			for _, fieldDef := range typeDef.Fields {
 				// register the location for the field
-				locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
+				locations.RegisterURL(name, fieldDef.Name, removeSchema.URL)
 			}
 		}
 	}
