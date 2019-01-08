@@ -3,10 +3,12 @@ package graphql
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"reflect"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/vektah/gqlparser/ast"
 )
 
@@ -33,7 +35,7 @@ type Queryer interface {
 
 // MockQueryer responds with pre-defined known values when executing a query
 type MockQueryer struct {
-	Value map[string]interface{}
+	Value interface{}
 }
 
 // Query looks up the name of the query in the map of responses and returns the value
@@ -65,6 +67,7 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 	if err != nil {
 		return err
 	}
+
 	// read the full body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -72,7 +75,19 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 	}
 	defer resp.Body.Close()
 
-	err = json.Unmarshal(body, receiver)
+	result := map[string]interface{}{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return err
+	}
+
+	// if there is an error
+	if _, ok := result["errors"]; ok {
+		return errors.New("Encountered error")
+	}
+
+	// assign the result under the data key to the receiver
+	err = mapstructure.Decode(result["data"], receiver)
 	if err != nil {
 		return err
 	}

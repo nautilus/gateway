@@ -29,7 +29,9 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 
 	// the result we expect back
 	expected := map[string]interface{}{
-		"foo": "bar",
+		"data": map[string]interface{}{
+			"foo": "bar",
+		},
 	}
 
 	// create a http client that responds with a known body and verifies the incoming query
@@ -83,7 +85,7 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 	}
 
 	// make sure we got what we expected
-	assert.Equal(t, result, expected)
+	assert.Equal(t, expected["data"], result)
 }
 
 func TestNetworkQueryer_respondsWithErr(t *testing.T) {

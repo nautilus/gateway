@@ -11,6 +11,7 @@ import (
 func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 	// a place to hold the result of firing the introspection query
 	result := IntrospectionQueryResult{}
+
 	// fire the introspection query
 	err := queryer.Query(&QueryInput{Query: IntrospectionQuery}, &result)
 	if err != nil {
@@ -23,60 +24,60 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 }
 
 type IntrospectionQueryResult struct {
-	Schema *IntrospectionQuerySchema `json:"__schema"`
+	Schema *IntrospectionQuerySchema `mapstructure:"__schema"`
 }
 
 type IntrospectionQuerySchema struct {
-	QueryType        *IntrospectionQueryRootType  `json:"queryType"`
-	MutationType     *IntrospectionQueryRootType  `json:"mutationType"`
-	SubscriptionType *IntrospectionQueryRootType  `json:"subscriptionType"`
-	Types            []IntrospectionQueryFullType `json:"types"`
+	QueryType        *IntrospectionQueryRootType
+	MutationType     *IntrospectionQueryRootType
+	SubscriptionType *IntrospectionQueryRootType
+	Types            []IntrospectionQueryFullType
 	Directives       []struct {
-		Name        string                    `json:"name"`
-		Description string                    `json:"description"`
-		Locations   []string                  `json:"locations"`
-		Args        []IntrospectionInputValue `json:"args"`
-	} `json:"directives"`
+		Name        string
+		Description string
+		Locations   []string
+		Args        []IntrospectionInputValue
+	}
 	EnumValues []struct {
-		Name              string `json:"name"`
-		Description       string `json:"description"`
-		IsDeprecated      bool   `json:"isDeprecated"`
-		DeprecationReason string `json:"deprecationReason"`
-	} `json:"enumValues"`
+		Name              string
+		Description       string
+		IsDeprecated      bool
+		DeprecationReason string
+	}
 }
 
 type IntrospectionQueryRootType struct {
-	Name string `json:"name"`
+	Name string
 }
 
 type IntrospectionQueryFullType struct {
-	Kind          string                    `json:"kind"`
-	Name          string                    `json:"name"`
-	Description   string                    `json:"description"`
-	InputFields   []IntrospectionInputValue `json:"inputFields"`
-	Interfaces    []IntrospectionTypeRef    `json:"interfaces"`
-	PossibleTypes []IntrospectionTypeRef    `json:"possibleTypes"`
+	Kind          string
+	Name          string
+	Description   string
+	InputFields   []IntrospectionInputValue
+	Interfaces    []IntrospectionTypeRef
+	PossibleTypes []IntrospectionTypeRef
 	Fields        []struct {
-		Name              string                    `json:"name"`
-		Description       string                    `json:"description"`
-		Args              []IntrospectionInputValue `json:"args"`
-		Type              *IntrospectionTypeRef     `json:"type"`
-		IsDeprecated      bool                      `json:"isDeprecated"`
-		DeprecationReason string                    `json:"deprecationReason"`
-	} `json:"fields"`
+		Name              string
+		Description       string
+		Args              []IntrospectionInputValue
+		Type              *IntrospectionTypeRef
+		IsDeprecated      bool
+		DeprecationReason string
+	}
 }
 
 type IntrospectionInputValue struct {
-	Name         string                `json:"name"`
-	Description  string                `json:"description"`
-	DefaultValue string                `json:"defaultValue"`
-	Type         *IntrospectionTypeRef `json:"type"`
+	Name         string
+	Description  string
+	DefaultValue string
+	Type         *IntrospectionTypeRef
 }
 
 type IntrospectionTypeRef struct {
-	Kind   string                `json:"kind"`
-	Name   string                `json:"name"`
-	OfType *IntrospectionTypeRef `json:"ofType"`
+	Kind   string
+	Name   string
+	OfType *IntrospectionTypeRef
 }
 
 // IntrospectionQuery is the query that is fired at an API to reconstruct its schema
@@ -122,7 +123,7 @@ var IntrospectionQuery = `
 		}
 
 		interfaces {
-		.	..TypeRef
+			...TypeRef
 		}
 
 		enumValues(includeDeprecated: true) {

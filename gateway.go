@@ -1,7 +1,16 @@
 package main
 
-import "fmt"
+import (
+	"github.com/alecaivazis/graphql-gateway/graphql"
+)
 
 func main() {
-	fmt.Println("hello world")
+	// the queryer to hit the api
+	queryer := graphql.NewNetworkQueryer("http://localhost:3000")
+
+	// introspect the api
+	_, err := graphql.IntrospectAPI(queryer)
+	if err != nil {
+		panic(err)
+	}
 }
