@@ -41,6 +41,8 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 			schema.Query = schemaType
 		} else if remoteSchema.MutationType != nil && schemaType.Name == remoteSchema.MutationType.Name {
 			schema.Mutation = schemaType
+		} else if remoteSchema.SubscriptionType != nil && schemaType.Name == remoteSchema.SubscriptionType.Name {
+			schema.Subscription = schemaType
 		}
 	}
 
