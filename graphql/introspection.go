@@ -23,7 +23,10 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 
 	// create a schema we will build up over time
 	schema := &ast.Schema{
-		Types: map[string]*ast.Definition{},
+		Types:         map[string]*ast.Definition{},
+		Directives:    map[string]*ast.DirectiveDefinition{},
+		PossibleTypes: map[string][]*ast.Definition{},
+		Implements:    map[string][]*ast.Definition{},
 	}
 
 	// if we dont have a name on the response
@@ -61,6 +64,32 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 			return nil, err
 		}
 
+		// if we are looking at an enum
+		if len(remoteType.PossibleTypes) > 0 {
+			// build up an empty list of types
+			storedType.Types = []string{}
+
+			// each enum value needs to be added to the list
+			for _, possibleType := range remoteType.PossibleTypes {
+				// if there is no name
+				if possibleType.Name == "" {
+					return nil, errors.New("Could not find name of type")
+				}
+
+				// add the type to the union definition
+				storedType.Types = append(storedType.Types, possibleType.Name)
+
+				possibleTypeDef, ok := schema.Types[possibleType.Name]
+				if !ok {
+					return nil, errors.New("Could not find type definition for union implementation")
+				}
+
+				// add the possible type to the schema
+				schema.AddPossibleType(remoteType.Name, possibleTypeDef)
+				schema.AddImplements(possibleType.Name, storedType)
+			}
+		}
+
 		// build up a list of fields associated with the type
 		fields := ast.FieldList{}
 
@@ -81,7 +110,6 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 				Type:        introspectionUnmarshalTypeRef(&field.Type),
 				Description: field.Description,
 			})
-
 		}
 
 		// save the list of fields in the schema type

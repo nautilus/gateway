@@ -205,7 +205,98 @@ func TestIntrospectQuery_interfaces(t *testing.T) {
 	t.Skip("Not yet implemented.")
 }
 
-func TestIntrospectQuery_union(t *testing.T) {
+func TestIntrospectQuery_unions(t *testing.T) {
+	// introspect the api with a known response
+	schema, err := IntrospectAPI(&MockQueryer{
+		IntrospectionQueryResult{
+			Schema: &IntrospectionQuerySchema{
+				QueryType: IntrospectionQueryRootType{
+					Name: "Query",
+				},
+				Types: []IntrospectionQueryFullType{
+					{
+						Kind:        "UNION",
+						Name:        "Maybe",
+						Description: "Description",
+						PossibleTypes: []IntrospectionTypeRef{
+							{
+								Kind: "OBJECT",
+								Name: "Type1",
+							},
+							{
+								Kind: "OBJECT",
+								Name: "Type2",
+							},
+						},
+					},
+					{
+						Kind: "OBJECT",
+						Name: "Type1",
+					},
+					{
+						Kind: "OBJECT",
+						Name: "Type2",
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	union, ok := schema.Types["Maybe"]
+	if !ok {
+		t.Error("Could not find union")
+		return
+	}
+
+	// make sure the union matches epectations
+	assert.Equal(t, "Maybe", union.Name)
+	assert.Equal(t, ast.Union, union.Kind)
+	assert.Equal(t, "Description", union.Description)
+
+	// make sure that the possible types for the Union match expectations
+	possibleTypes := schema.GetPossibleTypes(schema.Types["Maybe"])
+	if len(possibleTypes) != 2 {
+		t.Errorf("Encountered the right number of possible types: %v", len(possibleTypes))
+		return
+	}
+
+	// make sure the first possible type matches expectations
+	possibleType1 := possibleTypes[0]
+	if possibleType1.Name != "Type1" && possibleType1.Name != "Type2" {
+		t.Errorf("first possible type did not have the right name: %s", possibleType1.Name)
+		return
+	}
+
+	// make sure the first possible type matches expectations
+	possibleType2 := possibleTypes[0]
+	if possibleType2.Name != "Type1" && possibleType2.Name != "Type2" {
+		t.Errorf("first possible type did not have the right name: %s", possibleType2.Name)
+		return
+	}
+
+	// make sure the 2 types implement the union
+
+	type1Implements := schema.GetImplements(schema.Types["Type1"])
+	// type 1 implements only one type
+	if len(type1Implements) != 1 {
+		t.Errorf("Type1 implements incorrect number of types: %v", len(type1Implements))
+		return
+	}
+	type1Implementer := type1Implements[0]
+	assert.Equal(t, "Maybe", type1Implementer.Name)
+
+	type2Implements := schema.GetImplements(schema.Types["Type2"])
+	// type 1 implements only one type
+	if len(type2Implements) != 1 {
+		t.Errorf("Type2 implements incorrect number of types: %v", len(type2Implements))
+		return
+	}
+	type2Implementer := type2Implements[0]
+	assert.Equal(t, "Maybe", type2Implementer.Name)
 }
 
 func TestIntrospectQueryUnmarshalType_scalarFields(t *testing.T) {
