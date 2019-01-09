@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -263,9 +264,8 @@ func TestIntrospectQueryUnmarshalType_objects(t *testing.T) {
 								Description: "field-description",
 								Args: []IntrospectionInputValue{
 									{
-										Name:         "arg1",
-										Description:  "arg1-description",
-										DefaultValue: "arg1-default-value",
+										Name:        "arg1",
+										Description: "arg1-description",
 										Type: IntrospectionTypeRef{
 											Name: "String",
 										},
@@ -333,4 +333,99 @@ func TestIntrospectQueryUnmarshalType_enums(t *testing.T) {
 
 func TestIntrospectQueryUnmarshalType_inputObjects(t *testing.T) {
 	t.Skip("Not yet implemented.")
+}
+
+func TestIntrospectUnmarshalTypeDef(t *testing.T) {
+	// the table
+	table := []struct {
+		Message    string
+		Expected   *ast.Type
+		RemoteType *IntrospectionTypeRef
+	}{
+		// named types
+		{
+			"User",
+			ast.NamedType("User", &ast.Position{}),
+			&IntrospectionTypeRef{
+				Kind: "OBJECT",
+				Name: "User",
+			},
+		},
+		// non-null named types
+		{
+			"User!",
+			ast.NonNullNamedType("User", &ast.Position{}),
+			&IntrospectionTypeRef{
+				Kind: "NON_NULL",
+				OfType: &IntrospectionTypeRef{
+					Kind: "OBJECT",
+					Name: "User",
+				},
+			},
+		},
+		// lists of named types
+		{
+			"[User]",
+			ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+			&IntrospectionTypeRef{
+				Kind: "LIST",
+				OfType: &IntrospectionTypeRef{
+					Kind: "OBJECT",
+					Name: "User",
+				},
+			},
+		},
+		// non-null list of named types
+		{
+			"[User]!",
+			ast.NonNullListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+			&IntrospectionTypeRef{
+				Kind: "NON_NULL",
+				OfType: &IntrospectionTypeRef{
+					Kind: "LIST",
+					OfType: &IntrospectionTypeRef{
+						Kind: "OBJECT",
+						Name: "User",
+					},
+				},
+			},
+		},
+		// a non-null list of non-null types
+		{
+			"[User!]!",
+			ast.NonNullListType(ast.NonNullNamedType("User", &ast.Position{}), &ast.Position{}),
+			&IntrospectionTypeRef{
+				Kind: "NON_NULL",
+				OfType: &IntrospectionTypeRef{
+					Kind: "LIST",
+					OfType: &IntrospectionTypeRef{
+						Kind: "NON_NULL",
+						OfType: &IntrospectionTypeRef{
+							Kind: "OBJECT",
+							Name: "User",
+						},
+					},
+				},
+			},
+		},
+		// lists of lists of named types
+		{
+			"[[User]]",
+			ast.ListType(ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}), &ast.Position{}),
+			&IntrospectionTypeRef{
+				Kind: "LIST",
+				OfType: &IntrospectionTypeRef{
+					Kind: "LIST",
+					OfType: &IntrospectionTypeRef{
+						Kind: "OBJECT",
+						Name: "User",
+					},
+				},
+			},
+		},
+	}
+
+	for _, row := range table {
+		assert.Equal(t, row.Expected, introspectionUnmarshalTypeDef(row.RemoteType), fmt.Sprintf("Desired type: %s", row.Message))
+	}
 }

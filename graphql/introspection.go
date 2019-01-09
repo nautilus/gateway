@@ -67,7 +67,7 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 			// build up the field for this one
 			schemaField := &ast.FieldDefinition{
 				Name:        field.Name,
-				Type:        ast.NamedType(field.Type.Name, &ast.Position{}),
+				Type:        introspectionUnmarshalTypeDef(&field.Type),
 				Description: field.Description,
 				Arguments:   ast.ArgumentDefinitionList{},
 			}
@@ -77,7 +77,7 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 				schemaField.Arguments = append(schemaField.Arguments, &ast.ArgumentDefinition{
 					Name:        argument.Name,
 					Description: argument.Description,
-					Type:        ast.NamedType(argument.Type.Name, &ast.Position{}),
+					Type:        introspectionUnmarshalTypeDef(&argument.Type),
 				})
 			}
 
@@ -94,7 +94,6 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 }
 
 func introspectionUnmarshalType(schemaType IntrospectionQueryFullType) *ast.Definition {
-
 	// the kind of type
 	var kind ast.DefinitionKind
 	switch schemaType.Kind {
@@ -115,6 +114,26 @@ func introspectionUnmarshalType(schemaType IntrospectionQueryFullType) *ast.Defi
 		Name:        schemaType.Name,
 		Description: schemaType.Description,
 	}
+}
+
+func introspectionUnmarshalTypeDef(response *IntrospectionTypeRef) *ast.Type {
+	// we could have a non-null list of a field
+	if response.Kind == "NON_NULL" && response.OfType.Kind == "LIST" {
+		return ast.NonNullListType(introspectionUnmarshalTypeDef(response.OfType.OfType), &ast.Position{})
+	}
+
+	// we could have a list of a type
+	if response.Kind == "LIST" {
+		return ast.ListType(introspectionUnmarshalTypeDef(response.OfType), &ast.Position{})
+	}
+
+	// we could have just a non null
+	if response.Kind == "NON_NULL" {
+		return ast.NonNullNamedType(response.OfType.Name, &ast.Position{})
+	}
+
+	// if we are looking at a named type that isn't in a list or marked non-null
+	return ast.NamedType(response.Name, &ast.Position{})
 }
 
 type IntrospectionQueryResult struct {
