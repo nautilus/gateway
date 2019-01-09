@@ -426,6 +426,6 @@ func TestIntrospectUnmarshalTypeDef(t *testing.T) {
 	}
 
 	for _, row := range table {
-		assert.Equal(t, row.Expected, introspectionUnmarshalTypeDef(row.RemoteType), fmt.Sprintf("Desired type: %s", row.Message))
+		assert.Equal(t, row.Expected, introspectionUnmarshalTypeRef(row.RemoteType), fmt.Sprintf("Desired type: %s", row.Message))
 	}
 }

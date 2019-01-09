@@ -67,18 +67,9 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 			// build up the field for this one
 			schemaField := &ast.FieldDefinition{
 				Name:        field.Name,
-				Type:        introspectionUnmarshalTypeDef(&field.Type),
+				Type:        introspectionUnmarshalTypeRef(&field.Type),
 				Description: field.Description,
-				Arguments:   ast.ArgumentDefinitionList{},
-			}
-
-			// we need to add each argument to the field
-			for _, argument := range field.Args {
-				schemaField.Arguments = append(schemaField.Arguments, &ast.ArgumentDefinition{
-					Name:        argument.Name,
-					Description: argument.Description,
-					Type:        introspectionUnmarshalTypeDef(&argument.Type),
-				})
+				Arguments:   introspectionConvertArgList(field.Args),
 			}
 
 			// add the field to the list
@@ -91,6 +82,21 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 
 	// we're done here
 	return schema, nil
+}
+
+func introspectionConvertArgList(args []IntrospectionInputValue) ast.ArgumentDefinitionList {
+	result := ast.ArgumentDefinitionList{}
+
+	// we need to add each argument to the field
+	for _, argument := range args {
+		result = append(result, &ast.ArgumentDefinition{
+			Name:        argument.Name,
+			Description: argument.Description,
+			Type:        introspectionUnmarshalTypeRef(&argument.Type),
+		})
+	}
+
+	return result
 }
 
 func introspectionUnmarshalType(schemaType IntrospectionQueryFullType) *ast.Definition {
@@ -116,15 +122,15 @@ func introspectionUnmarshalType(schemaType IntrospectionQueryFullType) *ast.Defi
 	}
 }
 
-func introspectionUnmarshalTypeDef(response *IntrospectionTypeRef) *ast.Type {
+func introspectionUnmarshalTypeRef(response *IntrospectionTypeRef) *ast.Type {
 	// we could have a non-null list of a field
 	if response.Kind == "NON_NULL" && response.OfType.Kind == "LIST" {
-		return ast.NonNullListType(introspectionUnmarshalTypeDef(response.OfType.OfType), &ast.Position{})
+		return ast.NonNullListType(introspectionUnmarshalTypeRef(response.OfType.OfType), &ast.Position{})
 	}
 
 	// we could have a list of a type
 	if response.Kind == "LIST" {
-		return ast.ListType(introspectionUnmarshalTypeDef(response.OfType), &ast.Position{})
+		return ast.ListType(introspectionUnmarshalTypeRef(response.OfType), &ast.Position{})
 	}
 
 	// we could have just a non null
