@@ -585,11 +585,11 @@ func TestIntrospectQueryUnmarshalType_enums(t *testing.T) {
 	})
 }
 
-func TestIntrospectQuery_DeprecatedFields(t *testing.T) {
+func TestIntrospectQuery_deprecatedFields(t *testing.T) {
 	t.Skip("Not yet implemented")
 }
 
-func TestIntrospectQuery_DeprecateEnums(t *testing.T) {
+func TestIntrospectQuery_deprecatedEnums(t *testing.T) {
 	t.Skip("Not yet Implemented")
 }
 
