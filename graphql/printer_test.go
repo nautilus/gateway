@@ -1,4 +1,4 @@
-package gateway
+package graphql
 
 import (
 	"testing"

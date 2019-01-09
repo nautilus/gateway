@@ -1,11 +1,12 @@
-package gateway
+package graphql
 
 import (
 	"github.com/vektah/gqlparser"
 	"github.com/vektah/gqlparser/ast"
 )
 
-func loadSchema(typedef string) (*ast.Schema, error) {
+// LoadSchema takes an SDL string and returns the parsed version
+func LoadSchema(typedef string) (*ast.Schema, error) {
 	return gqlparser.LoadSchema(&ast.Source{
 		Input: typedef,
 	})

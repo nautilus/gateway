@@ -7,11 +7,13 @@ import (
 
 	"github.com/vektah/gqlparser"
 	"github.com/vektah/gqlparser/ast"
+
+	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
 // QueryPlanStep represents a step in the plan required to fulfill a query.
 type QueryPlanStep struct {
-	Queryer        Queryer
+	Queryer        graphql.Queryer
 	ParentType     string
 	ParentID       string
 	SelectionSet   ast.SelectionSet
@@ -41,11 +43,11 @@ type QueryPlanner interface {
 
 // Planner is meant to be embedded in other QueryPlanners to share configuration
 type Planner struct {
-	QueryerFactory func(url string) Queryer
+	QueryerFactory func(url string) graphql.Queryer
 }
 
 // GetQueryer returns the queryer that should be used to resolve the plan
-func (p *Planner) GetQueryer(url string) Queryer {
+func (p *Planner) GetQueryer(url string) graphql.Queryer {
 	// if there is a queryer factory defined
 	if p.QueryerFactory != nil {
 		// use the factory
@@ -53,7 +55,7 @@ func (p *Planner) GetQueryer(url string) Queryer {
 	}
 
 	// otherwise return the network queryer
-	return NewNetworkQueryer(url)
+	return graphql.NewNetworkQueryer(url)
 }
 
 // MinQueriesPlanner does the most basic level of query planning
