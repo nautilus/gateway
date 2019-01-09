@@ -215,51 +215,23 @@ func introspectionUnmarshalType(schemaType IntrospectionQueryFullType) *ast.Defi
 
 	return definition
 }
+
+// a mapping of marshaled directive locations to their parsed equivalent
+var directiveLocationMap map[string]ast.DirectiveLocation
+
 func introspectionUnmarshalDirectiveLocation(locs []string) ([]ast.DirectiveLocation, error) {
 	result := []ast.DirectiveLocation{}
 
 	// each location needs to be mapped over
 	for _, value := range locs {
-		switch value {
-		case "QUERY":
-			result = append(result, ast.LocationQuery)
-		case "MUTATION":
-			result = append(result, ast.LocationMutation)
-		case "SUBSCRIPTION":
-			result = append(result, ast.LocationSubscription)
-		case "FIELD":
-			result = append(result, ast.LocationField)
-		case "FRAGMENT_DEFINITION":
-			result = append(result, ast.LocationFragmentDefinition)
-		case "FRAGMENT_SPREAD":
-			result = append(result, ast.LocationFragmentSpread)
-		case "INLINE_FRAGMENT":
-			result = append(result, ast.LocationInlineFragment)
-		case "SCHEMA":
-			result = append(result, ast.LocationSchema)
-		case "SCALAR":
-			result = append(result, ast.LocationScalar)
-		case "OBJECT":
-			result = append(result, ast.LocationObject)
-		case "FIELD_DEFINTION":
-			result = append(result, ast.LocationFieldDefinition)
-		case "ARGUMENT_DEFINTION":
-			result = append(result, ast.LocationArgumentDefinition)
-		case "INTERFACE":
-			result = append(result, ast.LocationInterface)
-		case "UNION":
-			result = append(result, ast.LocationUnion)
-		case "ENUM":
-			result = append(result, ast.LocationEnum)
-		case "ENUM_VALUE":
-			result = append(result, ast.LocationEnumValue)
-		case "INPUT_OBJECT":
-			result = append(result, ast.LocationInputObject)
-		case "INPUT_FIELD_DEFINITION":
-			result = append(result, ast.LocationInputFieldDefinition)
-		default:
+		// look up the directive location for the API response
+		location, ok := directiveLocationMap[value]
+		if !ok {
 			return nil, fmt.Errorf("encountered unknown directive location: %s", value)
 		}
+
+		// add the result to the list
+		result = append(result, location)
 	}
 
 	// we're done
@@ -284,6 +256,29 @@ func introspectionUnmarshalTypeRef(response *IntrospectionTypeRef) *ast.Type {
 
 	// if we are looking at a named type that isn't in a list or marked non-null
 	return ast.NamedType(response.Name, &ast.Position{})
+}
+
+func init() {
+	directiveLocationMap = map[string]ast.DirectiveLocation{
+		"QUERY":                  ast.LocationQuery,
+		"MUTATION":               ast.LocationMutation,
+		"SUBSCRIPTION":           ast.LocationSubscription,
+		"FIELD":                  ast.LocationField,
+		"FRAGMENT_DEFINITION":    ast.LocationFragmentDefinition,
+		"FRAGMENT_SPREAD":        ast.LocationFragmentSpread,
+		"INLINE_FRAGMENT":        ast.LocationInlineFragment,
+		"SCHEMA":                 ast.LocationSchema,
+		"SCALAR":                 ast.LocationScalar,
+		"OBJECT":                 ast.LocationObject,
+		"FIELD_DEFINTION":        ast.LocationFieldDefinition,
+		"ARGUMENT_DEFINTION":     ast.LocationArgumentDefinition,
+		"INTERFACE":              ast.LocationInterface,
+		"UNION":                  ast.LocationUnion,
+		"ENUM":                   ast.LocationEnum,
+		"ENUM_VALUE":             ast.LocationEnumValue,
+		"INPUT_OBJECT":           ast.LocationInputObject,
+		"INPUT_FIELD_DEFINITION": ast.LocationInputFieldDefinition,
+	}
 }
 
 type IntrospectionQueryResult struct {

@@ -728,6 +728,20 @@ func TestIntrospectQueryUnmarshalType_inputObjects(t *testing.T) {
 	assert.Equal(t, "String", field.Type.Name())
 }
 
+func TestIntrospectUnmarshalDirectiveLocation(t *testing.T) {
+	// make sure each directive location is extractable
+	for key, value := range directiveLocationMap {
+		// make sure we can convert a list of strings to the list of location
+		result, err := introspectionUnmarshalDirectiveLocation([]string{key, key})
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		assert.Equal(t, []ast.DirectiveLocation{value, value}, result)
+	}
+}
+
 func TestIntrospectUnmarshalTypeDef(t *testing.T) {
 	// the table
 	table := []struct {
