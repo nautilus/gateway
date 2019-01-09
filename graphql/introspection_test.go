@@ -397,7 +397,59 @@ func TestIntrospectQuery_DeprecateEnums(t *testing.T) {
 }
 
 func TestIntrospectQueryUnmarshalType_inputObjects(t *testing.T) {
-	t.Skip("Not yet implemented.")
+	// introspect tIhe api with a known response
+	schema, err := IntrospectAPI(&MockQueryer{
+		IntrospectionQueryResult{
+			Schema: &IntrospectionQuerySchema{
+				QueryType: IntrospectionQueryRootType{
+					Name: "Query",
+				},
+				Types: []IntrospectionQueryFullType{
+					IntrospectionQueryFullType{
+						Kind:        "INPUT_OBJECT",
+						Name:        "InputObjectType",
+						Description: "Description",
+						InputFields: []IntrospectionInputValue{
+							{
+								Name:        "hello",
+								Description: "hello-description",
+								Type: IntrospectionTypeRef{
+									Name: "String",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// create a scalar type with known characteristics
+	object, ok := schema.Types["InputObjectType"]
+	if !ok {
+		t.Error("Could not find a reference to Query object")
+		return
+	}
+
+	// make sure the object meta data is right
+	assert.Equal(t, "InputObjectType", object.Name)
+	assert.Equal(t, "Description", object.Description)
+
+	// we should have added a single field
+	if len(object.Fields) != 1 {
+		t.Errorf("Encountered incorrect number of fields: %v", len(object.Fields))
+		return
+	}
+	field := object.Fields[0]
+
+	// make sure it had the right metadata
+	assert.Equal(t, "hello", field.Name)
+	assert.Equal(t, "hello-description", field.Description)
+	assert.Equal(t, "String", field.Type.Name())
 }
 
 func TestIntrospectUnmarshalTypeDef(t *testing.T) {

@@ -63,17 +63,25 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 
 		// build up a list of fields associated with the type
 		fields := ast.FieldList{}
+
 		for _, field := range remoteType.Fields {
-			// build up the field for this one
-			schemaField := &ast.FieldDefinition{
+			// add the field to the list
+			fields = append(fields, &ast.FieldDefinition{
 				Name:        field.Name,
 				Type:        introspectionUnmarshalTypeRef(&field.Type),
 				Description: field.Description,
 				Arguments:   introspectionConvertArgList(field.Args),
-			}
+			})
+		}
 
+		for _, field := range remoteType.InputFields {
 			// add the field to the list
-			fields = append(fields, schemaField)
+			fields = append(fields, &ast.FieldDefinition{
+				Name:        field.Name,
+				Type:        introspectionUnmarshalTypeRef(&field.Type),
+				Description: field.Description,
+			})
+
 		}
 
 		// save the list of fields in the schema type
