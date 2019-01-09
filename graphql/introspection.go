@@ -142,6 +142,28 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 		storedType.Fields = fields
 	}
 
+	// add each directive to the schema
+	for _, directive := range remoteSchema.Directives {
+		// if we dont have a name
+		if directive.Name == "" {
+			return nil, errors.New("could not find directive name")
+		}
+
+		// the list of directive locations
+		locations, err := introspectionUnmarshalDirectiveLocation(directive.Locations)
+		if err != nil {
+			return nil, err
+		}
+
+		// save the directive definition to the schema
+		schema.Directives[directive.Name] = &ast.DirectiveDefinition{
+			Name:        directive.Name,
+			Description: directive.Description,
+			Arguments:   introspectionConvertArgList(directive.Args),
+			Locations:   locations,
+		}
+	}
+
 	// we're done here
 	return schema, nil
 }
@@ -193,6 +215,56 @@ func introspectionUnmarshalType(schemaType IntrospectionQueryFullType) *ast.Defi
 
 	return definition
 }
+func introspectionUnmarshalDirectiveLocation(locs []string) ([]ast.DirectiveLocation, error) {
+	result := []ast.DirectiveLocation{}
+
+	// each location needs to be mapped over
+	for _, value := range locs {
+		switch value {
+		case "QUERY":
+			result = append(result, ast.LocationQuery)
+		case "MUTATION":
+			result = append(result, ast.LocationMutation)
+		case "SUBSCRIPTION":
+			result = append(result, ast.LocationSubscription)
+		case "FIELD":
+			result = append(result, ast.LocationField)
+		case "FRAGMENT_DEFINITION":
+			result = append(result, ast.LocationFragmentDefinition)
+		case "FRAGMENT_SPREAD":
+			result = append(result, ast.LocationFragmentSpread)
+		case "INLINE_FRAGMENT":
+			result = append(result, ast.LocationInlineFragment)
+		case "SCHEMA":
+			result = append(result, ast.LocationSchema)
+		case "SCALAR":
+			result = append(result, ast.LocationScalar)
+		case "OBJECT":
+			result = append(result, ast.LocationObject)
+		case "FIELD_DEFINTION":
+			result = append(result, ast.LocationFieldDefinition)
+		case "ARGUMENT_DEFINTION":
+			result = append(result, ast.LocationArgumentDefinition)
+		case "INTERFACE":
+			result = append(result, ast.LocationInterface)
+		case "UNION":
+			result = append(result, ast.LocationUnion)
+		case "ENUM":
+			result = append(result, ast.LocationEnum)
+		case "ENUM_VALUE":
+			result = append(result, ast.LocationEnumValue)
+		case "INPUT_OBJECT":
+			result = append(result, ast.LocationInputObject)
+		case "INPUT_FIELD_DEFINITION":
+			result = append(result, ast.LocationInputFieldDefinition)
+		default:
+			return nil, fmt.Errorf("encountered unknown directive location: %s", value)
+		}
+	}
+
+	// we're done
+	return result, nil
+}
 
 func introspectionUnmarshalTypeRef(response *IntrospectionTypeRef) *ast.Type {
 	// we could have a non-null list of a field
@@ -219,16 +291,18 @@ type IntrospectionQueryResult struct {
 }
 
 type IntrospectionQuerySchema struct {
-	QueryType        IntrospectionQueryRootType   `json:"queryType"`
-	MutationType     *IntrospectionQueryRootType  `json:"mutationType"`
-	SubscriptionType *IntrospectionQueryRootType  `json:"subscriptionType"`
-	Types            []IntrospectionQueryFullType `json:"types"`
-	Directives       []struct {
-		Name        string                    `json:"name"`
-		Description string                    `json:"description"`
-		Locations   []string                  `json:"location"`
-		Args        []IntrospectionInputValue `json:"arg"`
-	}
+	QueryType        IntrospectionQueryRootType    `json:"queryType"`
+	MutationType     *IntrospectionQueryRootType   `json:"mutationType"`
+	SubscriptionType *IntrospectionQueryRootType   `json:"subscriptionType"`
+	Types            []IntrospectionQueryFullType  `json:"types"`
+	Directives       []IntrospectionQueryDirective `json:"directives"`
+}
+
+type IntrospectionQueryDirective struct {
+	Name        string                    `json:"name"`
+	Description string                    `json:"description"`
+	Locations   []string                  `json:"location"`
+	Args        []IntrospectionInputValue `json:"arg"`
 }
 
 type IntrospectionQueryRootType struct {

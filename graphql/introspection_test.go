@@ -520,8 +520,87 @@ func TestIntrospectQueryUnmarshalType_objects(t *testing.T) {
 	assert.Equal(t, "String", argument.Type.Name())
 }
 
-func TestIntrospectQueryUnmarshalType_directives(t *testing.T) {
-	t.Skip("Not yet implemented.")
+func TestIntrospectQueryUnmarshalType_directives(t *testing.T) { // introspect the api with a known response
+	schema, err := IntrospectAPI(&MockQueryer{
+		IntrospectionQueryResult{
+			Schema: &IntrospectionQuerySchema{
+				QueryType: IntrospectionQueryRootType{
+					Name: "Query",
+				},
+				Types: []IntrospectionQueryFullType{
+					IntrospectionQueryFullType{
+						Kind:        "OBJECT",
+						Name:        "Query",
+						Description: "Description",
+						Fields: []IntrospectionQueryFullTypeField{
+							{
+								Name:        "hello",
+								Description: "field-description",
+								Args: []IntrospectionInputValue{
+									{
+										Name:        "arg1",
+										Description: "arg1-description",
+										Type: IntrospectionTypeRef{
+											Name: "String",
+										},
+									},
+								},
+								Type: IntrospectionTypeRef{
+									Name: "Foo",
+								},
+							},
+						},
+					},
+				},
+				Directives: []IntrospectionQueryDirective{
+					{
+						Name:        "internal",
+						Description: "internal-description",
+						Locations:   []string{"QUERY", "MUTATION"},
+						Args: []IntrospectionInputValue{
+							{
+								Name:        "hello",
+								Description: "hello-description",
+								Type: IntrospectionTypeRef{
+									Name: "String",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// make sure we have the one definition
+	if len(schema.Directives) != 1 {
+		t.Errorf("Encountered incorrect number of directives: %v", len(schema.Types))
+		return
+	}
+
+	directive, ok := schema.Directives["internal"]
+	if !ok {
+		t.Error("Could not find directive 'internal'")
+		return
+	}
+
+	// make sure that the directive meta data is right
+	assert.Equal(t, "internal", directive.Name)
+	assert.Equal(t, "internal-description", directive.Description)
+	assert.Equal(t, []ast.DirectiveLocation{ast.LocationQuery, ast.LocationMutation}, directive.Locations)
+
+	// make sure we got the args right
+	if len(directive.Arguments) != 1 {
+		t.Errorf("Encountered incorrect number of arguments: %v", len(directive.Arguments))
+		return
+	}
+
+	// make sure we got the argumen type right
+	assert.Equal(t, "String", directive.Arguments[0].Type.Name())
 }
 
 func TestIntrospectQueryUnmarshalType_enums(t *testing.T) {
