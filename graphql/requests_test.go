@@ -121,3 +121,8 @@ func TestNetworkQueryer_respondsWithErr(t *testing.T) {
 		return
 	}
 }
+
+func TestNewNetworkQueryer(t *testing.T) {
+	// make sure that create a new query renderer saves the right URL
+	assert.Equal(t, "foo", NewNetworkQueryer("foo").URL)
+}
