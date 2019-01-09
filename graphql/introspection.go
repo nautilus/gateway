@@ -126,9 +126,7 @@ func introspectionUnmarshalType(schemaType IntrospectionQueryFullType) *ast.Defi
 				Name:        value.Name,
 				Description: value.Description,
 			})
-
 		}
-
 	}
 
 	return definition
