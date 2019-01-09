@@ -202,7 +202,114 @@ func TestIntrospectQuery_multipleTypes(t *testing.T) {
 }
 
 func TestIntrospectQuery_interfaces(t *testing.T) {
-	t.Skip("Not yet implemented.")
+	// introspect the api with a known response
+	schema, err := IntrospectAPI(&MockQueryer{
+		IntrospectionQueryResult{
+			Schema: &IntrospectionQuerySchema{
+				QueryType: IntrospectionQueryRootType{
+					Name: "Query",
+				},
+				Types: []IntrospectionQueryFullType{
+					{
+						Kind:        "INTERFACE",
+						Name:        "IFace",
+						Description: "Description",
+						Fields: []IntrospectionQueryFullTypeField{
+							{
+								Name: "Hello",
+								Type: IntrospectionTypeRef{
+									Kind: "SCALAR",
+								},
+							},
+						},
+					},
+					{
+						Kind: "OBJECT",
+						Name: "Type1",
+						Interfaces: []IntrospectionTypeRef{
+							{
+								Kind: "INTERFACE",
+								Name: "IFace",
+							},
+						},
+					},
+					{
+						Kind: "OBJECT",
+						Name: "Type2",
+						Interfaces: []IntrospectionTypeRef{
+							{
+								Kind: "INTERFACE",
+								Name: "IFace",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	iface, ok := schema.Types["IFace"]
+	if !ok {
+		t.Error("Could not find union")
+		return
+	}
+
+	// make sure the meta data was correct
+	assert.Equal(t, "IFace", iface.Name)
+	assert.Equal(t, "Description", iface.Description)
+
+	// make sure there is only one field defined
+	fields := iface.Fields
+	if len(fields) != 1 {
+		t.Errorf("Encountered incorrect number of fields on interface: %v", len(fields))
+		return
+	}
+	assert.Equal(t, "Hello", fields[0].Name)
+
+	// get the list of possible types that the implement the interface
+	possibleTypes := schema.GetPossibleTypes(schema.Types["IFace"])
+	if len(possibleTypes) != 2 {
+		t.Errorf("Encountered incorrect number of fields that are possible for an interface: %v", len(possibleTypes))
+		return
+	}
+
+	// make sure the first possible type matches expectations
+	possibleType1 := possibleTypes[0]
+	if possibleType1.Name != "Type1" && possibleType1.Name != "Type2" {
+		t.Errorf("first possible type did not have the right name: %s", possibleType1.Name)
+		return
+	}
+
+	// make sure the first possible type matches expectations
+	possibleType2 := possibleTypes[0]
+	if possibleType2.Name != "Type1" && possibleType2.Name != "Type2" {
+		t.Errorf("first possible type did not have the right name: %s", possibleType2.Name)
+		return
+	}
+
+	// make sure the 2 types implement the interface
+
+	type1Implements := schema.GetImplements(schema.Types["Type1"])
+	// type 1 implements only one type
+	if len(type1Implements) != 1 {
+		t.Errorf("Type1 implements incorrect number of types: %v", len(type1Implements))
+		return
+	}
+	type1Implementer := type1Implements[0]
+	assert.Equal(t, "IFace", type1Implementer.Name)
+
+	type2Implements := schema.GetImplements(schema.Types["Type2"])
+	// type 1 implements only one type
+	if len(type2Implements) != 1 {
+		t.Errorf("Type2 implements incorrect number of types: %v", len(type2Implements))
+		return
+	}
+	type2Implementer := type2Implements[0]
+	assert.Equal(t, "IFace", type2Implementer.Name)
 }
 
 func TestIntrospectQuery_unions(t *testing.T) {

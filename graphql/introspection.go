@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/vektah/gqlparser/ast"
 )
@@ -69,7 +70,7 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 			// build up an empty list of types
 			storedType.Types = []string{}
 
-			// each enum value needs to be added to the list
+			// each union value needs to be added to the list
 			for _, possibleType := range remoteType.PossibleTypes {
 				// if there is no name
 				if possibleType.Name == "" {
@@ -87,6 +88,31 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 				// add the possible type to the schema
 				schema.AddPossibleType(remoteType.Name, possibleTypeDef)
 				schema.AddImplements(possibleType.Name, storedType)
+			}
+		}
+
+		if len(remoteType.Interfaces) > 0 {
+
+			// each interface value needs to be added to the list
+			for _, iFace := range remoteType.Interfaces {
+				// if there is no name
+				if iFace.Name == "" {
+					return nil, errors.New("Could not find name of type")
+				}
+
+				// add the type to the union definition
+				storedType.Interfaces = append(storedType.Interfaces, iFace.Name)
+
+				iFaceDef, ok := schema.Types[iFace.Name]
+				if !ok {
+					return nil, errors.New("Could not find type definition for union implementation")
+				}
+
+				fmt.Println("IFace def", iFaceDef.Name)
+
+				// add the possible type to the schema
+				schema.AddPossibleType(iFaceDef.Name, storedType)
+				schema.AddImplements(storedType.Name, iFaceDef)
 			}
 		}
 
