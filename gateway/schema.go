@@ -65,13 +65,13 @@ func fieldURLs(schemas []graphql.RemoteSchema) (FieldURLMap, error) {
 	locations := FieldURLMap{}
 
 	// every schema we were given could define types
-	for _, removeSchema := range schemas {
-		// each type defined by the schema can be found at removeSchema.URL
-		for name, typeDef := range removeSchema.Schema.Types {
+	for _, remoteSchema := range schemas {
+		// each type defined by the schema can be found at remoteSchema.URL
+		for name, typeDef := range remoteSchema.Schema.Types {
 			// each field of each type can be found here
 			for _, fieldDef := range typeDef.Fields {
 				// register the location for the field
-				locations.RegisterURL(name, fieldDef.Name, removeSchema.URL)
+				locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
 			}
 		}
 	}
