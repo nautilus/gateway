@@ -9,7 +9,7 @@ import (
 )
 
 func TestIntrospectQuery_savesQueryType(t *testing.T) {
-	// introspect tIhe api with a known response
+	// introspect the api with a known response
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
@@ -54,7 +54,7 @@ func TestIntrospectQuery_savesQueryType(t *testing.T) {
 }
 
 func TestIntrospectQuery_savesMutationType(t *testing.T) {
-	// introspect tIhe api with a known response
+	// introspect the api with a known response
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
@@ -102,7 +102,7 @@ func TestIntrospectQuery_savesMutationType(t *testing.T) {
 }
 
 func TestIntrospectQuery_savesSubscriptionType(t *testing.T) {
-	// introspect tIhe api with a known response
+	// introspect the api with a known response
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
@@ -150,7 +150,7 @@ func TestIntrospectQuery_savesSubscriptionType(t *testing.T) {
 }
 
 func TestIntrospectQuery_multipleTypes(t *testing.T) {
-	// introspect tIhe api with a known response
+	// introspect the api with a known response
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
@@ -206,11 +206,10 @@ func TestIntrospectQuery_interfaces(t *testing.T) {
 }
 
 func TestIntrospectQuery_union(t *testing.T) {
-	t.Skip("Not yet implemented.")
 }
 
 func TestIntrospectQueryUnmarshalType_scalarFields(t *testing.T) {
-	// introspect tIhe api with a known response
+	// introspect the api with a known response
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
@@ -246,7 +245,7 @@ func TestIntrospectQueryUnmarshalType_scalarFields(t *testing.T) {
 }
 
 func TestIntrospectQueryUnmarshalType_objects(t *testing.T) {
-	// introspect tIhe api with a known response
+	// introspect the api with a known response
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
@@ -328,7 +327,7 @@ func TestIntrospectQueryUnmarshalType_directives(t *testing.T) {
 }
 
 func TestIntrospectQueryUnmarshalType_enums(t *testing.T) {
-	// introspect tIhe api with a known response
+	// introspect the api with a known response
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
@@ -397,7 +396,7 @@ func TestIntrospectQuery_DeprecateEnums(t *testing.T) {
 }
 
 func TestIntrospectQueryUnmarshalType_inputObjects(t *testing.T) {
-	// introspect tIhe api with a known response
+	// introspect the api with a known response
 	schema, err := IntrospectAPI(&MockQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
