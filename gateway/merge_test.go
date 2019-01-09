@@ -3,13 +3,14 @@ package gateway
 import (
 	"testing"
 
+	"github.com/alecaivazis/graphql-gateway/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/ast"
 )
 
 func TestMergeSchema_fields(t *testing.T) {
 	// create the first schema
-	schema1, err := loadSchema(`
+	schema1, err := graphql.LoadSchema(`
 			type User {
 				firstName: String!
 			}
@@ -19,7 +20,7 @@ func TestMergeSchema_fields(t *testing.T) {
 	assert.Nil(t, err)
 
 	// and the second schema we are going to make
-	schema2, err := loadSchema(`
+	schema2, err := graphql.LoadSchema(`
 			type User {
 				lastName: String!
 			}
@@ -28,7 +29,7 @@ func TestMergeSchema_fields(t *testing.T) {
 	assert.Nil(t, err)
 
 	// merge the schemas together
-	schema, err := NewSchema([]RemoteSchema{
+	schema, err := NewSchema([]graphql.RemoteSchema{
 		{Schema: schema1, URL: "url1"},
 		{Schema: schema2, URL: "url2"},
 	})
@@ -70,7 +71,7 @@ func TestMergeSchema_fields(t *testing.T) {
 
 func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	// create the first schema
-	schema1, err := loadSchema(`
+	schema1, err := graphql.LoadSchema(`
 			type User {
 				firstName: String!
 			}
@@ -80,7 +81,7 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	assert.Nil(t, err)
 
 	// and the second schema we are going to make
-	schema2, err := loadSchema(`
+	schema2, err := graphql.LoadSchema(`
 			type User {
 				firstName: Int
 			}
@@ -89,7 +90,7 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	assert.Nil(t, err)
 
 	// merge the schemas together
-	_, err = NewSchema([]RemoteSchema{
+	_, err = NewSchema([]graphql.RemoteSchema{
 		{Schema: schema1, URL: "url1"},
 		{Schema: schema2, URL: "url2"},
 	})

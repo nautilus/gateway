@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/alecaivazis/graphql-gateway/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/ast"
 )
@@ -16,7 +17,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	locations := FieldURLMap{}
 	locations.RegisterURL("Query", "foo", location)
 
-	schema, _ := loadSchema(`
+	schema, _ := graphql.LoadSchema(`
 		type Query {
 			foo: Boolean
 		}
@@ -45,7 +46,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	rootField := applyFragments(root.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
-	queryer := root.Queryer.(*NetworkQueryer)
+	queryer := root.Queryer.(*graphql.NetworkQueryer)
 	assert.Equal(t, location, queryer.URL)
 
 	// we need to be asking for Query.foo
@@ -65,7 +66,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	locations.RegisterURL("User", "firstName", location)
 	locations.RegisterURL("User", "friends", location)
 
-	schema, _ := loadSchema(`
+	schema, _ := graphql.LoadSchema(`
 		type User {
 			firstName: String!
 			friends: [User!]!
@@ -109,7 +110,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	rootField := applyFragments(rootStep.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
-	queryer := rootStep.Queryer.(*NetworkQueryer)
+	queryer := rootStep.Queryer.(*graphql.NetworkQueryer)
 	assert.Equal(t, location, queryer.URL)
 
 	// we need to be asking for allUsers
@@ -156,7 +157,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 }
 
 func TestPlanQuery_subGraphs(t *testing.T) {
-	schema, _ := loadSchema(`
+	schema, _ := graphql.LoadSchema(`
 		type User {
 			firstName: String!
 			catPhotos: [CatPhoto!]!
@@ -222,7 +223,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 	firstField := applyFragments(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
-	queryer := firstStep.Queryer.(*NetworkQueryer)
+	queryer := firstStep.Queryer.(*graphql.NetworkQueryer)
 	assert.Equal(t, userLocation, queryer.URL)
 
 	// make sure it is for allUsers
@@ -259,7 +260,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "User", secondStep.ParentType)
 	// we should be going to the catePhoto servie
-	queryer = secondStep.Queryer.(*NetworkQueryer)
+	queryer = secondStep.Queryer.(*graphql.NetworkQueryer)
 	assert.Equal(t, catLocation, queryer.URL)
 	// we should only want one field selected
 	if len(secondStep.SelectionSet) != 1 {
@@ -291,7 +292,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "CatPhoto", thirdStep.ParentType)
 	// we should be going to the catePhoto service
-	queryer = thirdStep.Queryer.(*NetworkQueryer)
+	queryer = thirdStep.Queryer.(*graphql.NetworkQueryer)
 	assert.Equal(t, userLocation, queryer.URL)
 	// we should only want one field selected
 	if len(thirdStep.SelectionSet) != 1 {

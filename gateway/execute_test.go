@@ -3,6 +3,7 @@ package gateway
 import (
 	"testing"
 
+	"github.com/alecaivazis/graphql-gateway/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/ast"
 )
@@ -23,7 +24,7 @@ func TestExecutor_plansOfOne(t *testing.T) {
 				},
 			},
 			// return a known value we can test against
-			Queryer: &MockQueryer{JSONObject{
+			Queryer: &graphql.MockQueryer{JSONObject{
 				"values": []string{
 					"hello",
 					"world",
@@ -80,7 +81,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 				},
 			},
 			// return a known value we can test against
-			Queryer: &MockQueryer{JSONObject{
+			Queryer: &graphql.MockQueryer{JSONObject{
 				"user": JSONObject{
 					"id":        "1",
 					"firstName": "hello",
@@ -107,7 +108,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 							},
 						},
 					},
-					Queryer: &MockQueryer{JSONObject{
+					Queryer: &graphql.MockQueryer{JSONObject{
 						"node": JSONObject{
 							"favoriteCatPhoto": JSONObject{
 								"url": "hello world",
@@ -195,7 +196,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 			},
 			// planner will actually leave behind a queryer that hits service A
 			// for testing we can just return a known value
-			Queryer: &MockQueryer{JSONObject{
+			Queryer: &graphql.MockQueryer{JSONObject{
 				"users": []JSONObject{
 					{
 						"firstName": "hello",
@@ -256,7 +257,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 					// planner will actually leave behind a queryer that hits service B
 					// for testing we can just return a known value
-					Queryer: &MockQueryer{JSONObject{
+					Queryer: &graphql.MockQueryer{JSONObject{
 						"node": JSONObject{
 							"photoGallery": []JSONObject{
 								{
@@ -285,7 +286,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							},
 							// planner will actually leave behind a queryer that hits service B
 							// for testing we can just return a known value
-							Queryer: &MockQueryer{JSONObject{
+							Queryer: &graphql.MockQueryer{JSONObject{
 								"node": JSONObject{
 									"firstName": followerName,
 								},
@@ -714,14 +715,11 @@ func TestExecutorBuildQuery_query(t *testing.T) {
 	}
 
 	// the query we're building goes to the top level Query object
-	query := executorBuildQuery("Query", "", selection)
-	if query == nil {
+	operation := executorBuildQuery("Query", "", selection)
+	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
 	}
-
-	// grab the first operation
-	operation := query.Operations[0]
 
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operation)
@@ -756,14 +754,11 @@ func TestExecutorBuildQuery_node(t *testing.T) {
 	}
 
 	// the query we're building goes to the User object
-	query := executorBuildQuery(objType, objID, selection)
-	if query == nil {
+	operation := executorBuildQuery(objType, objID, selection)
+	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
 	}
-
-	// grab the first operation
-	operation := query.Operations[0]
 
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operation)

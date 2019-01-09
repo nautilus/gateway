@@ -1,4 +1,4 @@
-package gateway
+package graphql
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/vektah/gqlparser/ast"
 )
 
 type roundTripFunc func(req *http.Request) *http.Response
@@ -30,7 +29,9 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 
 	// the result we expect back
 	expected := map[string]interface{}{
-		"foo": "bar",
+		"data": map[string]interface{}{
+			"foo": "bar",
+		},
 	}
 
 	// create a http client that responds with a known body and verifies the incoming query
@@ -58,33 +59,13 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 	}
 
 	// the corresponding query document
-	query := &ast.QueryDocument{
-		Operations: ast.OperationList{
-			{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name:  "hello",
-						Alias: "Goodbye",
-						SelectionSet: ast.SelectionSet{
-							&ast.Field{
-								Name: "world",
-							},
-						},
-						Arguments: ast.ArgumentList{
-							&ast.Argument{
-								Name: "world",
-								Value: &ast.Value{
-									Kind: ast.NullValue,
-									Raw:  "",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
+	query := `
+		{
+			hello(world: "hello") {
+				world
+			}
+		}
+	`
 
 	queryer := &NetworkQueryer{
 		URL:    "hello",
@@ -92,7 +73,8 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 	}
 
 	// get the response of the query
-	result, err := queryer.Query(query)
+	result := map[string]interface{}{}
+	err := queryer.Query(&QueryInput{Query: query}, &result)
 	if err != nil {
 		t.Error(err)
 		return
@@ -103,7 +85,7 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 	}
 
 	// make sure we got what we expected
-	assert.Equal(t, result, expected)
+	assert.Equal(t, expected["data"], result)
 }
 
 func TestNetworkQueryer_respondsWithErr(t *testing.T) {
@@ -120,18 +102,11 @@ func TestNetworkQueryer_respondsWithErr(t *testing.T) {
 	}
 
 	// the corresponding query document
-	query := &ast.QueryDocument{
-		Operations: ast.OperationList{
-			{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-					},
-				},
-			},
-		},
-	}
+	query := `
+		{
+			hello
+		}
+	`
 
 	queryer := &NetworkQueryer{
 		URL:    "hello",
@@ -139,9 +114,15 @@ func TestNetworkQueryer_respondsWithErr(t *testing.T) {
 	}
 
 	// get the response of the query
-	_, err := queryer.Query(query)
+	var result interface{}
+	err := queryer.Query(&QueryInput{Query: query}, result)
 	if err == nil {
 		t.Error("Did not receive an error")
 		return
 	}
+}
+
+func TestNewNetworkQueryer(t *testing.T) {
+	// make sure that create a new query renderer saves the right URL
+	assert.Equal(t, "foo", NewNetworkQueryer("foo").URL)
 }
