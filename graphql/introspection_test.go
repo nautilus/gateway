@@ -328,7 +328,72 @@ func TestIntrospectQueryUnmarshalType_directives(t *testing.T) {
 }
 
 func TestIntrospectQueryUnmarshalType_enums(t *testing.T) {
-	t.Skip("Not yet implemented.")
+	// introspect tIhe api with a known response
+	schema, err := IntrospectAPI(&MockQueryer{
+		IntrospectionQueryResult{
+			Schema: &IntrospectionQuerySchema{
+				QueryType: IntrospectionQueryRootType{
+					Name: "Query",
+				},
+				Types: []IntrospectionQueryFullType{
+					IntrospectionQueryFullType{
+						Kind:        "ENUM",
+						Name:        "Word",
+						Description: "enum-description",
+						EnumValues: []IntrospectionQueryEnumDefinition{
+							{
+								Name:        "hello",
+								Description: "hello-description",
+							},
+							{
+								Name:        "goodbye",
+								Description: "goodbye-description",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// make sure we have the one definitino
+	if len(schema.Types) != 1 {
+		t.Errorf("Encountered incorrect number of types: %v", len(schema.Types))
+		return
+	}
+
+	enum, ok := schema.Types["Word"]
+	if !ok {
+		t.Error("Coud not find definition for Word enum")
+		return
+	}
+
+	// make sure the values matched expectations
+	assert.Equal(t, "Word", enum.Name)
+	assert.Equal(t, ast.Enum, enum.Kind)
+	assert.Equal(t, "enum-description", enum.Description)
+	assert.Equal(t, enum.EnumValues, ast.EnumValueList{
+		&ast.EnumValueDefinition{
+			Name:        "hello",
+			Description: "hello-description",
+		},
+		&ast.EnumValueDefinition{
+			Name:        "goodbye",
+			Description: "goodbye-description",
+		},
+	})
+}
+
+func TestIntrospectQuery_DeprecatedFields(t *testing.T) {
+	t.Skip("Not yet implemented")
+}
+
+func TestIntrospectQuery_DeprecateEnums(t *testing.T) {
+	t.Skip("Not yet Implemented")
 }
 
 func TestIntrospectQueryUnmarshalType_inputObjects(t *testing.T) {

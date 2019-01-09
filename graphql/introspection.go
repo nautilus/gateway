@@ -100,26 +100,38 @@ func introspectionConvertArgList(args []IntrospectionInputValue) ast.ArgumentDef
 }
 
 func introspectionUnmarshalType(schemaType IntrospectionQueryFullType) *ast.Definition {
-	// the kind of type
-	var kind ast.DefinitionKind
-	switch schemaType.Kind {
-	case "OBJECT":
-		kind = ast.Object
-	case "SCALAR":
-		kind = ast.Scalar
-	case "INTERFACE":
-		kind = ast.Interface
-	case "UNION":
-		kind = ast.Union
-	case "ENUM":
-		kind = ast.Enum
-	}
-
-	return &ast.Definition{
-		Kind:        kind,
+	definition := &ast.Definition{
 		Name:        schemaType.Name,
 		Description: schemaType.Description,
 	}
+
+	// the kind of type
+	switch schemaType.Kind {
+	case "OBJECT":
+		definition.Kind = ast.Object
+	case "SCALAR":
+		definition.Kind = ast.Scalar
+	case "INTERFACE":
+		definition.Kind = ast.Interface
+	case "UNION":
+		definition.Kind = ast.Union
+	case "ENUM":
+		definition.Kind = ast.Enum
+		// save the enum values
+		definition.EnumValues = ast.EnumValueList{}
+
+		// convert each enum value into the appropriate object
+		for _, value := range schemaType.EnumValues {
+			definition.EnumValues = append(definition.EnumValues, &ast.EnumValueDefinition{
+				Name:        value.Name,
+				Description: value.Description,
+			})
+
+		}
+
+	}
+
+	return definition
 }
 
 func introspectionUnmarshalTypeRef(response *IntrospectionTypeRef) *ast.Type {
@@ -157,12 +169,6 @@ type IntrospectionQuerySchema struct {
 		Locations   []string                  `json:"location"`
 		Args        []IntrospectionInputValue `json:"arg"`
 	}
-	EnumValues []struct {
-		Name              string `json:"name"`
-		Description       string `json:"description"`
-		IsDeprecated      bool   `json:"isDeprecated"`
-		DeprecationReason string `json:"deprecationReason"`
-	}
 }
 
 type IntrospectionQueryRootType struct {
@@ -179,13 +185,21 @@ type IntrospectionQueryFullTypeField struct {
 }
 
 type IntrospectionQueryFullType struct {
-	Kind          string                            `json:"kind"`
-	Name          string                            `json:"name"`
-	Description   string                            `json:"description"`
-	InputFields   []IntrospectionInputValue         `json:"inputField"`
-	Interfaces    []IntrospectionTypeRef            `json:"interfaces"`
-	PossibleTypes []IntrospectionTypeRef            `json:"possibleTypes"`
-	Fields        []IntrospectionQueryFullTypeField `json:"fields"`
+	Kind          string                             `json:"kind"`
+	Name          string                             `json:"name"`
+	Description   string                             `json:"description"`
+	InputFields   []IntrospectionInputValue          `json:"inputField"`
+	Interfaces    []IntrospectionTypeRef             `json:"interfaces"`
+	PossibleTypes []IntrospectionTypeRef             `json:"possibleTypes"`
+	Fields        []IntrospectionQueryFullTypeField  `json:"fields"`
+	EnumValues    []IntrospectionQueryEnumDefinition `json:"enumValues"`
+}
+
+type IntrospectionQueryEnumDefinition struct {
+	Name              string `json:"name"`
+	Description       string `json:"description"`
+	IsDeprecated      bool   `json:"isDeprecated"`
+	DeprecationReason string `json:"deprecationReason"`
 }
 
 type IntrospectionInputValue struct {
