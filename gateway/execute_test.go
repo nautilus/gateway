@@ -277,28 +277,28 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					// planner will actually leave behind a queryer that hits service A
 					// for testing we can just return a known value
 					Queryer: &graphql.MockQueryer{map[string]interface{}{
-						"users": []map[string]interface{}{
-							{
+						"users": []interface{}{
+							map[string]interface{}{
 								"firstName": "hello",
-								"friends": []map[string]interface{}{
-									{
+								"friends": []interface{}{
+									map[string]interface{}{
 										"firstName": "John",
 										"id":        "1",
 									},
-									{
+									map[string]interface{}{
 										"firstName": "Jacob",
 										"id":        "2",
 									},
 								},
 							},
-							{
+							map[string]interface{}{
 								"firstName": "goodbye",
-								"friends": []map[string]interface{}{
-									{
+								"friends": []interface{}{
+									map[string]interface{}{
 										"firstName": "Jingleheymer",
 										"id":        "1",
 									},
-									{
+									map[string]interface{}{
 										"firstName": "Schmidt",
 										"id":        "2",
 									},
@@ -339,11 +339,11 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							// for testing we can just return a known value
 							Queryer: &graphql.MockQueryer{map[string]interface{}{
 								"node": map[string]interface{}{
-									"photoGallery": []map[string]interface{}{
-										{
+									"photoGallery": []interface{}{
+										map[string]interface{}{
 											"url": photoGalleryURL,
-											"followers": []map[string]interface{}{
-												{
+											"followers": []interface{}{
+												map[string]interface{}{
 													"id": "1",
 												},
 											},
@@ -528,47 +528,47 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 
 	// the result of the step
 	result := map[string]interface{}{
-		"users": []map[string]interface{}{
-			{
-				"photoGallery": []map[string]interface{}{
-					{
-						"likedBy": []map[string]interface{}{
-							{
+		"users": []interface{}{
+			map[string]interface{}{
+				"photoGallery": []interface{}{
+					map[string]interface{}{
+						"likedBy": []interface{}{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "1",
 							},
-							{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "2",
 							},
 						},
 					},
-					{
-						"likedBy": []map[string]interface{}{
-							{
+					map[string]interface{}{
+						"likedBy": []interface{}{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "3",
 							},
-							{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "4",
 							},
-							{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "5",
 							},
 						},
 					},
-					{
-						"likedBy": []map[string]interface{}{
-							{
+					map[string]interface{}{
+						"likedBy": []interface{}{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "6",
 							},
 						},
 					},
-					{
-						"likedBy": []map[string]interface{}{},
+					map[string]interface{}{
+						"likedBy": []interface{}{},
 					},
 				},
 			},
@@ -587,25 +587,25 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 func TestFindObject(t *testing.T) {
 	// create an object we want to extract
 	source := map[string]interface{}{
-		"hello": []map[string]interface{}{
-			{
+		"hello": []interface{}{
+			map[string]interface{}{
 				"firstName": "0",
-				"friends": []map[string]interface{}{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "2",
 					},
-					{
+					map[string]interface{}{
 						"firstName": "3",
 					},
 				},
 			},
-			{
+			map[string]interface{}{
 				"firstName": "4",
-				"friends": []map[string]interface{}{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "5",
 					},
-					{
+					map[string]interface{}{
 						"firstName": "6",
 					},
 				},
@@ -627,25 +627,25 @@ func TestFindObject(t *testing.T) {
 func TestFindString(t *testing.T) {
 	// create an object we want to extract
 	source := map[string]interface{}{
-		"hello": []map[string]interface{}{
-			{
+		"hello": []interface{}{
+			map[string]interface{}{
 				"firstName": "0",
-				"friends": []map[string]interface{}{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "2",
 					},
-					{
+					map[string]interface{}{
 						"firstName": "3",
 					},
 				},
 			},
-			{
+			map[string]interface{}{
 				"firstName": "4",
-				"friends": []map[string]interface{}{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "5",
 					},
-					{
+					map[string]interface{}{
 						"firstName": "6",
 					},
 				},
@@ -669,7 +669,7 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 	// the object to insert
 	inserted := "world"
 
-	// insert the object deeeeep down
+	// insert the string deeeeep down
 	err := executorInsertObject(source, []string{"hello:5#1", "message", "body:2", "hello"}, inserted)
 	if err != nil {
 		t.Error(err)
@@ -682,7 +682,7 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 		t.Error("Did not add root list")
 		return
 	}
-	list, ok := rootList.([]map[string]interface{})
+	list, ok := rootList.([]interface{})
 	if !ok {
 		t.Error("root list is not a list")
 		return
@@ -694,8 +694,14 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 		return
 	}
 
+	entry, ok := list[5].(map[string]interface{})
+	if !ok {
+		t.Error("6th entry wasn't an object")
+		return
+	}
+
 	// the object we care about is index 5
-	message := list[5]["message"]
+	message := entry["message"]
 	if message == nil {
 		t.Error("Did not add message to object")
 		return
@@ -713,7 +719,7 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 		t.Error("Did not add body list")
 		return
 	}
-	bodies, ok := bodiesList.([]map[string]interface{})
+	bodies, ok := bodiesList.([]interface{})
 	if !ok {
 		t.Error("bodies list is not a list")
 		return
@@ -721,8 +727,13 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 
 	if len(bodies) != 3 {
 		t.Error("bodies list did not have enough entries")
+		return
 	}
-	body := bodies[2]
+	body, ok := bodies[2].(map[string]interface{})
+	if !ok {
+		t.Error("Body was not an object")
+		return
+	}
 
 	// make sure that the value is what we expect
 	assert.Equal(t, inserted, body["hello"])
@@ -973,18 +984,18 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 
 	// the result of the step
 	result := map[string]interface{}{
-		"photoGallery": []map[string]interface{}{
-			{
+		"photoGallery": []interface{}{
+			map[string]interface{}{
 				"author": map[string]interface{}{
 					"id": "1",
 				},
 			},
-			{
+			map[string]interface{}{
 				"author": map[string]interface{}{
 					"id": "2",
 				},
 			},
-			{
+			map[string]interface{}{
 				"author": map[string]interface{}{
 					"id": "3",
 				},

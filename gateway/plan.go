@@ -71,10 +71,6 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		return nil, err
 	}
 
-	selection, _ := parsedQuery.Operations[0].SelectionSet[0].(*ast.Field)
-
-	fmt.Println("parse response", selection.Definition)
-
 	// the list of plans that need to be executed simultaneously
 	plans := []*QueryPlan{}
 
@@ -129,7 +125,6 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 			for {
 				select {
 				case payload := <-newSteps:
-					fmt.Println("Adding queryer ", p.GetQueryer(payload.ServiceName))
 					step := &QueryPlanStep{
 						Queryer:        p.GetQueryer(payload.ServiceName),
 						ParentType:     payload.ParentType,

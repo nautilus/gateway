@@ -3,7 +3,6 @@ package gateway
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -161,7 +160,6 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 			for _, point := range path {
 				// look for the selection with that name
 				for _, selection := range applyFragments(target) {
-					log.Debug("selected ")
 					// if we still have to walk down the selection but we found the right branch
 					if selection.Name == point {
 						target = selection.SelectionSet
@@ -223,7 +221,7 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 		errCh <- err
 		return
 	}
-	log.Debug("Sending network query: ", queryStr, "with queryer ", step.Queryer)
+	log.Debug("Sending network query: ", queryStr)
 	// if there is no queryer
 	if step.Queryer == nil {
 		errCh <- errors.New("could not find queryer for step")
@@ -308,7 +306,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 		startingIndex = len(oldBranch[0])
 	}
 
-	log.Debug("Starting at ", resultChunk)
+	log.Debug("result ", resultChunk)
 
 	// if our starting point is []string{"users:0", "photoGallery"} then we know everything up until photoGallery
 	// is along the path of the steps insertion point
@@ -365,17 +363,10 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 					// if the type is a list
 					if selectionType.Elem != nil {
 						log.Debug("Selection is a list")
-
-						wtf, ok := rootValue.([]interface{})
-						if ok {
-							wtf2, ok := wtf[0].(map[string]interface{})
-							fmt.Println("its okay?", ok, " ", reflect.ValueOf(wtf2).Type())
-						}
-
 						// make sure the root value is a list
 						rootList, ok := rootValue.([]interface{})
 						if !ok {
-							return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootList)
+							return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootValue)
 						}
 
 						// build up a new list of insertion points
@@ -445,9 +436,12 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 						// or the root value could be an object in which case the id is the id of the root value
 
 						// if the root value is a list
-						if rootList, ok := rootValue.([]map[string]interface{}); ok {
+						if rootList, ok := rootValue.([]interface{}); ok {
 							for i := range oldBranch {
-								entry := rootList[i]
+								entry, ok := rootList[i].(map[string]interface{})
+								if !ok {
+									return nil, errors.New("Item in root list isn't a map")
+								}
 
 								// look up the id of the object
 								id, ok := entry["id"]
@@ -461,19 +455,19 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 
 							}
 						} else {
-							if rootObj, ok := rootValue.(map[string]interface{}); ok {
-								for i := range oldBranch {
-									// look up the id of the object
-									id := rootObj["id"]
-									if !ok {
-										return nil, errors.New("Could not find the id for the object")
-									}
+							rootObj, ok := rootValue.(map[string]interface{})
+							if !ok {
+								return nil, fmt.Errorf("Root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
+							}
 
-									oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
+							for i := range oldBranch {
+								// look up the id of the object
+								id := rootObj["id"]
+								if !ok {
+									return nil, errors.New("Could not find the id for the object")
 								}
 
-							} else {
-								return nil, fmt.Errorf("Root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
+								oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
 							}
 						}
 					}
@@ -509,18 +503,21 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 
 			recentObj, ok := recent.(map[string]interface{})
 			if !ok {
-				return nil, fmt.Errorf("List was not of objects? %v", pointData)
+				return nil, fmt.Errorf("List was not a child of an object? %v", pointData)
 			}
 
 			// if the field does not exist
-			if recentObj[pointData.Field] == nil {
-				recentObj[pointData.Field] = []map[string]interface{}{}
+			if _, ok := recentObj[pointData.Field]; !ok {
+				recentObj[pointData.Field] = []interface{}{}
 			}
+			fmt.Println("Looking at field", pointData.Field)
 			// it should be a list
-			targetList, ok := recentObj[pointData.Field].([]interface{})
+			field := recentObj[pointData.Field]
+			targetList, ok := field.([]interface{})
 			if !ok {
-				return nil, errors.New("Did not encounter a list when expected")
+				return nil, fmt.Errorf("did not encounter a list when expected. Point: %v. Result %v", point, targetList)
 			}
+
 			// if the field exists but does not have enough spots
 			if len(targetList) <= pointData.Index {
 				for i := len(targetList) - 1; i < pointData.Index; i++ {

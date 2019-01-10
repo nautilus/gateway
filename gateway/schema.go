@@ -73,7 +73,6 @@ func fieldURLs(schemas []graphql.RemoteSchema) (FieldURLMap, error) {
 
 	// every schema we were given could define types
 	for _, remoteSchema := range schemas {
-		fmt.Println("Looking at schema ", remoteSchema.URL)
 		// each type defined by the schema can be found at remoteSchema.URL
 		for name, typeDef := range remoteSchema.Schema.Types {
 			// each field of each type can be found here
