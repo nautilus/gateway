@@ -507,7 +507,6 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 				return nil, fmt.Errorf("List was not a child of an object. %v", pointData)
 			}
 
-			fmt.Println("Looking at field", pointData.Field)
 			// if the field does not exist
 			if _, ok := recentObj[pointData.Field]; !ok {
 				recentObj[pointData.Field] = []interface{}{}
@@ -586,7 +585,6 @@ func executorInsertObject(target map[string]interface{}, path []string, value in
 
 		// if the head points to a list
 		if strings.Contains(head, ":") {
-			fmt.Println("inserting into list")
 			// {head} is a key for a list, and value needs to go in the right place
 			pointData, err := executorGetPointData(head)
 			if err != nil {
