@@ -517,8 +517,7 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 
 			targetList, ok := field.([]interface{})
 			if !ok {
-				_, innerOk := field.([]map[string]interface{})
-				return nil, fmt.Errorf("did not encounter a list when expected. Point: %v. Field: %v. List Of Map: %v. Result %v", point, pointData.Field, innerOk, field)
+				return nil, fmt.Errorf("did not encounter a list when expected. Point: %v. Field: %v. Result %v", point, pointData.Field, field)
 			}
 
 			// if the field exists but does not have enough spots
