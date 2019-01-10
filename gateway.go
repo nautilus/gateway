@@ -10,19 +10,27 @@ import (
 )
 
 func main() {
-	// the queryer to hit the api
-	queryer := graphql.NewNetworkQueryer("http://localhost:3000")
 
 	// introspect the api
-	schema, err := graphql.IntrospectAPI(queryer)
+	serviceASchema, err := graphql.IntrospectAPI(graphql.NewNetworkQueryer("http://localhost:4000"))
+	if err != nil {
+		panic(err)
+	}
+
+	// introspect the api
+	serviceBSchema, err := graphql.IntrospectAPI(graphql.NewNetworkQueryer("http://localhost:4001"))
 	if err != nil {
 		panic(err)
 	}
 
 	gatewaySchema, err := gateway.NewSchema([]graphql.RemoteSchema{
 		graphql.RemoteSchema{
-			Schema: schema,
-			URL:    "http://localhost:3000",
+			Schema: serviceASchema,
+			URL:    "http://localhost:4000",
+		},
+		graphql.RemoteSchema{
+			Schema: serviceBSchema,
+			URL:    "http://localhost:4001",
 		},
 	})
 	if err != nil {
@@ -56,6 +64,8 @@ func main() {
 
 		fmt.Fprintf(w, string(payload))
 	})
+
+	fmt.Println("Starting server")
 
 	http.ListenAndServe(":3001", nil)
 }

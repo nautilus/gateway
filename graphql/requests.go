@@ -56,7 +56,6 @@ type NetworkQueryer struct {
 
 // Query sends the query to the designated url and returns the response.
 func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
-	fmt.Println("Performing query")
 	// the payload
 	payload, err := json.Marshal(JSONObject{
 		"query":         input.Query,
@@ -88,7 +87,19 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 
 	// if there is an error
 	if _, ok := result["errors"]; ok {
-		return errors.New("Encountered error")
+		// build up a list of errors
+		errs, ok := result["errors"].([]interface{})
+		if !ok {
+			return errors.New("errors was not a list")
+		}
+		fmt.Println(errs[0])
+
+		err, ok := errs[0].(map[interface{}]interface{})
+		if !ok {
+			return errors.New("error was not an object")
+		}
+
+		return fmt.Errorf("Encountered error: %v", err["message"])
 	}
 
 	// assign the result under the data key to the receiver

@@ -3,6 +3,7 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -304,7 +305,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 		startingIndex = len(oldBranch[0])
 	}
 
-	// log.Debug("Starting at ", startingIndex, oldBranch)
+	log.Debug("Starting at ", resultChunk)
 
 	// if our starting point is []string{"users:0", "photoGallery"} then we know everything up until photoGallery
 	// is along the path of the steps insertion point
@@ -356,15 +357,24 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 						return nil, errors.New("Root value of result chunk could not be found")
 					}
 
+					fmt.Println(point, selection.Definition.Type)
+
 					// get the type of the object in question
 					selectionType := selection.Definition.Type
 					// if the type is a list
 					if selectionType.Elem != nil {
-						// log.Debug("Selection is a list")
+						log.Debug("Selection is a list")
+
+						wtf, ok := rootValue.([]map[interface{}]interface{})
+						if ok {
+							fmt.Println(ok, wtf)
+							fmt.Println(reflect.ValueOf(wtf).Type())
+						}
+
 						// make sure the root value is a list
-						rootList, ok := rootValue.([]JSONObject)
+						rootList, ok := rootValue.([]map[string]interface{})
 						if !ok {
-							return nil, errors.New("Root value of result chunk was not a list")
+							return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootList)
 						}
 
 						// build up a new list of insertion points
