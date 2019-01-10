@@ -37,12 +37,6 @@ func main() {
 		panic(err)
 	}
 
-	// for _, field := range gatewaySchema.Schema.Types["Query"].Fields {
-	// 	if field.Name == "allUsers" {
-	// 		fmt.Println(field)
-	// 	}
-	// }
-
 	http.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
 		query, ok := r.URL.Query()["query"]
 		if !ok {

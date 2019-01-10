@@ -12,13 +12,10 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
-// JSONObject is a typdef for map[string]interface{} to make structuring json responses easier.
-type JSONObject map[string]interface{}
-
 // Executor is responsible for executing a query plan against the remote
 // schemas and returning the result
 type Executor interface {
-	Execute(*QueryPlan) (JSONObject, error)
+	Execute(*QueryPlan) (map[string]interface{}, error)
 }
 
 // ParallelExecutor executes the given query plan by starting at the root of the plan and
@@ -27,14 +24,14 @@ type ParallelExecutor struct{}
 
 type queryExecutionResult struct {
 	InsertionPoint []string
-	Result         JSONObject
+	Result         map[string]interface{}
 	StripNode      bool
 }
 
 // Execute returns the result of the query plan
-func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
+func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface{}, error) {
 	// a place to store the result
-	result := JSONObject{}
+	result := map[string]interface{}{}
 
 	// a channel to receive query results
 	resultCh := make(chan queryExecutionResult, 10)
@@ -90,8 +87,14 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 				}
 				log.Debug("raw value: ", queryResult)
 
+				log.Debug("Inserting result into ", payload.InsertionPoint)
+				log.Debug("Result: ", queryResult)
 				// copy the result into the accumulator
-				executorInsertObject(result, payload.InsertionPoint, queryResult)
+				err = executorInsertObject(result, payload.InsertionPoint, queryResult)
+				if err != nil {
+					errCh <- err
+					continue ConsumptionLoop
+				}
 
 				log.Debug("Done")
 				// one of the queries is done
@@ -283,7 +286,7 @@ func max(a, b int) int {
 }
 
 // findInsertionPoints returns the list of insertion points where this step should be executed.
-func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result JSONObject, startingPoints [][]string, stripNode bool) ([][]string, error) {
+func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, stripNode bool) ([][]string, error) {
 
 	// log.Debug("Looking for insertion points. target: ", targetPoints)
 	oldBranch := startingPoints
@@ -344,7 +347,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 						}
 
 						// make sure the node value is an object
-						objValue, ok := nodeValue.(JSONObject)
+						objValue, ok := nodeValue.(map[string]interface{})
 						if !ok {
 							return nil, errors.New("node value was not an object")
 						}
@@ -356,8 +359,6 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 					if !ok {
 						return nil, errors.New("Root value of result chunk could not be found")
 					}
-
-					fmt.Println(point, selection.Definition.Type)
 
 					// get the type of the object in question
 					selectionType := selection.Definition.Type
@@ -444,7 +445,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 						// or the root value could be an object in which case the id is the id of the root value
 
 						// if the root value is a list
-						if rootList, ok := rootValue.([]JSONObject); ok {
+						if rootList, ok := rootValue.([]map[string]interface{}); ok {
 							for i := range oldBranch {
 								entry := rootList[i]
 
@@ -460,7 +461,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 
 							}
 						} else {
-							if rootObj, ok := rootValue.(JSONObject); ok {
+							if rootObj, ok := rootValue.(map[string]interface{}); ok {
 								for i := range oldBranch {
 									// look up the id of the object
 									id := rootObj["id"]
@@ -494,7 +495,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 	return oldBranch, nil
 }
 
-func executorExtractValue(source JSONObject, path []string) (interface{}, error) {
+func executorExtractValue(source map[string]interface{}, path []string) (interface{}, error) {
 	// a pointer to the objects we are modifying
 	var recent interface{} = source
 
@@ -506,8 +507,6 @@ func executorExtractValue(source JSONObject, path []string) (interface{}, error)
 				return nil, err
 			}
 
-			fmt.Println(pointData)
-
 			recentObj, ok := recent.(map[string]interface{})
 			if !ok {
 				return nil, fmt.Errorf("List was not of objects? %v", pointData)
@@ -515,17 +514,17 @@ func executorExtractValue(source JSONObject, path []string) (interface{}, error)
 
 			// if the field does not exist
 			if recentObj[pointData.Field] == nil {
-				recentObj[pointData.Field] = []JSONObject{}
+				recentObj[pointData.Field] = []map[string]interface{}{}
 			}
 			// it should be a list
-			targetList, ok := recentObj[pointData.Field].([]JSONObject)
+			targetList, ok := recentObj[pointData.Field].([]interface{})
 			if !ok {
 				return nil, errors.New("Did not encounter a list when expected")
 			}
 			// if the field exists but does not have enough spots
 			if len(targetList) <= pointData.Index {
 				for i := len(targetList) - 1; i < pointData.Index; i++ {
-					targetList = append(targetList, JSONObject{})
+					targetList = append(targetList, map[string]interface{}{})
 				}
 
 				// update the list with what we just made
@@ -552,11 +551,11 @@ func executorExtractValue(source JSONObject, path []string) (interface{}, error)
 			targetObject := recentObj[pointField]
 
 			if i != len(path)-1 && targetObject == nil {
-				recentObj[pointField] = JSONObject{}
+				recentObj[pointField] = map[string]interface{}{}
 			}
 			// if we haven't created an object there with that field
 			if targetObject == nil {
-				recentObj[pointField] = JSONObject{}
+				recentObj[pointField] = map[string]interface{}{}
 			}
 
 			// look there next
@@ -567,7 +566,7 @@ func executorExtractValue(source JSONObject, path []string) (interface{}, error)
 	return recent, nil
 }
 
-func executorInsertObject(target JSONObject, path []string, value interface{}) error {
+func executorInsertObject(target map[string]interface{}, path []string, value interface{}) error {
 	if len(path) > 0 {
 		head := path[len(path)-1]
 		// the path to the key we want to set
@@ -579,13 +578,14 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 			return err
 		}
 
-		valueObj, ok := obj.(JSONObject)
+		valueObj, ok := obj.(map[string]interface{})
 		if !ok {
 			return errors.New("something went wrong")
 		}
 
 		// if the head points to a list
 		if strings.Contains(head, ":") {
+			fmt.Println("inserting into list")
 			// {head} is a key for a list, and value needs to go in the right place
 			pointData, err := executorGetPointData(head)
 			if err != nil {
@@ -594,11 +594,11 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 
 			// if there is no list at that location
 			if _, ok := valueObj[pointData.Field]; !ok {
-				valueObj[pointData.Field] = []JSONObject{}
+				valueObj[pointData.Field] = []map[string]interface{}{}
 			}
 
 			// if its not a list
-			valueList, ok := valueObj[pointData.Field].([]JSONObject)
+			valueList, ok := valueObj[pointData.Field].([]map[string]interface{})
 			if !ok {
 				return errors.New("Found a non-list at the insertion point")
 			}
@@ -606,11 +606,11 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 			if len(valueList) <= pointData.Index {
 				// make sure that the list has enough entries
 				for i := max(len(valueList)-1, 0); i <= pointData.Index; i++ {
-					valueList = append(valueList, JSONObject{})
+					valueList = append(valueList, map[string]interface{}{})
 				}
 			}
 
-			objValue, ok := value.(JSONObject)
+			objValue, ok := value.(map[string]interface{})
 			if ok {
 				// make sure we update the object at that location with each value
 				for k, v := range objValue {
@@ -626,7 +626,7 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 			valueObj[head] = value
 		}
 	} else {
-		valueObj, ok := value.(JSONObject)
+		valueObj, ok := value.(map[string]interface{})
 		if !ok {
 			return errors.New("something went wrong")
 		}

@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/vektah/gqlparser/ast"
@@ -19,9 +20,6 @@ type RemoteSchema struct {
 	Schema *ast.Schema
 	URL    string
 }
-
-// JSONObject is a typdef for map[string]interface{} to make structuring json responses easier.
-type JSONObject map[string]interface{}
 
 type QueryInput struct {
 	Query         string
@@ -57,7 +55,7 @@ type NetworkQueryer struct {
 // Query sends the query to the designated url and returns the response.
 func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 	// the payload
-	payload, err := json.Marshal(JSONObject{
+	payload, err := json.Marshal(map[string]interface{}{
 		"query":         input.Query,
 		"variables":     input.Variables,
 		"operationName": input.OperationName,
@@ -92,14 +90,24 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 		if !ok {
 			return errors.New("errors was not a list")
 		}
-		fmt.Println(errs[0])
 
-		err, ok := errs[0].(map[interface{}]interface{})
-		if !ok {
-			return errors.New("error was not an object")
+		// a list of error messages
+		messages := []string{}
+		for _, err := range errs {
+			obj, ok := err.(map[string]interface{})
+			if !ok {
+				return errors.New("encountered non-object error")
+			}
+
+			message, ok := obj["message"].(string)
+			if !ok {
+				return errors.New("error message was not a string")
+			}
+
+			messages = append(messages, message)
 		}
 
-		return fmt.Errorf("Encountered error: %v", err["message"])
+		return fmt.Errorf("Encountered errors: %v", strings.Join(messages, " "))
 	}
 
 	// assign the result under the data key to the receiver

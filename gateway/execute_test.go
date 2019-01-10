@@ -26,7 +26,7 @@ func TestExecutor_plansOfOne(t *testing.T) {
 						},
 					},
 					// return a known value we can test against
-					Queryer: &graphql.MockQueryer{JSONObject{
+					Queryer: &graphql.MockQueryer{map[string]interface{}{
 						"values": []string{
 							"hello",
 							"world",
@@ -88,8 +88,8 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 						},
 					},
 					// return a known value we can test against
-					Queryer: &graphql.MockQueryer{JSONObject{
-						"user": JSONObject{
+					Queryer: &graphql.MockQueryer{map[string]interface{}{
+						"user": map[string]interface{}{
 							"id":        "1",
 							"firstName": "hello",
 						},
@@ -115,9 +115,9 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 									},
 								},
 							},
-							Queryer: &graphql.MockQueryer{JSONObject{
-								"node": JSONObject{
-									"favoriteCatPhoto": JSONObject{
+							Queryer: &graphql.MockQueryer{map[string]interface{}{
+								"node": map[string]interface{}{
+									"favoriteCatPhoto": map[string]interface{}{
 										"url": "hello world",
 									},
 								},
@@ -134,11 +134,11 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	}
 
 	// make sure we got the right values back
-	assert.Equal(t, JSONObject{
-		"user": JSONObject{
+	assert.Equal(t, map[string]interface{}{
+		"user": map[string]interface{}{
 			"id":        "1",
 			"firstName": "hello",
-			"favoriteCatPhoto": JSONObject{
+			"favoriteCatPhoto": map[string]interface{}{
 				"url": "hello world",
 			},
 		},
@@ -162,8 +162,8 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 					ParentType:     "Query",
 					InsertionPoint: []string{},
 					// return a known value we can test against
-					Queryer: &graphql.MockQueryer{JSONObject{
-						"user": JSONObject{
+					Queryer: &graphql.MockQueryer{map[string]interface{}{
+						"user": map[string]interface{}{
 							"id":        "1",
 							"firstName": "hello",
 						},
@@ -190,8 +190,8 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 								},
 							},
 							// return a known value we can test against
-							Queryer: &graphql.MockQueryer{JSONObject{
-								"user": JSONObject{
+							Queryer: &graphql.MockQueryer{map[string]interface{}{
+								"user": map[string]interface{}{
 									"id":        "1",
 									"firstName": "hello",
 								},
@@ -208,8 +208,8 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 	}
 
 	// make sure we got the right values back
-	assert.Equal(t, JSONObject{
-		"user": JSONObject{
+	assert.Equal(t, map[string]interface{}{
+		"user": map[string]interface{}{
 			"id":        "1",
 			"firstName": "hello",
 		},
@@ -276,11 +276,11 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 					// planner will actually leave behind a queryer that hits service A
 					// for testing we can just return a known value
-					Queryer: &graphql.MockQueryer{JSONObject{
-						"users": []JSONObject{
+					Queryer: &graphql.MockQueryer{map[string]interface{}{
+						"users": []map[string]interface{}{
 							{
 								"firstName": "hello",
-								"friends": []JSONObject{
+								"friends": []map[string]interface{}{
 									{
 										"firstName": "John",
 										"id":        "1",
@@ -293,7 +293,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							},
 							{
 								"firstName": "goodbye",
-								"friends": []JSONObject{
+								"friends": []map[string]interface{}{
 									{
 										"firstName": "Jingleheymer",
 										"id":        "1",
@@ -337,12 +337,12 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							},
 							// planner will actually leave behind a queryer that hits service B
 							// for testing we can just return a known value
-							Queryer: &graphql.MockQueryer{JSONObject{
-								"node": JSONObject{
-									"photoGallery": []JSONObject{
+							Queryer: &graphql.MockQueryer{map[string]interface{}{
+								"node": map[string]interface{}{
+									"photoGallery": []map[string]interface{}{
 										{
 											"url": photoGalleryURL,
-											"followers": []JSONObject{
+											"followers": []map[string]interface{}{
 												{
 													"id": "1",
 												},
@@ -366,8 +366,8 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 									},
 									// planner will actually leave behind a queryer that hits service B
 									// for testing we can just return a known value
-									Queryer: &graphql.MockQueryer{JSONObject{
-										"node": JSONObject{
+									Queryer: &graphql.MockQueryer{map[string]interface{}{
+										"node": map[string]interface{}{
 											"firstName": followerName,
 										},
 									}},
@@ -386,18 +386,18 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 
 	// atm the mock queryer always returns the same value so we will end up with
 	// the same User.favoritePhoto and User.photoGallery
-	assert.Equal(t, JSONObject{
-		"users": []JSONObject{
+	assert.Equal(t, map[string]interface{}{
+		"users": []map[string]interface{}{
 			{
 				"firstName": "hello",
-				"friends": []JSONObject{
+				"friends": []map[string]interface{}{
 					{
 						"firstName": "John",
 						"id":        "1",
-						"photoGallery": []JSONObject{
+						"photoGallery": []map[string]interface{}{
 							{
 								"url": photoGalleryURL,
-								"followers": []JSONObject{
+								"followers": []map[string]interface{}{
 									{
 										"id":        "1",
 										"firstName": followerName,
@@ -409,10 +409,10 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					{
 						"firstName": "Jacob",
 						"id":        "2",
-						"photoGallery": []JSONObject{
+						"photoGallery": []map[string]interface{}{
 							{
 								"url": photoGalleryURL,
-								"followers": []JSONObject{
+								"followers": []map[string]interface{}{
 									{
 										"id":        "1",
 										"firstName": followerName,
@@ -425,14 +425,14 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 			},
 			{
 				"firstName": "goodbye",
-				"friends": []JSONObject{
+				"friends": []map[string]interface{}{
 					{
 						"firstName": "Jingleheymer",
 						"id":        "1",
-						"photoGallery": []JSONObject{
+						"photoGallery": []map[string]interface{}{
 							{
 								"url": photoGalleryURL,
-								"followers": []JSONObject{
+								"followers": []map[string]interface{}{
 									{
 										"id":        "1",
 										"firstName": followerName,
@@ -444,10 +444,10 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					{
 						"firstName": "Schmidt",
 						"id":        "2",
-						"photoGallery": []JSONObject{
+						"photoGallery": []map[string]interface{}{
 							{
 								"url": photoGalleryURL,
-								"followers": []JSONObject{
+								"followers": []map[string]interface{}{
 									{
 										"id":        "1",
 										"firstName": followerName,
@@ -527,12 +527,12 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 	}
 
 	// the result of the step
-	result := JSONObject{
-		"users": []JSONObject{
+	result := map[string]interface{}{
+		"users": []map[string]interface{}{
 			{
-				"photoGallery": []JSONObject{
+				"photoGallery": []map[string]interface{}{
 					{
-						"likedBy": []JSONObject{
+						"likedBy": []map[string]interface{}{
 							{
 								"totalLikes": 10,
 								"id":         "1",
@@ -544,7 +544,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 						},
 					},
 					{
-						"likedBy": []JSONObject{
+						"likedBy": []map[string]interface{}{
 							{
 								"totalLikes": 10,
 								"id":         "3",
@@ -560,7 +560,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 						},
 					},
 					{
-						"likedBy": []JSONObject{
+						"likedBy": []map[string]interface{}{
 							{
 								"totalLikes": 10,
 								"id":         "6",
@@ -568,7 +568,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 						},
 					},
 					{
-						"likedBy": []JSONObject{},
+						"likedBy": []map[string]interface{}{},
 					},
 				},
 			},
@@ -586,11 +586,11 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 
 func TestFindObject(t *testing.T) {
 	// create an object we want to extract
-	source := JSONObject{
-		"hello": []JSONObject{
+	source := map[string]interface{}{
+		"hello": []map[string]interface{}{
 			{
 				"firstName": "0",
-				"friends": []JSONObject{
+				"friends": []map[string]interface{}{
 					{
 						"firstName": "2",
 					},
@@ -601,7 +601,7 @@ func TestFindObject(t *testing.T) {
 			},
 			{
 				"firstName": "4",
-				"friends": []JSONObject{
+				"friends": []map[string]interface{}{
 					{
 						"firstName": "5",
 					},
@@ -619,18 +619,18 @@ func TestFindObject(t *testing.T) {
 		return
 	}
 
-	assert.Equal(t, JSONObject{
+	assert.Equal(t, map[string]interface{}{
 		"firstName": "3",
 	}, value)
 }
 
 func TestFindString(t *testing.T) {
 	// create an object we want to extract
-	source := JSONObject{
-		"hello": []JSONObject{
+	source := map[string]interface{}{
+		"hello": []map[string]interface{}{
 			{
 				"firstName": "0",
-				"friends": []JSONObject{
+				"friends": []map[string]interface{}{
 					{
 						"firstName": "2",
 					},
@@ -641,7 +641,7 @@ func TestFindString(t *testing.T) {
 			},
 			{
 				"firstName": "4",
-				"friends": []JSONObject{
+				"friends": []map[string]interface{}{
 					{
 						"firstName": "5",
 					},
@@ -664,7 +664,7 @@ func TestFindString(t *testing.T) {
 
 func TestExecutorInsertObject_insertValue(t *testing.T) {
 	// the object to mutate
-	source := JSONObject{}
+	source := map[string]interface{}{}
 
 	// the object to insert
 	inserted := "world"
@@ -682,7 +682,7 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 		t.Error("Did not add root list")
 		return
 	}
-	list, ok := rootList.([]JSONObject)
+	list, ok := rootList.([]map[string]interface{})
 	if !ok {
 		t.Error("root list is not a list")
 		return
@@ -701,7 +701,7 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 		return
 	}
 
-	msgObj, ok := message.(JSONObject)
+	msgObj, ok := message.(map[string]interface{})
 	if !ok {
 		t.Error("message is not a list")
 		return
@@ -713,7 +713,7 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 		t.Error("Did not add body list")
 		return
 	}
-	bodies, ok := bodiesList.([]JSONObject)
+	bodies, ok := bodiesList.([]map[string]interface{})
 	if !ok {
 		t.Error("bodies list is not a list")
 		return
@@ -730,10 +730,10 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 
 func TestExecutorInsertObject_insertListElements(t *testing.T) {
 	// the object to mutate
-	source := JSONObject{}
+	source := map[string]interface{}{}
 
 	// the object to insert
-	inserted := JSONObject{
+	inserted := map[string]interface{}{
 		"hello": "world",
 	}
 
@@ -751,7 +751,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 		return
 	}
 
-	root, ok := rootEntry.(JSONObject)
+	root, ok := rootEntry.(map[string]interface{})
 	if !ok {
 		t.Error("root object is not an object")
 		return
@@ -763,7 +763,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 		return
 	}
 
-	list, ok := rootList.([]JSONObject)
+	list, ok := rootList.([]map[string]interface{})
 	if !ok {
 		t.Error("objects is not a list")
 		return
@@ -972,20 +972,20 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	}
 
 	// the result of the step
-	result := JSONObject{
-		"photoGallery": []JSONObject{
+	result := map[string]interface{}{
+		"photoGallery": []map[string]interface{}{
 			{
-				"author": JSONObject{
+				"author": map[string]interface{}{
 					"id": "1",
 				},
 			},
 			{
-				"author": JSONObject{
+				"author": map[string]interface{}{
 					"id": "2",
 				},
 			},
 			{
-				"author": JSONObject{
+				"author": map[string]interface{}{
 					"id": "3",
 				},
 			},
