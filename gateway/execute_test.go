@@ -136,6 +136,74 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	}, result)
 }
 
+func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
+	// the query we want to execute is
+	// {
+	// 		user {                   <- from serviceA
+	//      	firstName            <- from serviceA
+	// 		}
+	// }
+
+	// build a query plan that the executor will follow
+	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+		RootStep: &QueryPlanStep{
+			// this is equivalent to
+			// query { user }
+			ParentType:     "Query",
+			InsertionPoint: []string{},
+			// return a known value we can test against
+			Queryer: &graphql.MockQueryer{JSONObject{
+				"user": JSONObject{
+					"id":        "1",
+					"firstName": "hello",
+				},
+			}},
+			// then we have to ask for the users favorite cat photo and its url
+			Then: []*QueryPlanStep{
+				{
+					ParentType:     "Query",
+					InsertionPoint: []string{},
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "user",
+							Definition: &ast.FieldDefinition{
+								Type: ast.NamedType("User", &ast.Position{}),
+							},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "firstName",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("String", &ast.Position{}),
+									},
+								},
+							},
+						},
+					},
+					// return a known value we can test against
+					Queryer: &graphql.MockQueryer{JSONObject{
+						"user": JSONObject{
+							"id":        "1",
+							"firstName": "hello",
+						},
+					}},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error executing plan: %v", err.Error())
+		return
+	}
+
+	// make sure we got the right values back
+	assert.Equal(t, JSONObject{
+		"user": JSONObject{
+			"id":        "1",
+			"firstName": "hello",
+		},
+	}, result)
+}
+
 func TestExecutor_insertIntoLists(t *testing.T) {
 	// the query we want to execute is
 	// {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -55,6 +56,7 @@ type NetworkQueryer struct {
 
 // Query sends the query to the designated url and returns the response.
 func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
+	fmt.Println("Performing query")
 	// the payload
 	payload, err := json.Marshal(JSONObject{
 		"query":         input.Query,

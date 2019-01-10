@@ -130,53 +130,61 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 
 func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan queryExecutionResult, errCh chan error, stepWg *sync.WaitGroup) {
 	log.Debug("")
-	log.Debug("Executing step to be inserted in ", insertionPoint)
-	// each selection set that is the parent of another query must ask for the id
-	for _, nextStep := range step.Then {
-		log.Debug("Step has children. Need to add ids.")
-		// the next query will go
-		path := nextStep.InsertionPoint[:len(nextStep.InsertionPoint)-1]
+	log.Debug("Executing step to be inserted in ", step.ParentType, " ", insertionPoint)
 
-		// the selection set we need to add `id` to
-		target := step.SelectionSet
-		var targetField *ast.Field
+	log.Debug(step.SelectionSet)
 
-		for _, point := range path {
-			// look for the selection with that name
+	// if this step has a selection, the resulting steps will end up being inserted at a particular object
+	// we need to make sure that we ask for the id of the object
+	if len(step.SelectionSet) > 0 {
+		// each selection set that is the parent of another query must ask for the id
+		for _, nextStep := range step.Then {
+			// the next query will go
+			path := nextStep.InsertionPoint[:max(len(nextStep.InsertionPoint)-1, 0)]
+			log.Debug("Step has children. Need to add ids ", path, nextStep.InsertionPoint)
+
+			// the selection set we need to add `id` to
+			target := step.SelectionSet
+			var targetField *ast.Field
+
+			for _, point := range path {
+				// look for the selection with that name
+				for _, selection := range applyFragments(target) {
+					log.Debug("selected ")
+					// if we still have to walk down the selection but we found the right branch
+					if selection.Name == point {
+						target = selection.SelectionSet
+						targetField = selection
+						break
+					}
+				}
+			}
+
+			// if we couldn't find the target
+			if target == nil {
+				errCh <- fmt.Errorf("Could not find field to add id to. insertion point: %v", path)
+				return
+			}
+
+			// if the target does not currently ask for id we need to add it
+			addID := true
 			for _, selection := range applyFragments(target) {
-				// if we still have to walk down the selection but we found the right branch
-				if selection.Name == point {
-					target = selection.SelectionSet
-					targetField = selection
+				if selection.Name == "id" {
+					addID = false
 					break
 				}
 			}
-		}
 
-		// if we couldn't find the target
-		if target == nil {
-			errCh <- fmt.Errorf("Could not find field to add id to: %v", path)
-			return
-		}
-
-		// if the target does not currently ask for id we need to add it
-		addID := true
-		for _, selection := range applyFragments(target) {
-			if selection.Name == "id" {
-				addID = false
-				break
+			// add the ID to the selection set if necessary
+			if addID {
+				target = append(target, &ast.Field{
+					Name: "id",
+				})
 			}
-		}
 
-		// add the ID to the selection set if necessary
-		if addID {
-			target = append(target, &ast.Field{
-				Name: "id",
-			})
+			// make sure the selection set contains the id
+			targetField.SelectionSet = target
 		}
-
-		// make sure the selection set contains the id
-		targetField.SelectionSet = target
 	}
 
 	// log the query
@@ -202,6 +210,12 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 	queryStr, err := graphql.PrintQuery(query)
 	if err != nil {
 		errCh <- err
+		return
+	}
+	log.Debug("Sending network query: ", queryStr, "with queryer ", step.Queryer)
+	// if there is no queryer
+	if step.Queryer == nil {
+		errCh <- errors.New("could not find queryer for step")
 		return
 	}
 	// execute the query
@@ -686,6 +700,7 @@ func executorBuildQuery(parentType string, parentID string, selectionSet ast.Sel
 			},
 		}
 	}
+	log.Debug("Build Query")
 
 	// add the operation to a QueryDocument
 	return operation

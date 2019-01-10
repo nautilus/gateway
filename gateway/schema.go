@@ -21,9 +21,16 @@ type Schema struct {
 	fieldURLs FieldURLMap
 }
 
-// Plan returns the query plan for the incoming query
-func (s *Schema) Plan(query string) ([]*QueryPlan, error) {
-	return s.Planner.Plan(query, s.Schema, s.fieldURLs)
+// Execute takes a query string, executes it, and returns the response
+func (s *Schema) Execute(query string) (map[string]interface{}, error) {
+	// generate a query plan for the query
+	plan, err := s.Planner.Plan(query, s.Schema, s.fieldURLs)
+	if err != nil {
+		return nil, err
+	}
+
+	// execute the plan and return the results
+	return s.Executor.Execute(plan[0])
 }
 
 // NewSchema instantiates a new schema with the required stuffs.
