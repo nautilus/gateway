@@ -875,6 +875,10 @@ func TestExecutorBuildQuery_node(t *testing.T) {
 		t.Error("Did not pass the right id value to the node field")
 		return
 	}
+	if argument.Value.Kind != ast.StringValue {
+		t.Error("Argument was incorrect type")
+		return
+	}
 
 	// make sure the field has an inline fragment for the type
 	if len(node.SelectionSet) != 1 {

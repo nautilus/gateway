@@ -365,14 +365,14 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 					if selectionType.Elem != nil {
 						log.Debug("Selection is a list")
 
-						wtf, ok := rootValue.([]map[interface{}]interface{})
+						wtf, ok := rootValue.([]interface{})
 						if ok {
-							fmt.Println(ok, wtf)
-							fmt.Println(reflect.ValueOf(wtf).Type())
+							wtf2, ok := wtf[0].(map[string]interface{})
+							fmt.Println("its okay?", ok, " ", reflect.ValueOf(wtf2).Type())
 						}
 
 						// make sure the root value is a list
-						rootList, ok := rootValue.([]map[string]interface{})
+						rootList, ok := rootValue.([]interface{})
 						if !ok {
 							return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootList)
 						}
@@ -381,7 +381,11 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 						newInsertionPoints := [][]string{}
 
 						// each value in this list contributes an insertion point
-						for entryI, resultEntry := range rootList {
+						for entryI, iEntry := range rootList {
+							resultEntry, ok := iEntry.(map[string]interface{})
+							if !ok {
+								return nil, errors.New("entry in result wasn't a map")
+							}
 							// the point we are going to add to the list
 							entryPoint := fmt.Sprintf("%s:%v", selection.Name, entryI)
 							// log.Debug("Adding ", entryPoint, " to list")
@@ -497,51 +501,51 @@ func executorExtractValue(source JSONObject, path []string) (interface{}, error)
 	for i, point := range path[:len(path)] {
 		// if the point designates an element in the list
 		if strings.Contains(point, ":") {
-			// extract the index of the element we need to insert into
-			indexData := strings.Split(point, ":")
-
-			// grab the field name and the index
-			field := indexData[0]
-			idData := strings.Split(indexData[1], "#")
-			index, err := strconv.ParseInt(idData[0], 0, 32)
+			pointData, err := executorGetPointData(point)
 			if err != nil {
 				return nil, err
 			}
 
-			recentObj, ok := recent.(JSONObject)
+			fmt.Println(pointData)
+
+			recentObj, ok := recent.(map[string]interface{})
 			if !ok {
-				return nil, errors.New("List was not of objects?")
+				return nil, fmt.Errorf("List was not of objects? %v", pointData)
 			}
 
 			// if the field does not exist
-			if recentObj[field] == nil {
-				recentObj[field] = []JSONObject{}
+			if recentObj[pointData.Field] == nil {
+				recentObj[pointData.Field] = []JSONObject{}
 			}
 			// it should be a list
-			targetList, ok := recentObj[field].([]JSONObject)
+			targetList, ok := recentObj[pointData.Field].([]JSONObject)
 			if !ok {
 				return nil, errors.New("Did not encounter a list when expected")
 			}
 			// if the field exists but does not have enough spots
-			if len(targetList) <= int(index) {
-				for i := len(targetList) - 1; i < int(index); i++ {
+			if len(targetList) <= pointData.Index {
+				for i := len(targetList) - 1; i < pointData.Index; i++ {
 					targetList = append(targetList, JSONObject{})
 				}
 
 				// update the list with what we just made
-				recentObj[field] = targetList
+				recentObj[pointData.Field] = targetList
 			}
 
 			// focus on the right element
-			recent = targetList[index]
+			recent = targetList[pointData.Index]
 		} else {
 			// it's possible that there's an id
-			pointData := strings.Split(point, "#")
-			pointField := pointData[0]
+			pointData, err := executorGetPointData(point)
+			if err != nil {
+				return nil, err
+			}
 
-			recentObj, ok := recent.(JSONObject)
+			pointField := pointData.Field
+
+			recentObj, ok := recent.(map[string]interface{})
 			if !ok {
-				return nil, errors.New("List was not of objects?")
+				return nil, fmt.Errorf("thisone, Target was not an object. %v, %v", pointData, recent)
 			}
 
 			// we are add an object value
@@ -704,7 +708,8 @@ func executorBuildQuery(parentType string, parentID string, selectionSet ast.Sel
 					&ast.Argument{
 						Name: "id",
 						Value: &ast.Value{
-							Raw: parentID,
+							Kind: ast.StringValue,
+							Raw:  parentID,
 						},
 					},
 				},
