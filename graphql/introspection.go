@@ -108,8 +108,6 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 					return nil, errors.New("Could not find type definition for union implementation")
 				}
 
-				fmt.Println("IFace def", iFaceDef.Name)
-
 				// add the possible type to the schema
 				schema.AddPossibleType(iFaceDef.Name, storedType)
 				schema.AddImplements(storedType.Name, iFaceDef)

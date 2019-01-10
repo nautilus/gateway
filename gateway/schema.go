@@ -21,9 +21,16 @@ type Schema struct {
 	fieldURLs FieldURLMap
 }
 
-// Plan returns the query plan for the incoming query
-func (s *Schema) Plan(query string) ([]*QueryPlan, error) {
-	return s.Planner.Plan(query, s.Schema, s.fieldURLs)
+// Execute takes a query string, executes it, and returns the response
+func (s *Schema) Execute(query string) (map[string]interface{}, error) {
+	// generate a query plan for the query
+	plan, err := s.Planner.Plan(query, s.Schema, s.fieldURLs)
+	if err != nil {
+		return nil, err
+	}
+
+	// execute the plan and return the results
+	return s.Executor.Execute(plan[0])
 }
 
 // NewSchema instantiates a new schema with the required stuffs.
@@ -34,15 +41,15 @@ func NewSchema(sources []graphql.RemoteSchema) (*Schema, error) {
 		sourceSchemas = append(sourceSchemas, source.Schema)
 	}
 
-	// merge them into one
-	schema, err := mergeSchemas(sourceSchemas)
+	// compute the locations for each field
+	locations, err := fieldURLs(sources)
 	if err != nil {
 		// if something went wrong during the merge, return the result
 		return nil, err
 	}
 
-	// compute the locations for each field
-	locations, err := fieldURLs(sources)
+	// merge them into one
+	schema, err := mergeSchemas(sourceSchemas)
 	if err != nil {
 		// if something went wrong during the merge, return the result
 		return nil, err

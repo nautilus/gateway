@@ -12,24 +12,28 @@ func TestExecutor_plansOfOne(t *testing.T) {
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
 		RootStep: &QueryPlanStep{
-			// this is equivalent to
-			// query { values }
-			ParentType: "Query",
-			SelectionSet: ast.SelectionSet{
-				&ast.Field{
-					Name: "values",
-					Definition: &ast.FieldDefinition{
-						Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+			Then: []*QueryPlanStep{
+				{
+					// this is equivalent to
+					// query { values }
+					ParentType: "Query",
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "values",
+							Definition: &ast.FieldDefinition{
+								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+							},
+						},
 					},
+					// return a known value we can test against
+					Queryer: &graphql.MockQueryer{map[string]interface{}{
+						"values": []string{
+							"hello",
+							"world",
+						},
+					}},
 				},
 			},
-			// return a known value we can test against
-			Queryer: &graphql.MockQueryer{JSONObject{
-				"values": []string{
-					"hello",
-					"world",
-				},
-			}},
 		},
 	})
 	if err != nil {
@@ -60,47 +64,22 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
 		RootStep: &QueryPlanStep{
-			// this is equivalent to
-			// query { user }
-			ParentType:     "Query",
-			InsertionPoint: []string{},
-			SelectionSet: ast.SelectionSet{
-				&ast.Field{
-					Name: "user",
-					Definition: &ast.FieldDefinition{
-						Type: ast.NamedType("User", &ast.Position{}),
-					},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "firstName",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("String", &ast.Position{}),
-							},
-						},
-					},
-				},
-			},
-			// return a known value we can test against
-			Queryer: &graphql.MockQueryer{JSONObject{
-				"user": JSONObject{
-					"id":        "1",
-					"firstName": "hello",
-				},
-			}},
-			// then we have to ask for the users favorite cat photo and its url
 			Then: []*QueryPlanStep{
 				{
-					ParentType:     "User",
-					InsertionPoint: []string{"user", "favoriteCatPhoto"},
+
+					// this is equivalent to
+					// query { user }
+					ParentType:     "Query",
+					InsertionPoint: []string{},
 					SelectionSet: ast.SelectionSet{
 						&ast.Field{
-							Name: "favoriteCatPhoto",
+							Name: "user",
 							Definition: &ast.FieldDefinition{
 								Type: ast.NamedType("User", &ast.Position{}),
 							},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
-									Name: "url",
+									Name: "firstName",
 									Definition: &ast.FieldDefinition{
 										Type: ast.NamedType("String", &ast.Position{}),
 									},
@@ -108,13 +87,43 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 							},
 						},
 					},
-					Queryer: &graphql.MockQueryer{JSONObject{
-						"node": JSONObject{
-							"favoriteCatPhoto": JSONObject{
-								"url": "hello world",
-							},
+					// return a known value we can test against
+					Queryer: &graphql.MockQueryer{map[string]interface{}{
+						"user": map[string]interface{}{
+							"id":        "1",
+							"firstName": "hello",
 						},
 					}},
+					// then we have to ask for the users favorite cat photo and its url
+					Then: []*QueryPlanStep{
+						{
+							ParentType:     "User",
+							InsertionPoint: []string{"user", "favoriteCatPhoto"},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "favoriteCatPhoto",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("User", &ast.Position{}),
+									},
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Name: "url",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+										},
+									},
+								},
+							},
+							Queryer: &graphql.MockQueryer{map[string]interface{}{
+								"node": map[string]interface{}{
+									"favoriteCatPhoto": map[string]interface{}{
+										"url": "hello world",
+									},
+								},
+							}},
+						},
+					},
 				},
 			},
 		},
@@ -125,13 +134,84 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	}
 
 	// make sure we got the right values back
-	assert.Equal(t, JSONObject{
-		"user": JSONObject{
+	assert.Equal(t, map[string]interface{}{
+		"user": map[string]interface{}{
 			"id":        "1",
 			"firstName": "hello",
-			"favoriteCatPhoto": JSONObject{
+			"favoriteCatPhoto": map[string]interface{}{
 				"url": "hello world",
 			},
+		},
+	}, result)
+}
+
+func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
+	// the query we want to execute is
+	// {
+	// 		user {                   <- from serviceA
+	//      	firstName            <- from serviceA
+	// 		}
+	// }
+
+	// build a query plan that the executor will follow
+	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+		RootStep: &QueryPlanStep{
+			Then: []*QueryPlanStep{
+				{ // this is equivalent to
+					// query { user }
+					ParentType:     "Query",
+					InsertionPoint: []string{},
+					// return a known value we can test against
+					Queryer: &graphql.MockQueryer{map[string]interface{}{
+						"user": map[string]interface{}{
+							"id":        "1",
+							"firstName": "hello",
+						},
+					}},
+					// then we have to ask for the users favorite cat photo and its url
+					Then: []*QueryPlanStep{
+						{
+							ParentType:     "Query",
+							InsertionPoint: []string{},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "user",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("User", &ast.Position{}),
+									},
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Name: "firstName",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+										},
+									},
+								},
+							},
+							// return a known value we can test against
+							Queryer: &graphql.MockQueryer{map[string]interface{}{
+								"user": map[string]interface{}{
+									"id":        "1",
+									"firstName": "hello",
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error executing plan: %v", err.Error())
+		return
+	}
+
+	// make sure we got the right values back
+	assert.Equal(t, map[string]interface{}{
+		"user": map[string]interface{}{
+			"id":        "1",
+			"firstName": "hello",
 		},
 	}, result)
 }
@@ -159,138 +239,140 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
-		// the first step is to get Query.users
 		RootStep: &QueryPlanStep{
-			ParentType:     "Query",
-			InsertionPoint: []string{},
-
-			SelectionSet: ast.SelectionSet{
-				&ast.Field{
-					Name: "users",
-					Definition: &ast.FieldDefinition{
-						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-					},
+			Then: []*QueryPlanStep{
+				{
+					ParentType:     "Query",
+					InsertionPoint: []string{},
 					SelectionSet: ast.SelectionSet{
 						&ast.Field{
-							Name: "firstName",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("String", &ast.Position{}),
-							},
-						},
-						&ast.Field{
-							Name: "friends",
+							Name: "users",
 							Definition: &ast.FieldDefinition{
 								Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 							},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("String", &ast.Position{}),
-									},
 									Name: "firstName",
-								},
-							},
-						},
-					},
-				},
-			},
-			// planner will actually leave behind a queryer that hits service A
-			// for testing we can just return a known value
-			Queryer: &graphql.MockQueryer{JSONObject{
-				"users": []JSONObject{
-					{
-						"firstName": "hello",
-						"friends": []JSONObject{
-							{
-								"firstName": "John",
-								"id":        "1",
-							},
-							{
-								"firstName": "Jacob",
-								"id":        "2",
-							},
-						},
-					},
-					{
-						"firstName": "goodbye",
-						"friends": []JSONObject{
-							{
-								"firstName": "Jingleheymer",
-								"id":        "1",
-							},
-							{
-								"firstName": "Schmidt",
-								"id":        "2",
-							},
-						},
-					},
-				},
-			}},
-			// then we have to ask for the users photo gallery
-			Then: []*QueryPlanStep{
-				// a query to satisfy User.photoGallery
-				{
-					ParentType:     "User",
-					InsertionPoint: []string{"users", "friends", "photoGallery"},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "photoGallery",
-							Definition: &ast.FieldDefinition{
-								Type: ast.ListType(ast.NamedType("CatPhoto", &ast.Position{}), &ast.Position{}),
-							},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "url",
 									Definition: &ast.FieldDefinition{
 										Type: ast.NamedType("String", &ast.Position{}),
 									},
 								},
 								&ast.Field{
-									Name: "followers",
+									Name: "friends",
 									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("User", &ast.Position{}),
+										Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 									},
-									SelectionSet: ast.SelectionSet{},
-								},
-							},
-						},
-					},
-					// planner will actually leave behind a queryer that hits service B
-					// for testing we can just return a known value
-					Queryer: &graphql.MockQueryer{JSONObject{
-						"node": JSONObject{
-							"photoGallery": []JSONObject{
-								{
-									"url": photoGalleryURL,
-									"followers": []JSONObject{
-										{
-											"id": "1",
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+											Name: "firstName",
 										},
 									},
 								},
 							},
 						},
+					},
+					// planner will actually leave behind a queryer that hits service A
+					// for testing we can just return a known value
+					Queryer: &graphql.MockQueryer{map[string]interface{}{
+						"users": []interface{}{
+							map[string]interface{}{
+								"firstName": "hello",
+								"friends": []interface{}{
+									map[string]interface{}{
+										"firstName": "John",
+										"id":        "1",
+									},
+									map[string]interface{}{
+										"firstName": "Jacob",
+										"id":        "2",
+									},
+								},
+							},
+							map[string]interface{}{
+								"firstName": "goodbye",
+								"friends": []interface{}{
+									map[string]interface{}{
+										"firstName": "Jingleheymer",
+										"id":        "1",
+									},
+									map[string]interface{}{
+										"firstName": "Schmidt",
+										"id":        "2",
+									},
+								},
+							},
+						},
 					}},
+					// then we have to ask for the users photo gallery
 					Then: []*QueryPlanStep{
-						// a query to satisfy User.firstName
+						// a query to satisfy User.photoGallery
 						{
 							ParentType:     "User",
-							InsertionPoint: []string{"users", "friends", "photoGallery", "followers", "firstName"},
+							InsertionPoint: []string{"users", "friends", "photoGallery"},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
-									Name: "firstName",
+									Name: "photoGallery",
 									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("String", &ast.Position{}),
+										Type: ast.ListType(ast.NamedType("CatPhoto", &ast.Position{}), &ast.Position{}),
+									},
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Name: "url",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+										},
+										&ast.Field{
+											Name: "followers",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("User", &ast.Position{}),
+											},
+											SelectionSet: ast.SelectionSet{},
+										},
 									},
 								},
 							},
 							// planner will actually leave behind a queryer that hits service B
 							// for testing we can just return a known value
-							Queryer: &graphql.MockQueryer{JSONObject{
-								"node": JSONObject{
-									"firstName": followerName,
+							Queryer: &graphql.MockQueryer{map[string]interface{}{
+								"node": map[string]interface{}{
+									"photoGallery": []interface{}{
+										map[string]interface{}{
+											"url": photoGalleryURL,
+											"followers": []interface{}{
+												map[string]interface{}{
+													"id": "1",
+												},
+											},
+										},
+									},
 								},
 							}},
+							Then: []*QueryPlanStep{
+								// a query to satisfy User.firstName
+								{
+									ParentType:     "User",
+									InsertionPoint: []string{"users", "friends", "photoGallery", "followers", "firstName"},
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Name: "firstName",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+										},
+									},
+									// planner will actually leave behind a queryer that hits service B
+									// for testing we can just return a known value
+									Queryer: &graphql.MockQueryer{map[string]interface{}{
+										"node": map[string]interface{}{
+											"firstName": followerName,
+										},
+									}},
+								},
+							},
 						},
 					},
 				},
@@ -304,19 +386,19 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 
 	// atm the mock queryer always returns the same value so we will end up with
 	// the same User.favoritePhoto and User.photoGallery
-	assert.Equal(t, JSONObject{
-		"users": []JSONObject{
-			{
+	assert.Equal(t, map[string]interface{}{
+		"users": []interface{}{
+			map[string]interface{}{
 				"firstName": "hello",
-				"friends": []JSONObject{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "John",
 						"id":        "1",
-						"photoGallery": []JSONObject{
-							{
+						"photoGallery": []interface{}{
+							map[string]interface{}{
 								"url": photoGalleryURL,
-								"followers": []JSONObject{
-									{
+								"followers": []interface{}{
+									map[string]interface{}{
 										"id":        "1",
 										"firstName": followerName,
 									},
@@ -324,14 +406,14 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							},
 						},
 					},
-					{
+					map[string]interface{}{
 						"firstName": "Jacob",
 						"id":        "2",
-						"photoGallery": []JSONObject{
-							{
+						"photoGallery": []interface{}{
+							map[string]interface{}{
 								"url": photoGalleryURL,
-								"followers": []JSONObject{
-									{
+								"followers": []interface{}{
+									map[string]interface{}{
 										"id":        "1",
 										"firstName": followerName,
 									},
@@ -341,17 +423,17 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 				},
 			},
-			{
+			map[string]interface{}{
 				"firstName": "goodbye",
-				"friends": []JSONObject{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "Jingleheymer",
 						"id":        "1",
-						"photoGallery": []JSONObject{
-							{
+						"photoGallery": []interface{}{
+							map[string]interface{}{
 								"url": photoGalleryURL,
-								"followers": []JSONObject{
-									{
+								"followers": []interface{}{
+									map[string]interface{}{
 										"id":        "1",
 										"firstName": followerName,
 									},
@@ -359,14 +441,14 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							},
 						},
 					},
-					{
+					map[string]interface{}{
 						"firstName": "Schmidt",
 						"id":        "2",
-						"photoGallery": []JSONObject{
-							{
+						"photoGallery": []interface{}{
+							map[string]interface{}{
 								"url": photoGalleryURL,
-								"followers": []JSONObject{
-									{
+								"followers": []interface{}{
+									map[string]interface{}{
 										"id":        "1",
 										"firstName": followerName,
 									},
@@ -445,48 +527,48 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 	}
 
 	// the result of the step
-	result := JSONObject{
-		"users": []JSONObject{
-			{
-				"photoGallery": []JSONObject{
-					{
-						"likedBy": []JSONObject{
-							{
+	result := map[string]interface{}{
+		"users": []interface{}{
+			map[string]interface{}{
+				"photoGallery": []interface{}{
+					map[string]interface{}{
+						"likedBy": []interface{}{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "1",
 							},
-							{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "2",
 							},
 						},
 					},
-					{
-						"likedBy": []JSONObject{
-							{
+					map[string]interface{}{
+						"likedBy": []interface{}{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "3",
 							},
-							{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "4",
 							},
-							{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "5",
 							},
 						},
 					},
-					{
-						"likedBy": []JSONObject{
-							{
+					map[string]interface{}{
+						"likedBy": []interface{}{
+							map[string]interface{}{
 								"totalLikes": 10,
 								"id":         "6",
 							},
 						},
 					},
-					{
-						"likedBy": []JSONObject{},
+					map[string]interface{}{
+						"likedBy": []interface{}{},
 					},
 				},
 			},
@@ -504,66 +586,86 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 
 func TestFindObject(t *testing.T) {
 	// create an object we want to extract
-	source := JSONObject{
-		"hello": []JSONObject{
-			{
+	source := map[string]interface{}{
+		"hello": []interface{}{
+			map[string]interface{}{
 				"firstName": "0",
-				"friends": []JSONObject{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "2",
+						"friends": []interface{}{
+							map[string]interface{}{
+								"firstName": "Hello1",
+							},
+						},
 					},
-					{
+					map[string]interface{}{
 						"firstName": "3",
+						"friends": []interface{}{
+							map[string]interface{}{
+								"firstName": "Hello2",
+							},
+						},
 					},
 				},
 			},
-			{
+			map[string]interface{}{
 				"firstName": "4",
-				"friends": []JSONObject{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "5",
+						"friends": []interface{}{
+							map[string]interface{}{
+								"firstName": "Hello3",
+							},
+						},
 					},
-					{
+					map[string]interface{}{
 						"firstName": "6",
+						"friends": []interface{}{
+							map[string]interface{}{
+								"firstName": "Hello4",
+							},
+						},
 					},
 				},
 			},
 		},
 	}
 
-	value, err := executorExtractValue(source, []string{"hello:0", "friends:1"})
+	value, err := executorExtractValue(source, []string{"hello:0", "friends:1", "friends:0"})
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	assert.Equal(t, JSONObject{
-		"firstName": "3",
+	assert.Equal(t, map[string]interface{}{
+		"firstName": "Hello2",
 	}, value)
 }
 
 func TestFindString(t *testing.T) {
 	// create an object we want to extract
-	source := JSONObject{
-		"hello": []JSONObject{
-			{
+	source := map[string]interface{}{
+		"hello": []interface{}{
+			map[string]interface{}{
 				"firstName": "0",
-				"friends": []JSONObject{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "2",
 					},
-					{
+					map[string]interface{}{
 						"firstName": "3",
 					},
 				},
 			},
-			{
+			map[string]interface{}{
 				"firstName": "4",
-				"friends": []JSONObject{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "5",
 					},
-					{
+					map[string]interface{}{
 						"firstName": "6",
 					},
 				},
@@ -582,12 +684,12 @@ func TestFindString(t *testing.T) {
 
 func TestExecutorInsertObject_insertValue(t *testing.T) {
 	// the object to mutate
-	source := JSONObject{}
+	source := map[string]interface{}{}
 
 	// the object to insert
 	inserted := "world"
 
-	// insert the object deeeeep down
+	// insert the string deeeeep down
 	err := executorInsertObject(source, []string{"hello:5#1", "message", "body:2", "hello"}, inserted)
 	if err != nil {
 		t.Error(err)
@@ -600,7 +702,7 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 		t.Error("Did not add root list")
 		return
 	}
-	list, ok := rootList.([]JSONObject)
+	list, ok := rootList.([]interface{})
 	if !ok {
 		t.Error("root list is not a list")
 		return
@@ -612,14 +714,20 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 		return
 	}
 
+	entry, ok := list[5].(map[string]interface{})
+	if !ok {
+		t.Error("6th entry wasn't an object")
+		return
+	}
+
 	// the object we care about is index 5
-	message := list[5]["message"]
+	message := entry["message"]
 	if message == nil {
 		t.Error("Did not add message to object")
 		return
 	}
 
-	msgObj, ok := message.(JSONObject)
+	msgObj, ok := message.(map[string]interface{})
 	if !ok {
 		t.Error("message is not a list")
 		return
@@ -631,7 +739,7 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 		t.Error("Did not add body list")
 		return
 	}
-	bodies, ok := bodiesList.([]JSONObject)
+	bodies, ok := bodiesList.([]interface{})
 	if !ok {
 		t.Error("bodies list is not a list")
 		return
@@ -639,8 +747,13 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 
 	if len(bodies) != 3 {
 		t.Error("bodies list did not have enough entries")
+		return
 	}
-	body := bodies[2]
+	body, ok := bodies[2].(map[string]interface{})
+	if !ok {
+		t.Error("Body was not an object")
+		return
+	}
 
 	// make sure that the value is what we expect
 	assert.Equal(t, inserted, body["hello"])
@@ -648,10 +761,10 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 
 func TestExecutorInsertObject_insertListElements(t *testing.T) {
 	// the object to mutate
-	source := JSONObject{}
+	source := map[string]interface{}{}
 
 	// the object to insert
-	inserted := JSONObject{
+	inserted := map[string]interface{}{
 		"hello": "world",
 	}
 
@@ -669,7 +782,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 		return
 	}
 
-	root, ok := rootEntry.(JSONObject)
+	root, ok := rootEntry.(map[string]interface{})
 	if !ok {
 		t.Error("root object is not an object")
 		return
@@ -681,7 +794,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 		return
 	}
 
-	list, ok := rootList.([]JSONObject)
+	list, ok := rootList.([]interface{})
 	if !ok {
 		t.Error("objects is not a list")
 		return
@@ -793,6 +906,10 @@ func TestExecutorBuildQuery_node(t *testing.T) {
 		t.Error("Did not pass the right id value to the node field")
 		return
 	}
+	if argument.Value.Kind != ast.StringValue {
+		t.Error("Argument was incorrect type")
+		return
+	}
 
 	// make sure the field has an inline fragment for the type
 	if len(node.SelectionSet) != 1 {
@@ -886,20 +1003,20 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	}
 
 	// the result of the step
-	result := JSONObject{
-		"photoGallery": []JSONObject{
-			{
-				"author": JSONObject{
+	result := map[string]interface{}{
+		"photoGallery": []interface{}{
+			map[string]interface{}{
+				"author": map[string]interface{}{
 					"id": "1",
 				},
 			},
-			{
-				"author": JSONObject{
+			map[string]interface{}{
+				"author": map[string]interface{}{
 					"id": "2",
 				},
 			},
-			{
-				"author": JSONObject{
+			map[string]interface{}{
+				"author": map[string]interface{}{
 					"id": "3",
 				},
 			},

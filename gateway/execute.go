@@ -11,13 +11,10 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
-// JSONObject is a typdef for map[string]interface{} to make structuring json responses easier.
-type JSONObject map[string]interface{}
-
 // Executor is responsible for executing a query plan against the remote
 // schemas and returning the result
 type Executor interface {
-	Execute(*QueryPlan) (JSONObject, error)
+	Execute(*QueryPlan) (map[string]interface{}, error)
 }
 
 // ParallelExecutor executes the given query plan by starting at the root of the plan and
@@ -26,14 +23,14 @@ type ParallelExecutor struct{}
 
 type queryExecutionResult struct {
 	InsertionPoint []string
-	Result         JSONObject
+	Result         map[string]interface{}
 	StripNode      bool
 }
 
 // Execute returns the result of the query plan
-func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
+func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface{}, error) {
 	// a place to store the result
-	result := JSONObject{}
+	result := map[string]interface{}{}
 
 	// a channel to receive query results
 	resultCh := make(chan queryExecutionResult, 10)
@@ -50,9 +47,16 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 	closeCh := make(chan bool)
 	// defer close(closeCh)
 
-	// we need to start at the root strep
-	stepWg.Add(1)
-	go executeStep(plan.RootStep, []string{}, resultCh, errCh, stepWg)
+	// if there are no steps after the root step, there is a problem
+	if len(plan.RootStep.Then) == 0 {
+		return nil, errors.New("was given empty plan")
+	}
+
+	// the root step could have multiple steps that have to happen
+	for _, step := range plan.RootStep.Then {
+		stepWg.Add(1)
+		go executeStep(step, []string{}, resultCh, errCh, stepWg)
+	}
 
 	// start a goroutine to add results to the list
 	go func() {
@@ -82,8 +86,14 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 				}
 				log.Debug("raw value: ", queryResult)
 
+				log.Debug("Inserting result into ", payload.InsertionPoint)
+				log.Debug("Result: ", queryResult)
 				// copy the result into the accumulator
-				executorInsertObject(result, payload.InsertionPoint, queryResult)
+				err = executorInsertObject(result, payload.InsertionPoint, queryResult)
+				if err != nil {
+					errCh <- err
+					continue ConsumptionLoop
+				}
 
 				log.Debug("Done")
 				// one of the queries is done
@@ -130,53 +140,60 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 
 func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan queryExecutionResult, errCh chan error, stepWg *sync.WaitGroup) {
 	log.Debug("")
-	log.Debug("Executing step to be inserted in ", insertionPoint)
-	// each selection set that is the parent of another query must ask for the id
-	for _, nextStep := range step.Then {
-		log.Debug("Step has children. Need to add ids.")
-		// the next query will go
-		path := nextStep.InsertionPoint[:len(nextStep.InsertionPoint)-1]
+	log.Debug("Executing step to be inserted in ", step.ParentType, " ", insertionPoint)
 
-		// the selection set we need to add `id` to
-		target := step.SelectionSet
-		var targetField *ast.Field
+	log.Debug(step.SelectionSet)
 
-		for _, point := range path {
-			// look for the selection with that name
+	// if this step has a selection, the resulting steps will end up being inserted at a particular object
+	// we need to make sure that we ask for the id of the object
+	if len(step.SelectionSet) > 0 {
+		// each selection set that is the parent of another query must ask for the id
+		for _, nextStep := range step.Then {
+			// the next query will go
+			path := nextStep.InsertionPoint[:max(len(nextStep.InsertionPoint)-1, 0)]
+			log.Debug("Step has children. Need to add ids ", path, nextStep.InsertionPoint)
+
+			// the selection set we need to add `id` to
+			target := step.SelectionSet
+			var targetField *ast.Field
+
+			for _, point := range path {
+				// look for the selection with that name
+				for _, selection := range applyFragments(target) {
+					// if we still have to walk down the selection but we found the right branch
+					if selection.Name == point {
+						target = selection.SelectionSet
+						targetField = selection
+						break
+					}
+				}
+			}
+
+			// if we couldn't find the target
+			if target == nil {
+				errCh <- fmt.Errorf("Could not find field to add id to. insertion point: %v", path)
+				return
+			}
+
+			// if the target does not currently ask for id we need to add it
+			addID := true
 			for _, selection := range applyFragments(target) {
-				// if we still have to walk down the selection but we found the right branch
-				if selection.Name == point {
-					target = selection.SelectionSet
-					targetField = selection
+				if selection.Name == "id" {
+					addID = false
 					break
 				}
 			}
-		}
 
-		// if we couldn't find the target
-		if target == nil {
-			errCh <- fmt.Errorf("Could not find field to add id to: %v", path)
-			return
-		}
-
-		// if the target does not currently ask for id we need to add it
-		addID := true
-		for _, selection := range applyFragments(target) {
-			if selection.Name == "id" {
-				addID = false
-				break
+			// add the ID to the selection set if necessary
+			if addID {
+				target = append(target, &ast.Field{
+					Name: "id",
+				})
 			}
-		}
 
-		// add the ID to the selection set if necessary
-		if addID {
-			target = append(target, &ast.Field{
-				Name: "id",
-			})
+			// make sure the selection set contains the id
+			targetField.SelectionSet = target
 		}
-
-		// make sure the selection set contains the id
-		targetField.SelectionSet = target
 	}
 
 	// log the query
@@ -202,6 +219,12 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 	queryStr, err := graphql.PrintQuery(query)
 	if err != nil {
 		errCh <- err
+		return
+	}
+	log.Debug("Sending network query: ", queryStr)
+	// if there is no queryer
+	if step.Queryer == nil {
+		errCh <- errors.New("could not find queryer for step")
 		return
 	}
 	// execute the query
@@ -261,7 +284,7 @@ func max(a, b int) int {
 }
 
 // findInsertionPoints returns the list of insertion points where this step should be executed.
-func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result JSONObject, startingPoints [][]string, stripNode bool) ([][]string, error) {
+func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, stripNode bool) ([][]string, error) {
 
 	// log.Debug("Looking for insertion points. target: ", targetPoints)
 	oldBranch := startingPoints
@@ -283,7 +306,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 		startingIndex = len(oldBranch[0])
 	}
 
-	// log.Debug("Starting at ", startingIndex, oldBranch)
+	log.Debug("result ", resultChunk)
 
 	// if our starting point is []string{"users:0", "photoGallery"} then we know everything up until photoGallery
 	// is along the path of the steps insertion point
@@ -322,7 +345,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 						}
 
 						// make sure the node value is an object
-						objValue, ok := nodeValue.(JSONObject)
+						objValue, ok := nodeValue.(map[string]interface{})
 						if !ok {
 							return nil, errors.New("node value was not an object")
 						}
@@ -339,18 +362,22 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 					selectionType := selection.Definition.Type
 					// if the type is a list
 					if selectionType.Elem != nil {
-						// log.Debug("Selection is a list")
+						log.Debug("Selection is a list")
 						// make sure the root value is a list
-						rootList, ok := rootValue.([]JSONObject)
+						rootList, ok := rootValue.([]interface{})
 						if !ok {
-							return nil, errors.New("Root value of result chunk was not a list")
+							return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootValue)
 						}
 
 						// build up a new list of insertion points
 						newInsertionPoints := [][]string{}
 
 						// each value in this list contributes an insertion point
-						for entryI, resultEntry := range rootList {
+						for entryI, iEntry := range rootList {
+							resultEntry, ok := iEntry.(map[string]interface{})
+							if !ok {
+								return nil, errors.New("entry in result wasn't a map")
+							}
 							// the point we are going to add to the list
 							entryPoint := fmt.Sprintf("%s:%v", selection.Name, entryI)
 							// log.Debug("Adding ", entryPoint, " to list")
@@ -409,9 +436,12 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 						// or the root value could be an object in which case the id is the id of the root value
 
 						// if the root value is a list
-						if rootList, ok := rootValue.([]JSONObject); ok {
+						if rootList, ok := rootValue.([]interface{}); ok {
 							for i := range oldBranch {
-								entry := rootList[i]
+								entry, ok := rootList[i].(map[string]interface{})
+								if !ok {
+									return nil, errors.New("Item in root list isn't a map")
+								}
 
 								// look up the id of the object
 								id, ok := entry["id"]
@@ -425,19 +455,19 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 
 							}
 						} else {
-							if rootObj, ok := rootValue.(JSONObject); ok {
-								for i := range oldBranch {
-									// look up the id of the object
-									id := rootObj["id"]
-									if !ok {
-										return nil, errors.New("Could not find the id for the object")
-									}
+							rootObj, ok := rootValue.(map[string]interface{})
+							if !ok {
+								return nil, fmt.Errorf("Root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
+							}
 
-									oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
+							for i := range oldBranch {
+								// look up the id of the object
+								id := rootObj["id"]
+								if !ok {
+									return nil, errors.New("Could not find the id for the object")
 								}
 
-							} else {
-								return nil, fmt.Errorf("Root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
+								oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
 							}
 						}
 					}
@@ -459,69 +489,72 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 	return oldBranch, nil
 }
 
-func executorExtractValue(source JSONObject, path []string) (interface{}, error) {
+func executorExtractValue(source map[string]interface{}, path []string) (interface{}, error) {
 	// a pointer to the objects we are modifying
 	var recent interface{} = source
+	log.Debug("Pulling ", path, " from ", source)
 
 	for i, point := range path[:len(path)] {
 		// if the point designates an element in the list
 		if strings.Contains(point, ":") {
-			// extract the index of the element we need to insert into
-			indexData := strings.Split(point, ":")
-
-			// grab the field name and the index
-			field := indexData[0]
-			idData := strings.Split(indexData[1], "#")
-			index, err := strconv.ParseInt(idData[0], 0, 32)
+			pointData, err := executorGetPointData(point)
 			if err != nil {
 				return nil, err
 			}
 
-			recentObj, ok := recent.(JSONObject)
+			recentObj, ok := recent.(map[string]interface{})
 			if !ok {
-				return nil, errors.New("List was not of objects?")
+				return nil, fmt.Errorf("List was not a child of an object. %v", pointData)
 			}
 
 			// if the field does not exist
-			if recentObj[field] == nil {
-				recentObj[field] = []JSONObject{}
+			if _, ok := recentObj[pointData.Field]; !ok {
+				recentObj[pointData.Field] = []interface{}{}
 			}
+
 			// it should be a list
-			targetList, ok := recentObj[field].([]JSONObject)
+			field := recentObj[pointData.Field]
+
+			targetList, ok := field.([]interface{})
 			if !ok {
-				return nil, errors.New("Did not encounter a list when expected")
+				return nil, fmt.Errorf("did not encounter a list when expected. Point: %v. Field: %v. Result %v", point, pointData.Field, field)
 			}
+
 			// if the field exists but does not have enough spots
-			if len(targetList) <= int(index) {
-				for i := len(targetList) - 1; i < int(index); i++ {
-					targetList = append(targetList, JSONObject{})
+			if len(targetList) <= pointData.Index {
+				for i := len(targetList) - 1; i < pointData.Index; i++ {
+					targetList = append(targetList, map[string]interface{}{})
 				}
 
 				// update the list with what we just made
-				recentObj[field] = targetList
+				recentObj[pointData.Field] = targetList
 			}
 
 			// focus on the right element
-			recent = targetList[index]
+			recent = targetList[pointData.Index]
 		} else {
 			// it's possible that there's an id
-			pointData := strings.Split(point, "#")
-			pointField := pointData[0]
+			pointData, err := executorGetPointData(point)
+			if err != nil {
+				return nil, err
+			}
 
-			recentObj, ok := recent.(JSONObject)
+			pointField := pointData.Field
+
+			recentObj, ok := recent.(map[string]interface{})
 			if !ok {
-				return nil, errors.New("List was not of objects?")
+				return nil, fmt.Errorf("thisone, Target was not an object. %v, %v", pointData, recent)
 			}
 
 			// we are add an object value
 			targetObject := recentObj[pointField]
 
 			if i != len(path)-1 && targetObject == nil {
-				recentObj[pointField] = JSONObject{}
+				recentObj[pointField] = map[string]interface{}{}
 			}
 			// if we haven't created an object there with that field
 			if targetObject == nil {
-				recentObj[pointField] = JSONObject{}
+				recentObj[pointField] = map[string]interface{}{}
 			}
 
 			// look there next
@@ -532,7 +565,7 @@ func executorExtractValue(source JSONObject, path []string) (interface{}, error)
 	return recent, nil
 }
 
-func executorInsertObject(target JSONObject, path []string, value interface{}) error {
+func executorInsertObject(target map[string]interface{}, path []string, value interface{}) error {
 	if len(path) > 0 {
 		head := path[len(path)-1]
 		// the path to the key we want to set
@@ -544,7 +577,7 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 			return err
 		}
 
-		valueObj, ok := obj.(JSONObject)
+		valueObj, ok := obj.(map[string]interface{})
 		if !ok {
 			return errors.New("something went wrong")
 		}
@@ -559,11 +592,11 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 
 			// if there is no list at that location
 			if _, ok := valueObj[pointData.Field]; !ok {
-				valueObj[pointData.Field] = []JSONObject{}
+				valueObj[pointData.Field] = []interface{}{}
 			}
 
 			// if its not a list
-			valueList, ok := valueObj[pointData.Field].([]JSONObject)
+			valueList, ok := valueObj[pointData.Field].([]interface{})
 			if !ok {
 				return errors.New("Found a non-list at the insertion point")
 			}
@@ -571,15 +604,18 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 			if len(valueList) <= pointData.Index {
 				// make sure that the list has enough entries
 				for i := max(len(valueList)-1, 0); i <= pointData.Index; i++ {
-					valueList = append(valueList, JSONObject{})
+					valueList = append(valueList, map[string]interface{}{})
 				}
 			}
 
-			objValue, ok := value.(JSONObject)
+			field := valueList[pointData.Index]
+			mapField, ok := field.(map[string]interface{})
+
+			objValue, ok := value.(map[string]interface{})
 			if ok {
 				// make sure we update the object at that location with each value
 				for k, v := range objValue {
-					valueList[pointData.Index][k] = v
+					mapField[k] = v
 				}
 			}
 
@@ -591,7 +627,7 @@ func executorInsertObject(target JSONObject, path []string, value interface{}) e
 			valueObj[head] = value
 		}
 	} else {
-		valueObj, ok := value.(JSONObject)
+		valueObj, ok := value.(map[string]interface{})
 		if !ok {
 			return errors.New("something went wrong")
 		}
@@ -673,7 +709,8 @@ func executorBuildQuery(parentType string, parentID string, selectionSet ast.Sel
 					&ast.Argument{
 						Name: "id",
 						Value: &ast.Value{
-							Raw: parentID,
+							Kind: ast.StringValue,
+							Raw:  parentID,
 						},
 					},
 				},
@@ -686,6 +723,7 @@ func executorBuildQuery(parentType string, parentID string, selectionSet ast.Sel
 			},
 		}
 	}
+	log.Debug("Build Query")
 
 	// add the operation to a QueryDocument
 	return operation
