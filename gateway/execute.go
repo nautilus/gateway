@@ -50,9 +50,16 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (JSONObject, error) {
 	closeCh := make(chan bool)
 	// defer close(closeCh)
 
-	// we need to start at the root strep
-	stepWg.Add(1)
-	go executeStep(plan.RootStep, []string{}, resultCh, errCh, stepWg)
+	// if there are no steps after the root step, there is a problem
+	if len(plan.RootStep.Then) == 0 {
+		return nil, errors.New("was given empty plan")
+	}
+
+	// the root step could have multiple steps that have to happen
+	for _, step := range plan.RootStep.Then {
+		stepWg.Add(1)
+		go executeStep(step, []string{}, resultCh, errCh, stepWg)
+	}
 
 	// start a goroutine to add results to the list
 	go func() {

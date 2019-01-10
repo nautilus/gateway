@@ -12,24 +12,28 @@ func TestExecutor_plansOfOne(t *testing.T) {
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
 		RootStep: &QueryPlanStep{
-			// this is equivalent to
-			// query { values }
-			ParentType: "Query",
-			SelectionSet: ast.SelectionSet{
-				&ast.Field{
-					Name: "values",
-					Definition: &ast.FieldDefinition{
-						Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+			Then: []*QueryPlanStep{
+				{
+					// this is equivalent to
+					// query { values }
+					ParentType: "Query",
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "values",
+							Definition: &ast.FieldDefinition{
+								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+							},
+						},
 					},
+					// return a known value we can test against
+					Queryer: &graphql.MockQueryer{JSONObject{
+						"values": []string{
+							"hello",
+							"world",
+						},
+					}},
 				},
 			},
-			// return a known value we can test against
-			Queryer: &graphql.MockQueryer{JSONObject{
-				"values": []string{
-					"hello",
-					"world",
-				},
-			}},
 		},
 	})
 	if err != nil {
@@ -60,47 +64,22 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
 		RootStep: &QueryPlanStep{
-			// this is equivalent to
-			// query { user }
-			ParentType:     "Query",
-			InsertionPoint: []string{},
-			SelectionSet: ast.SelectionSet{
-				&ast.Field{
-					Name: "user",
-					Definition: &ast.FieldDefinition{
-						Type: ast.NamedType("User", &ast.Position{}),
-					},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "firstName",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("String", &ast.Position{}),
-							},
-						},
-					},
-				},
-			},
-			// return a known value we can test against
-			Queryer: &graphql.MockQueryer{JSONObject{
-				"user": JSONObject{
-					"id":        "1",
-					"firstName": "hello",
-				},
-			}},
-			// then we have to ask for the users favorite cat photo and its url
 			Then: []*QueryPlanStep{
 				{
-					ParentType:     "User",
-					InsertionPoint: []string{"user", "favoriteCatPhoto"},
+
+					// this is equivalent to
+					// query { user }
+					ParentType:     "Query",
+					InsertionPoint: []string{},
 					SelectionSet: ast.SelectionSet{
 						&ast.Field{
-							Name: "favoriteCatPhoto",
+							Name: "user",
 							Definition: &ast.FieldDefinition{
 								Type: ast.NamedType("User", &ast.Position{}),
 							},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
-									Name: "url",
+									Name: "firstName",
 									Definition: &ast.FieldDefinition{
 										Type: ast.NamedType("String", &ast.Position{}),
 									},
@@ -108,13 +87,43 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 							},
 						},
 					},
+					// return a known value we can test against
 					Queryer: &graphql.MockQueryer{JSONObject{
-						"node": JSONObject{
-							"favoriteCatPhoto": JSONObject{
-								"url": "hello world",
-							},
+						"user": JSONObject{
+							"id":        "1",
+							"firstName": "hello",
 						},
 					}},
+					// then we have to ask for the users favorite cat photo and its url
+					Then: []*QueryPlanStep{
+						{
+							ParentType:     "User",
+							InsertionPoint: []string{"user", "favoriteCatPhoto"},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "favoriteCatPhoto",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("User", &ast.Position{}),
+									},
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Name: "url",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+										},
+									},
+								},
+							},
+							Queryer: &graphql.MockQueryer{JSONObject{
+								"node": JSONObject{
+									"favoriteCatPhoto": JSONObject{
+										"url": "hello world",
+									},
+								},
+							}},
+						},
+					},
 				},
 			},
 		},
@@ -147,38 +156,11 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
 		RootStep: &QueryPlanStep{
-			// this is equivalent to
-			// query { user }
-			ParentType:     "Query",
-			InsertionPoint: []string{},
-			// return a known value we can test against
-			Queryer: &graphql.MockQueryer{JSONObject{
-				"user": JSONObject{
-					"id":        "1",
-					"firstName": "hello",
-				},
-			}},
-			// then we have to ask for the users favorite cat photo and its url
 			Then: []*QueryPlanStep{
-				{
+				{ // this is equivalent to
+					// query { user }
 					ParentType:     "Query",
 					InsertionPoint: []string{},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "user",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("User", &ast.Position{}),
-							},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "firstName",
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("String", &ast.Position{}),
-									},
-								},
-							},
-						},
-					},
 					// return a known value we can test against
 					Queryer: &graphql.MockQueryer{JSONObject{
 						"user": JSONObject{
@@ -186,6 +168,36 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 							"firstName": "hello",
 						},
 					}},
+					// then we have to ask for the users favorite cat photo and its url
+					Then: []*QueryPlanStep{
+						{
+							ParentType:     "Query",
+							InsertionPoint: []string{},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "user",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("User", &ast.Position{}),
+									},
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Name: "firstName",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+										},
+									},
+								},
+							},
+							// return a known value we can test against
+							Queryer: &graphql.MockQueryer{JSONObject{
+								"user": JSONObject{
+									"id":        "1",
+									"firstName": "hello",
+								},
+							}},
+						},
+					},
 				},
 			},
 		},
@@ -227,128 +239,99 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
-		// the first step is to get Query.users
 		RootStep: &QueryPlanStep{
-			ParentType:     "Query",
-			InsertionPoint: []string{},
-
-			SelectionSet: ast.SelectionSet{
-				&ast.Field{
-					Name: "users",
-					Definition: &ast.FieldDefinition{
-						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-					},
+			Then: []*QueryPlanStep{
+				{
+					ParentType:     "Query",
+					InsertionPoint: []string{},
 					SelectionSet: ast.SelectionSet{
 						&ast.Field{
-							Name: "firstName",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("String", &ast.Position{}),
-							},
-						},
-						&ast.Field{
-							Name: "friends",
+							Name: "users",
 							Definition: &ast.FieldDefinition{
 								Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 							},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("String", &ast.Position{}),
-									},
 									Name: "firstName",
-								},
-							},
-						},
-					},
-				},
-			},
-			// planner will actually leave behind a queryer that hits service A
-			// for testing we can just return a known value
-			Queryer: &graphql.MockQueryer{JSONObject{
-				"users": []JSONObject{
-					{
-						"firstName": "hello",
-						"friends": []JSONObject{
-							{
-								"firstName": "John",
-								"id":        "1",
-							},
-							{
-								"firstName": "Jacob",
-								"id":        "2",
-							},
-						},
-					},
-					{
-						"firstName": "goodbye",
-						"friends": []JSONObject{
-							{
-								"firstName": "Jingleheymer",
-								"id":        "1",
-							},
-							{
-								"firstName": "Schmidt",
-								"id":        "2",
-							},
-						},
-					},
-				},
-			}},
-			// then we have to ask for the users photo gallery
-			Then: []*QueryPlanStep{
-				// a query to satisfy User.photoGallery
-				{
-					ParentType:     "User",
-					InsertionPoint: []string{"users", "friends", "photoGallery"},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "photoGallery",
-							Definition: &ast.FieldDefinition{
-								Type: ast.ListType(ast.NamedType("CatPhoto", &ast.Position{}), &ast.Position{}),
-							},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "url",
 									Definition: &ast.FieldDefinition{
 										Type: ast.NamedType("String", &ast.Position{}),
 									},
 								},
 								&ast.Field{
-									Name: "followers",
+									Name: "friends",
 									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("User", &ast.Position{}),
+										Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 									},
-									SelectionSet: ast.SelectionSet{},
-								},
-							},
-						},
-					},
-					// planner will actually leave behind a queryer that hits service B
-					// for testing we can just return a known value
-					Queryer: &graphql.MockQueryer{JSONObject{
-						"node": JSONObject{
-							"photoGallery": []JSONObject{
-								{
-									"url": photoGalleryURL,
-									"followers": []JSONObject{
-										{
-											"id": "1",
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+											Name: "firstName",
 										},
 									},
 								},
 							},
 						},
+					},
+					// planner will actually leave behind a queryer that hits service A
+					// for testing we can just return a known value
+					Queryer: &graphql.MockQueryer{JSONObject{
+						"users": []JSONObject{
+							{
+								"firstName": "hello",
+								"friends": []JSONObject{
+									{
+										"firstName": "John",
+										"id":        "1",
+									},
+									{
+										"firstName": "Jacob",
+										"id":        "2",
+									},
+								},
+							},
+							{
+								"firstName": "goodbye",
+								"friends": []JSONObject{
+									{
+										"firstName": "Jingleheymer",
+										"id":        "1",
+									},
+									{
+										"firstName": "Schmidt",
+										"id":        "2",
+									},
+								},
+							},
+						},
 					}},
+					// then we have to ask for the users photo gallery
 					Then: []*QueryPlanStep{
-						// a query to satisfy User.firstName
+						// a query to satisfy User.photoGallery
 						{
 							ParentType:     "User",
-							InsertionPoint: []string{"users", "friends", "photoGallery", "followers", "firstName"},
+							InsertionPoint: []string{"users", "friends", "photoGallery"},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
-									Name: "firstName",
+									Name: "photoGallery",
 									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("String", &ast.Position{}),
+										Type: ast.ListType(ast.NamedType("CatPhoto", &ast.Position{}), &ast.Position{}),
+									},
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Name: "url",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+										},
+										&ast.Field{
+											Name: "followers",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("User", &ast.Position{}),
+											},
+											SelectionSet: ast.SelectionSet{},
+										},
 									},
 								},
 							},
@@ -356,9 +339,40 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							// for testing we can just return a known value
 							Queryer: &graphql.MockQueryer{JSONObject{
 								"node": JSONObject{
-									"firstName": followerName,
+									"photoGallery": []JSONObject{
+										{
+											"url": photoGalleryURL,
+											"followers": []JSONObject{
+												{
+													"id": "1",
+												},
+											},
+										},
+									},
 								},
 							}},
+							Then: []*QueryPlanStep{
+								// a query to satisfy User.firstName
+								{
+									ParentType:     "User",
+									InsertionPoint: []string{"users", "friends", "photoGallery", "followers", "firstName"},
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Name: "firstName",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+										},
+									},
+									// planner will actually leave behind a queryer that hits service B
+									// for testing we can just return a known value
+									Queryer: &graphql.MockQueryer{JSONObject{
+										"node": JSONObject{
+											"firstName": followerName,
+										},
+									}},
+								},
+							},
 						},
 					},
 				},

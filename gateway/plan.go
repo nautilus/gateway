@@ -129,7 +129,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 			for {
 				select {
 				case payload := <-newSteps:
-
+					fmt.Println("Adding queryer ", p.GetQueryer(payload.ServiceName))
 					step := &QueryPlanStep{
 						Queryer:        p.GetQueryer(payload.ServiceName),
 						ParentType:     payload.ParentType,
