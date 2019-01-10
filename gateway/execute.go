@@ -492,6 +492,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 func executorExtractValue(source map[string]interface{}, path []string) (interface{}, error) {
 	// a pointer to the objects we are modifying
 	var recent interface{} = source
+	log.Debug("Pulling ", path, " from ", source)
 
 	for i, point := range path[:len(path)] {
 		// if the point designates an element in the list
@@ -503,19 +504,22 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 
 			recentObj, ok := recent.(map[string]interface{})
 			if !ok {
-				return nil, fmt.Errorf("List was not a child of an object? %v", pointData)
+				return nil, fmt.Errorf("List was not a child of an object. %v", pointData)
 			}
 
+			fmt.Println("Looking at field", pointData.Field)
 			// if the field does not exist
 			if _, ok := recentObj[pointData.Field]; !ok {
 				recentObj[pointData.Field] = []interface{}{}
 			}
-			fmt.Println("Looking at field", pointData.Field)
+
 			// it should be a list
 			field := recentObj[pointData.Field]
+
 			targetList, ok := field.([]interface{})
 			if !ok {
-				return nil, fmt.Errorf("did not encounter a list when expected. Point: %v. Result %v", point, targetList)
+				_, innerOk := field.([]map[string]interface{})
+				return nil, fmt.Errorf("did not encounter a list when expected. Point: %v. Field: %v. List Of Map: %v. Result %v", point, pointData.Field, innerOk, field)
 			}
 
 			// if the field exists but does not have enough spots
@@ -591,11 +595,11 @@ func executorInsertObject(target map[string]interface{}, path []string, value in
 
 			// if there is no list at that location
 			if _, ok := valueObj[pointData.Field]; !ok {
-				valueObj[pointData.Field] = []map[string]interface{}{}
+				valueObj[pointData.Field] = []interface{}{}
 			}
 
 			// if its not a list
-			valueList, ok := valueObj[pointData.Field].([]map[string]interface{})
+			valueList, ok := valueObj[pointData.Field].([]interface{})
 			if !ok {
 				return errors.New("Found a non-list at the insertion point")
 			}
@@ -607,11 +611,14 @@ func executorInsertObject(target map[string]interface{}, path []string, value in
 				}
 			}
 
+			field := valueList[pointData.Index]
+			mapField, ok := field.(map[string]interface{})
+
 			objValue, ok := value.(map[string]interface{})
 			if ok {
 				// make sure we update the object at that location with each value
 				for k, v := range objValue {
-					valueList[pointData.Index][k] = v
+					mapField[k] = v
 				}
 			}
 

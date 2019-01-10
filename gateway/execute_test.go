@@ -387,18 +387,18 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 	// atm the mock queryer always returns the same value so we will end up with
 	// the same User.favoritePhoto and User.photoGallery
 	assert.Equal(t, map[string]interface{}{
-		"users": []map[string]interface{}{
-			{
+		"users": []interface{}{
+			map[string]interface{}{
 				"firstName": "hello",
-				"friends": []map[string]interface{}{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "John",
 						"id":        "1",
-						"photoGallery": []map[string]interface{}{
-							{
+						"photoGallery": []interface{}{
+							map[string]interface{}{
 								"url": photoGalleryURL,
-								"followers": []map[string]interface{}{
-									{
+								"followers": []interface{}{
+									map[string]interface{}{
 										"id":        "1",
 										"firstName": followerName,
 									},
@@ -406,14 +406,14 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							},
 						},
 					},
-					{
+					map[string]interface{}{
 						"firstName": "Jacob",
 						"id":        "2",
-						"photoGallery": []map[string]interface{}{
-							{
+						"photoGallery": []interface{}{
+							map[string]interface{}{
 								"url": photoGalleryURL,
-								"followers": []map[string]interface{}{
-									{
+								"followers": []interface{}{
+									map[string]interface{}{
 										"id":        "1",
 										"firstName": followerName,
 									},
@@ -423,17 +423,17 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 				},
 			},
-			{
+			map[string]interface{}{
 				"firstName": "goodbye",
-				"friends": []map[string]interface{}{
-					{
+				"friends": []interface{}{
+					map[string]interface{}{
 						"firstName": "Jingleheymer",
 						"id":        "1",
-						"photoGallery": []map[string]interface{}{
-							{
+						"photoGallery": []interface{}{
+							map[string]interface{}{
 								"url": photoGalleryURL,
-								"followers": []map[string]interface{}{
-									{
+								"followers": []interface{}{
+									map[string]interface{}{
 										"id":        "1",
 										"firstName": followerName,
 									},
@@ -441,14 +441,14 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							},
 						},
 					},
-					{
+					map[string]interface{}{
 						"firstName": "Schmidt",
 						"id":        "2",
-						"photoGallery": []map[string]interface{}{
-							{
+						"photoGallery": []interface{}{
+							map[string]interface{}{
 								"url": photoGalleryURL,
-								"followers": []map[string]interface{}{
-									{
+								"followers": []interface{}{
+									map[string]interface{}{
 										"id":        "1",
 										"firstName": followerName,
 									},
@@ -593,9 +593,19 @@ func TestFindObject(t *testing.T) {
 				"friends": []interface{}{
 					map[string]interface{}{
 						"firstName": "2",
+						"friends": []interface{}{
+							map[string]interface{}{
+								"firstName": "Hello1",
+							},
+						},
 					},
 					map[string]interface{}{
 						"firstName": "3",
+						"friends": []interface{}{
+							map[string]interface{}{
+								"firstName": "Hello2",
+							},
+						},
 					},
 				},
 			},
@@ -604,23 +614,33 @@ func TestFindObject(t *testing.T) {
 				"friends": []interface{}{
 					map[string]interface{}{
 						"firstName": "5",
+						"friends": []interface{}{
+							map[string]interface{}{
+								"firstName": "Hello3",
+							},
+						},
 					},
 					map[string]interface{}{
 						"firstName": "6",
+						"friends": []interface{}{
+							map[string]interface{}{
+								"firstName": "Hello4",
+							},
+						},
 					},
 				},
 			},
 		},
 	}
 
-	value, err := executorExtractValue(source, []string{"hello:0", "friends:1"})
+	value, err := executorExtractValue(source, []string{"hello:0", "friends:1", "friends:0"})
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
 	assert.Equal(t, map[string]interface{}{
-		"firstName": "3",
+		"firstName": "Hello2",
 	}, value)
 }
 
@@ -774,7 +794,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 		return
 	}
 
-	list, ok := rootList.([]map[string]interface{})
+	list, ok := rootList.([]interface{})
 	if !ok {
 		t.Error("objects is not a list")
 		return
