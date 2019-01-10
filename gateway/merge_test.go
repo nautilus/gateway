@@ -69,6 +69,76 @@ func TestMergeSchema_fields(t *testing.T) {
 	assert.Equal(t, "String!", lastNameDefinition.Type.String())
 }
 
+func TestMergeSchema_assignQueryType(t *testing.T) {
+	// create the first schema
+	schema1, err := graphql.LoadSchema(`
+			type Query {
+				firstName: String!
+			}
+	`)
+
+	// make sure nothing went wrong
+	assert.Nil(t, err)
+
+	// and the second schema we are going to make
+	schema2, err := graphql.LoadSchema(`
+			type Query {
+				lastName: String!
+			}
+	`)
+	// make sure nothing went wrong
+	assert.Nil(t, err)
+
+	// merge the schemas together
+	schema, err := NewSchema([]graphql.RemoteSchema{
+		{Schema: schema1, URL: "url1"},
+		{Schema: schema2, URL: "url2"},
+	})
+	// make sure nothing went wrong
+	assert.Nil(t, err)
+
+	// look up the definition for the User type
+	definition := schema.Schema.Query
+	if definition == nil {
+		t.Error("Could not find a query type")
+	}
+}
+
+func TestMergeSchema_assignMutationType(t *testing.T) {
+	// create the first schema
+	schema1, err := graphql.LoadSchema(`
+			type Mutation {
+				firstName: String!
+			}
+	`)
+
+	// make sure nothing went wrong
+	assert.Nil(t, err)
+
+	// and the second schema we are going to make
+	schema2, err := graphql.LoadSchema(`
+			type Mutation {
+				lastName: String!
+			}
+	`)
+	// make sure nothing went wrong
+	assert.Nil(t, err)
+
+	// merge the schemas together
+	schema, err := NewSchema([]graphql.RemoteSchema{
+		{Schema: schema1, URL: "url1"},
+		{Schema: schema2, URL: "url2"},
+	})
+	// make sure nothing went wrong
+	assert.Nil(t, err)
+
+	// look up the definition for the User type
+	definition := schema.Schema.Mutation
+	if definition == nil {
+		t.Error("Could not find a Mutation type")
+	}
+}
+
 func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	// create the first schema
 	schema1, err := graphql.LoadSchema(`
