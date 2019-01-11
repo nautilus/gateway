@@ -20,7 +20,7 @@ func TestHttpHandler_postMissingQuery(t *testing.T) {
 	`)
 
 	// create gateway schema we can test against
-	gateway, err := New([]graphql.RemoteSchema{
+	gateway, err := New([]*graphql.RemoteSchema{
 		{Schema: schema, URL: "url1"},
 	})
 	if err != nil {
@@ -51,7 +51,7 @@ func TestHttpHandler_getMissingQuery(t *testing.T) {
 	`)
 
 	// create gateway schema we can test against
-	gateway, err := New([]graphql.RemoteSchema{
+	gateway, err := New([]*graphql.RemoteSchema{
 		{Schema: schema, URL: "url1"},
 	})
 	if err != nil {
@@ -80,7 +80,7 @@ func TestHttpHandler_executionError(t *testing.T) {
 			allUsers: [String!]!
 		}
 	`)
-	schemas := []graphql.RemoteSchema{{Schema: schema, URL: "url1"}}
+	schemas := []*graphql.RemoteSchema{{Schema: schema, URL: "url1"}}
 
 	// create gateway schema we can test against
 	gateway, err := New(schemas, WithPlanner(planner))

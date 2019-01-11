@@ -52,6 +52,19 @@ type NetworkQueryer struct {
 	Client *http.Client
 }
 
+func IntrospectRemoteSchema(url string) (*RemoteSchema, error) {
+	// introspect the schema at the designated url
+	schema, err := IntrospectAPI(NewNetworkQueryer(url))
+	if err != nil {
+		return nil, err
+	}
+
+	return &RemoteSchema{
+		URL:    url,
+		Schema: schema,
+	}, nil
+}
+
 // Query sends the query to the designated url and returns the response.
 func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 	// the payload

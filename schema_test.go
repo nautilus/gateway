@@ -38,14 +38,14 @@ func TestSchema_computeFieldURLs(t *testing.T) {
 	}
 
 	// the list of remote schemas
-	sources := []graphql.RemoteSchema{}
+	sources := []*graphql.RemoteSchema{}
 
 	for _, source := range schemas {
 		// turn the combo into a remote schema
 		schema, _ := graphql.LoadSchema(source.query)
 
 		// add the schema to list of sources
-		sources = append(sources, graphql.RemoteSchema{Schema: schema, URL: source.location})
+		sources = append(sources, &graphql.RemoteSchema{Schema: schema, URL: source.location})
 	}
 
 	locations := fieldURLs(sources)
@@ -90,18 +90,18 @@ func TestNew_variadicConfiguration(t *testing.T) {
 	}
 
 	// the list of remote schemas
-	sources := []graphql.RemoteSchema{}
+	sources := []*graphql.RemoteSchema{}
 
 	for _, source := range schemas {
 		// turn the combo into a remote schema
 		schema, _ := graphql.LoadSchema(source.query)
 
 		// add the schema to list of sources
-		sources = append(sources, graphql.RemoteSchema{Schema: schema, URL: source.location})
+		sources = append(sources, &graphql.RemoteSchema{Schema: schema, URL: source.location})
 	}
 
 	// create a new schema with the sources and some configuration
-	gateway, err := New([]graphql.RemoteSchema{sources[0]}, func(schema *Schema) {
+	gateway, err := New([]*graphql.RemoteSchema{sources[0]}, func(schema *Schema) {
 		schema.sources = append(schema.sources, sources[1])
 	})
 
@@ -123,7 +123,7 @@ func TestSchemaConfigurator_withPlanner(t *testing.T) {
 		`,
 	)
 
-	remoteSchema := graphql.RemoteSchema{
+	remoteSchema := &graphql.RemoteSchema{
 		Schema: schema,
 		URL:    "hello",
 	}
@@ -131,7 +131,7 @@ func TestSchemaConfigurator_withPlanner(t *testing.T) {
 	// the planner we will assign
 	planner := &MockPlanner{}
 
-	gateway, err := New([]graphql.RemoteSchema{remoteSchema}, WithPlanner(planner))
+	gateway, err := New([]*graphql.RemoteSchema{remoteSchema}, WithPlanner(planner))
 	if err != nil {
 		t.Error(err.Error())
 		return

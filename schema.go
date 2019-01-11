@@ -13,7 +13,7 @@ import (
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
 type Schema struct {
-	sources  []graphql.RemoteSchema
+	sources  []*graphql.RemoteSchema
 	schema   *ast.Schema
 	planner  QueryPlanner
 	executor Executor
@@ -36,7 +36,7 @@ func (s *Schema) Execute(query string) (map[string]interface{}, error) {
 }
 
 // New instantiates a new schema with the required stuffs.
-func New(sources []graphql.RemoteSchema, configs ...SchemaConfigurator) (*Schema, error) {
+func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Schema, error) {
 	// if there are no source schemas
 	if len(sources) == 0 {
 		return nil, errors.New("a gateway must have at least one schema")
@@ -89,7 +89,7 @@ func WithPlanner(p QueryPlanner) SchemaConfigurator {
 	}
 }
 
-func fieldURLs(schemas []graphql.RemoteSchema) FieldURLMap {
+func fieldURLs(schemas []*graphql.RemoteSchema) FieldURLMap {
 	// build the mapping of fields to urls
 	locations := FieldURLMap{}
 
