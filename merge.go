@@ -12,7 +12,9 @@ import (
 func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	// a placeholder schema we will build up using the sources
 	result := &ast.Schema{
-		Types: map[string]*ast.Definition{},
+		Types:         map[string]*ast.Definition{},
+		PossibleTypes: map[string][]*ast.Definition{},
+		Implements:    map[string][]*ast.Definition{},
 	}
 
 	// we have to visit each source schema
@@ -26,6 +28,9 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			if !exists {
 				// use the declaration that we got from the new schema
 				result.Types[name] = newDefinition
+
+				// register the type as an implementer of itself
+				result.AddPossibleType(name, newDefinition)
 
 				// we are merging the same type from 2 different schemas together
 			} else {
