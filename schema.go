@@ -30,6 +30,7 @@ func (s *Schema) Execute(query string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
+	// TODO: handle plans of more than one query
 	// execute the plan and return the results
 	return s.executor.Execute(plan[0])
 }

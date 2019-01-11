@@ -48,10 +48,7 @@ func TestSchema_computeFieldURLs(t *testing.T) {
 		sources = append(sources, graphql.RemoteSchema{Schema: schema, URL: source.location})
 	}
 
-	locations, err := fieldURLs(sources)
-	if err != nil {
-		t.Errorf("Encountered error building schema: %s", err.Error())
-	}
+	locations := fieldURLs(sources)
 
 	allUsersURL, err := locations.URLFor("Query", "allUsers")
 	assert.Nil(t, err)
@@ -121,7 +118,7 @@ func TestSchemaConfigurator_withPlanner(t *testing.T) {
 	schema, _ := graphql.LoadSchema(
 		`
 			type Query {
-				allUsers: [User!]!
+				allUsers: [String!]!
 			}
 		`,
 	)
