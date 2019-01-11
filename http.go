@@ -16,9 +16,7 @@ type QueryPOSTBody struct {
 }
 
 // GraphQLHandler returns a http.HandlerFunc that should be used as the
-// primary endpoint for the gateway API. If withGraphiql is set to true,
-// the endpoint will show a on GET requests, and respond to queries on
-// POSTs only. If withGraphiql is set to false, the endpoint will respond
+// primary endpoint for the gateway API. The endpoint will respond
 // to queries on both GET and POST requests.
 func (s *Schema) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// a place to store query params
