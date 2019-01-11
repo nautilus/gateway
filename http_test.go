@@ -37,7 +37,7 @@ func TestHttpHandler_postMissingQuery(t *testing.T) {
 	responseRecorder := httptest.NewRecorder()
 
 	// call the http hander
-	gateway.GraphQLHandler(true)(responseRecorder, request)
+	gateway.GraphQLHandler(responseRecorder, request)
 
 	// make sure we got an error code
 	assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
@@ -64,7 +64,7 @@ func TestHttpHandler_getMissingQuery(t *testing.T) {
 	responseRecorder := httptest.NewRecorder()
 
 	// call the http hander
-	gateway.GraphQLHandler(true)(responseRecorder, request)
+	gateway.GraphQLHandler(responseRecorder, request)
 
 	// make sure we got an error code
 	assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
@@ -98,7 +98,7 @@ func TestHttpHandler_executionError(t *testing.T) {
 	responseRecorder := httptest.NewRecorder()
 
 	// call the http hander
-	gateway.GraphQLHandler(true)(responseRecorder, request)
+	gateway.GraphQLHandler(responseRecorder, request)
 
 	// get the response from the handler
 	response := responseRecorder.Result()
