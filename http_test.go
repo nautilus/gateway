@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHttpHandler_missingQuery(t *testing.T) {
+func TestHttpHandler_postMissingQuery(t *testing.T) {
 	schema, err := graphql.LoadSchema(`
 		type Query {
 			allUsers: [String!]!
@@ -33,6 +33,33 @@ func TestHttpHandler_missingQuery(t *testing.T) {
 			"query": ""
 		}
 	`))
+	// a recorder so we can check what the handler responded with
+	responseRecorder := httptest.NewRecorder()
+
+	// call the http hander
+	gateway.GraphQLHandler(true)(responseRecorder, request)
+
+	// make sure we got an error code
+	assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+}
+
+func TestHttpHandler_getMissingQuery(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		type Query {
+			allUsers: [String!]!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]graphql.RemoteSchema{
+		{Schema: schema, URL: "url1"},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	// the incoming request
+	request := httptest.NewRequest("GET", "/graphql", strings.NewReader(""))
 	// a recorder so we can check what the handler responded with
 	responseRecorder := httptest.NewRecorder()
 

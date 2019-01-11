@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -24,25 +25,55 @@ func (s *Schema) GraphQLHandler(withGraphiql bool) http.HandlerFunc {
 		// a place to store query params
 		payload := QueryPOSTBody{}
 
-		// read the full request body
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			fmt.Fprintf(w, "Encountered error reading body: %s", err.Error())
-			return
+		var payloadErr error = nil
+
+		// if we got a GET request
+		if r.Method == http.MethodGet {
+			parameters := r.URL.Query()
+
+			// get the query paramter
+			if query, ok := parameters["query"]; ok {
+				payload.Query = query[0]
+
+				// include variables
+				variables, _ := parameters["variables"]
+				payload.Variables = variables[0]
+
+				// include operationName
+				operationName, _ := parameters["operationName"]
+				payload.OperationName = operationName[0]
+			} else {
+				// there was no query parameter
+				payloadErr = errors.New("must include query as parameter")
+			}
+			// or we got a POST request
+		} else if r.Method == http.MethodPost {
+			// read the full request body
+			body, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				payloadErr = fmt.Errorf("encountered error reading body: %s", err.Error())
+			}
+
+			err = json.Unmarshal(body, &payload)
+			if err != nil {
+				payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
+			}
 		}
 
-		err = json.Unmarshal(body, &payload)
-		if err != nil {
+		// if there was an error retrieving the payload
+		if payloadErr != nil {
+			// set the right header
 			w.WriteHeader(http.StatusUnprocessableEntity)
-			fmt.Fprintf(w, "Encountered error parsing body: %s", err.Error())
+
+			// send the error body back
+			fmt.Fprint(w, payloadErr.Error())
 			return
 		}
 
 		// if we dont have a query
 		if payload.Query == "" {
 			w.WriteHeader(http.StatusUnprocessableEntity)
-			fmt.Fprint(w, "Could not find a query in payload")
+			fmt.Fprint(w, "Could not find a query in request payload.")
 			return
 		}
 
@@ -61,6 +92,7 @@ func (s *Schema) GraphQLHandler(withGraphiql bool) http.HandlerFunc {
 			return
 		}
 
-		fmt.Fprintf(w, string(response))
+		// send the result to the user
+		fmt.Fprint(w, response)
 	}
 }
