@@ -44,7 +44,7 @@ func TestHttpHandler_postMissingQuery(t *testing.T) {
 }
 
 func TestHttpHandler_getMissingQuery(t *testing.T) {
-	schema, err := graphql.LoadSchema(`
+	schema, _ := graphql.LoadSchema(`
 		type Query {
 			allUsers: [String!]!
 		}

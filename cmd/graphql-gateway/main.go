@@ -21,11 +21,8 @@ func main() {
 		panic(err)
 	}
 
-	// the list of remote schemas that the gateway wraps
-	remoteSchemas := []*graphql.RemoteSchema{serviceASchema, serviceBSchema}
-
 	// create the gateway instance
-	gatewaySchema, err := gateway.New(remoteSchemas)
+	gatewaySchema, err := gateway.New([]*graphql.RemoteSchema{serviceASchema, serviceBSchema})
 	if err != nil {
 		panic(err)
 	}

@@ -68,7 +68,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 	// the first thing to do is to parse the query
 	parsedQuery, err := gqlparser.LoadQuery(schema, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encountered error parsing query: %s", err.Error())
 	}
 
 	// the list of plans that need to be executed simultaneously
