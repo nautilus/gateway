@@ -353,3 +353,21 @@ func applyFragments(source ast.SelectionSet) []*ast.Field {
 	// we're done
 	return fields
 }
+
+// MockErrPlanner always returns the provided error. Useful in testing.
+type MockErrPlanner struct {
+	Err error
+}
+
+func (p *MockErrPlanner) Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error) {
+	return nil, p.Err
+}
+
+// MockPlanner always returns the provided list of plans. Useful in testing.
+type MockPlanner struct {
+	Plans []*QueryPlan
+}
+
+func (p *MockPlanner) Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error) {
+	return p.Plans, nil
+}
