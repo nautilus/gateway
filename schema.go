@@ -48,6 +48,9 @@ func New(sources []graphql.RemoteSchema, configs ...SchemaConfigurator) (*Schema
 		sourceSchemas = append(sourceSchemas, source.Schema)
 	}
 
+	// find the field URLs before we merge schemas
+	urls := fieldURLs(sources)
+
 	// merge them into one
 	schema, err := mergeSchemas(sourceSchemas)
 	if err != nil {
@@ -63,7 +66,7 @@ func New(sources []graphql.RemoteSchema, configs ...SchemaConfigurator) (*Schema
 		executor: &ParallelExecutor{},
 
 		// internal fields
-		fieldURLs: fieldURLs(sources),
+		fieldURLs: urls,
 	}
 
 	// pass the gateway through any configurators

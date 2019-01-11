@@ -33,12 +33,14 @@ func (s *Schema) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			payload.Query = query[0]
 
 			// include variables
-			variables, _ := parameters["variables"]
-			payload.Variables = variables[0]
+			if variables, ok := parameters["variables"]; ok {
+				payload.Variables = variables[0]
+			}
 
 			// include operationName
-			operationName, _ := parameters["operationName"]
-			payload.OperationName = operationName[0]
+			if operationName, ok := parameters["operationName"]; ok {
+				payload.OperationName = operationName[0]
+			}
 		} else {
 			// there was no query parameter
 			payloadErr = errors.New("must include query as parameter")
@@ -90,5 +92,5 @@ func (s *Schema) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// send the result to the user
-	fmt.Fprint(w, response)
+	fmt.Fprint(w, string(response))
 }
