@@ -46,22 +46,6 @@ type Planner struct {
 	QueryerFactory func(url string) graphql.Queryer
 }
 
-// LocalLocation is a string that identifies a query that needs to be executed against
-// the gateway itself
-const LocalLocation = "__LOCAL__LOCATION__"
-
-// GetQueryer returns the queryer that should be used to resolve the plan
-func (p *Planner) GetQueryer(url string) graphql.Queryer {
-	// if there is a queryer factory defined
-	if p.QueryerFactory != nil {
-		// use the factory
-		return p.QueryerFactory(url)
-	}
-
-	// otherwise return the network queryer
-	return graphql.NewNetworkQueryer(url)
-}
-
 // MinQueriesPlanner does the most basic level of query planning
 type MinQueriesPlanner struct {
 	Planner
@@ -74,6 +58,8 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println(locations)
 
 	// the list of plans that need to be executed simultaneously
 	plans := []*QueryPlan{}
@@ -98,6 +84,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		}
 
 		currentLocation := possibleLocations[0]
+		fmt.Println("First step", currentLocation, fields[0].Name, possibleLocations)
 
 		// a channel to register new steps
 		stepCh := make(chan *newQueryPlanStepPayload, 10)
@@ -165,7 +152,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 							insertionPoint = payload.InsertionPoint[:len(payload.InsertionPoint)-1]
 						}
 
-						// we are going to start walking down the operations selectedField set and let
+						// we are going to start walking down the operations selection set and let
 						// the steps of the walk add any necessary selectedFields
 						newSelection, err := p.extractSelection(&extractSelectionConfig{
 							stepCh:         stepCh,
@@ -264,7 +251,9 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 	currentType := coreFieldType(config.field).Name()
 
 	log.Debug("-----")
-	log.Debug("Looking at ", config.field.Name)
+	log.Debug("Looking at: ", config.field.Name)
+	log.Debug("Parent location: ", config.parentLocation)
+	log.Debug("Current location: ", currentLocation)
 
 	// the insertion point for this field is the previous one with the new field name
 	insertionPoint := make([]string, len(config.insertionPoint))
@@ -272,7 +261,6 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 	insertionPoint = append(insertionPoint, config.field.Name)
 
 	log.Debug(fmt.Sprintf("Insertion point: %v", insertionPoint))
-
 	// if the location of this targetField is the same as its parent
 	if config.parentLocation == currentLocation {
 		log.Debug("same service")
@@ -322,7 +310,7 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 
 	// since we're adding another step we need to track at least one more execution
 	config.stepWg.Add(1)
-	log.Debug(fmt.Sprintf("Adding the new step to resolve %s.%s\n", config.parentType, config.field.Name))
+	log.Debug(fmt.Sprintf("Adding the new step to resolve %s.%s @%v\n", config.parentType, config.field.Name, currentLocation))
 
 	// add the new step
 	config.stepCh <- &newQueryPlanStepPayload{
@@ -356,6 +344,18 @@ func applyFragments(source ast.SelectionSet) []*ast.Field {
 
 	// we're done
 	return fields
+}
+
+// GetQueryer returns the queryer that should be used to resolve the plan
+func (p *Planner) GetQueryer(url string) graphql.Queryer {
+	// if there is a queryer factory defined
+	if p.QueryerFactory != nil {
+		// use the factory
+		return p.QueryerFactory(url)
+	}
+
+	// otherwise return the network queryer
+	return graphql.NewNetworkQueryer(url)
 }
 
 // MockErrPlanner always returns the provided error. Useful in testing.

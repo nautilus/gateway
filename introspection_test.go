@@ -83,6 +83,8 @@ func TestSchemaIntrospection(t *testing.T) {
 		return
 	}
 
+	panic("")
+
 	// make sure the 2 matched
 	assert.Equal(t, expectedMarshaled, responseMarshaled)
 }

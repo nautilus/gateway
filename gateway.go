@@ -23,9 +23,6 @@ type Gateway struct {
 	fieldURLs FieldURLMap
 }
 
-// internalSchema is a graphql schema that exists at the gateway level and is merged with the
-// other schemas that the gateway wraps.
-
 // Execute takes a query string, executes it, and returns the response
 func (g *Gateway) Execute(query string) (map[string]interface{}, error) {
 	// generate a query plan for the query
@@ -54,7 +51,9 @@ func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Gatew
 
 	// find the field URLs before we merge schemas. We need to make sure to include
 	// the fields defined by the gateway's internal schema
-	urls := fieldURLs(sources, true).Concat(fieldURLs(sources, false))
+	urls := fieldURLs(sources, true).Concat(
+		fieldURLs([]*graphql.RemoteSchema{internalSchema}, false),
+	)
 	// merge them into one
 	schema, err := mergeSchemas(sourceSchemas)
 	if err != nil {
@@ -62,7 +61,7 @@ func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Gatew
 		return nil, err
 	}
 
-	// return the resulting schema
+	// return the resulting gateway
 	gateway := &Gateway{
 		sources:  sources,
 		schema:   schema,
@@ -104,8 +103,18 @@ func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap 
 			if !strings.HasPrefix(typeDef.Name, "__") || !stripInternal {
 				// each field of each type can be found here
 				for _, fieldDef := range typeDef.Fields {
-					// register the location for the field
-					locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
+					// if the field is not an introspection field
+					if !(name == "Query" && strings.HasPrefix(fieldDef.Name, "__")) {
+						locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
+					} else {
+						// its an introspection name
+						if !stripInternal {
+							// register the location for the field
+							locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
+						}
+					}
+					fmt.Println("Recording", name, fieldDef.Name, remoteSchema.URL)
+
 				}
 			}
 		}

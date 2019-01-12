@@ -66,7 +66,13 @@ func TestSchema_computeFieldURLs(t *testing.T) {
 	// make sure we can look up the url for internal
 	_, ok := locations["__Schema.types"]
 	if !ok {
-		t.Error("Could not find internal type")
+		t.Error("Could not find internal type __Schema.types")
+		return
+	}
+
+	_, ok = locations["Query.__schema"]
+	if !ok {
+		t.Error("Could not find internal field Query.__schema")
 		return
 	}
 }
@@ -165,6 +171,11 @@ func TestFieldURLs_ignoreIntrospection(t *testing.T) {
 		if strings.HasPrefix(key, "__") {
 			t.Errorf("Found type starting with __: %s", key)
 		}
+	}
+
+	if _, ok := locations["Query.__schema"]; ok {
+		t.Error("Encountered introspection value Query.__schema")
+		return
 	}
 }
 
