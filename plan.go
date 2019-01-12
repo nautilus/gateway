@@ -59,8 +59,6 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		return nil, err
 	}
 
-	fmt.Println(locations)
-
 	// the list of plans that need to be executed simultaneously
 	plans := []*QueryPlan{}
 
@@ -84,7 +82,6 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		}
 
 		currentLocation := possibleLocations[0]
-		fmt.Println("First step", currentLocation, fields[0].Name, possibleLocations)
 
 		// a channel to register new steps
 		stepCh := make(chan *newQueryPlanStepPayload, 10)

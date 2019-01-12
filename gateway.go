@@ -113,7 +113,6 @@ func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap 
 							locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
 						}
 					}
-					fmt.Println("Recording", name, fieldDef.Name, remoteSchema.URL)
 
 				}
 			}
