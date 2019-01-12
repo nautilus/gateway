@@ -43,23 +43,31 @@ func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Gatew
 		return nil, errors.New("a gateway must have at least one schema")
 	}
 
-	// grab the schemas to compute the sources
-	sourceSchemas := []*ast.Schema{}
-	for _, source := range sources {
-		sourceSchemas = append(sourceSchemas, source.Schema)
-	}
-
 	// find the field URLs before we merge schemas. We need to make sure to include
 	// the fields defined by the gateway's internal schema
 	urls := fieldURLs(sources, true).Concat(
 		fieldURLs([]*graphql.RemoteSchema{internalSchema}, false),
 	)
+
+	// grab the schemas to compute the sources
+	sourceSchemas := []*ast.Schema{}
+	for _, source := range sources {
+		sourceSchemas = append(sourceSchemas, source.Schema)
+	}
+	// add the internal schema
+	sourceSchemas = append(sourceSchemas, internalSchema.Schema)
+
 	// merge them into one
 	schema, err := mergeSchemas(sourceSchemas)
 	if err != nil {
 		// if something went wrong during the merge, return the result
 		return nil, err
 	}
+
+	for _, field := range schema.Query.Fields {
+		fmt.Println(field.Name)
+	}
+	// fmt.Println(schema.Query.Fields)
 
 	// return the resulting gateway
 	gateway := &Gateway{
