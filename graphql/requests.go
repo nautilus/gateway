@@ -23,6 +23,7 @@ type RemoteSchema struct {
 
 type QueryInput struct {
 	Query         string
+	QueryDocument *ast.OperationDefinition
 	OperationName string
 	Variables     map[string]interface{}
 }

@@ -114,7 +114,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 				select {
 				case payload := <-newSteps:
 					step := &QueryPlanStep{
-						Queryer:        p.GetQueryer(payload.ServiceName),
+						Queryer:        p.GetQueryer(payload.ServiceName, schema),
 						ParentType:     payload.ParentType,
 						SelectionSet:   payload.SelectionSet,
 						InsertionPoint: payload.InsertionPoint,
@@ -344,14 +344,19 @@ func applyFragments(source ast.SelectionSet) []*ast.Field {
 }
 
 // GetQueryer returns the queryer that should be used to resolve the plan
-func (p *Planner) GetQueryer(url string) graphql.Queryer {
+func (p *Planner) GetQueryer(url string, schema *ast.Schema) graphql.Queryer {
+	// if we are looking to query the local schema
+	if url == internalSchemaLocation {
+		return &SchemaQueryer{Schema: schema}
+	}
+
 	// if there is a queryer factory defined
 	if p.QueryerFactory != nil {
 		// use the factory
 		return p.QueryerFactory(url)
 	}
 
-	// otherwise return the network queryer
+	// otherwise return a network queryer
 	return graphql.NewNetworkQueryer(url)
 }
 

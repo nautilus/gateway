@@ -229,7 +229,10 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 	}
 	// execute the query
 	queryResult := map[string]interface{}{}
-	err = step.Queryer.Query(&graphql.QueryInput{Query: queryStr}, &queryResult)
+	err = step.Queryer.Query(&graphql.QueryInput{
+		Query:         queryStr,
+		QueryDocument: query,
+	}, &queryResult)
 	if err != nil {
 		errCh <- err
 		return
