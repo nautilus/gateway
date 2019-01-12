@@ -3,16 +3,17 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/vektah/gqlparser/ast"
 
 	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
-// Schema is the top level entry for interacting with a gateway. It is responsible for merging a list of
+// Gateway is the top level entry for interacting with a gateway. It is responsible for merging a list of
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
-type Schema struct {
+type Gateway struct {
 	sources  []*graphql.RemoteSchema
 	schema   *ast.Schema
 	planner  QueryPlanner
@@ -22,21 +23,24 @@ type Schema struct {
 	fieldURLs FieldURLMap
 }
 
+// internalSchema is a graphql schema that exists at the gateway level and is merged with the
+// other schemas that the gateway wraps.
+
 // Execute takes a query string, executes it, and returns the response
-func (s *Schema) Execute(query string) (map[string]interface{}, error) {
+func (g *Gateway) Execute(query string) (map[string]interface{}, error) {
 	// generate a query plan for the query
-	plan, err := s.planner.Plan(query, s.schema, s.fieldURLs)
+	plan, err := g.planner.Plan(query, g.schema, g.fieldURLs)
 	if err != nil {
 		return nil, err
 	}
 
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	return s.executor.Execute(plan[0])
+	return g.executor.Execute(plan[0])
 }
 
 // New instantiates a new schema with the required stuffs.
-func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Schema, error) {
+func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Gateway, error) {
 	// if there are no source schemas
 	if len(sources) == 0 {
 		return nil, errors.New("a gateway must have at least one schema")
@@ -48,9 +52,9 @@ func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Schem
 		sourceSchemas = append(sourceSchemas, source.Schema)
 	}
 
-	// find the field URLs before we merge schemas
-	urls := fieldURLs(sources)
-
+	// find the field URLs before we merge schemas. We need to make sure to include
+	// the fields defined by the gateway's internal schema
+	urls := fieldURLs(sources, true).Concat(fieldURLs(sources, false))
 	// merge them into one
 	schema, err := mergeSchemas(sourceSchemas)
 	if err != nil {
@@ -59,7 +63,7 @@ func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Schem
 	}
 
 	// return the resulting schema
-	gateway := &Schema{
+	gateway := &Gateway{
 		sources:  sources,
 		schema:   schema,
 		planner:  &MinQueriesPlanner{},
@@ -80,16 +84,16 @@ func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Schem
 
 // SchemaConfigurator is a function to be passed to New that configures the
 // resulting schema
-type SchemaConfigurator func(*Schema)
+type SchemaConfigurator func(*Gateway)
 
 // WithPlanner returns a SchemaConfigurator that sets the planner of the schema
 func WithPlanner(p QueryPlanner) SchemaConfigurator {
-	return func(s *Schema) {
-		s.planner = p
+	return func(g *Gateway) {
+		g.planner = p
 	}
 }
 
-func fieldURLs(schemas []*graphql.RemoteSchema) FieldURLMap {
+func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap {
 	// build the mapping of fields to urls
 	locations := FieldURLMap{}
 
@@ -97,10 +101,12 @@ func fieldURLs(schemas []*graphql.RemoteSchema) FieldURLMap {
 	for _, remoteSchema := range schemas {
 		// each type defined by the schema can be found at remoteSchema.URL
 		for name, typeDef := range remoteSchema.Schema.Types {
-			// each field of each type can be found here
-			for _, fieldDef := range typeDef.Fields {
-				// register the location for the field
-				locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
+			if !strings.HasPrefix(typeDef.Name, "__") || !stripInternal {
+				// each field of each type can be found here
+				for _, fieldDef := range typeDef.Fields {
+					// register the location for the field
+					locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
+				}
 			}
 		}
 	}
@@ -127,6 +133,24 @@ func (m FieldURLMap) URLFor(parent string, field string) ([]string, error) {
 
 	// return the value to the caller
 	return value, nil
+}
+
+// Concat returns a new field map url whose entries are the union of both maps
+func (m FieldURLMap) Concat(other FieldURLMap) FieldURLMap {
+	for key, value := range other {
+		// if we have seen the location before
+		if prevValue, ok := m[key]; ok {
+			// add the values to the internal registery
+			m[key] = append(prevValue, value...)
+
+			// we havent' seen the key before
+		} else {
+			m[key] = value
+		}
+	}
+
+	// return the
+	return m
 }
 
 // RegisterURL adds a new location to the list of possible places to find the value for parent.field

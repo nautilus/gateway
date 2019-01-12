@@ -46,6 +46,10 @@ type Planner struct {
 	QueryerFactory func(url string) graphql.Queryer
 }
 
+// LocalLocation is a string that identifies a query that needs to be executed against
+// the gateway itself
+const LocalLocation = "__LOCAL__LOCATION__"
+
 // GetQueryer returns the queryer that should be used to resolve the plan
 func (p *Planner) GetQueryer(url string) graphql.Queryer {
 	// if there is a queryer factory defined
@@ -87,7 +91,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// the list of fields we care about
 		fields := applyFragments(operation.SelectionSet)
 
-		// assume that the root location for this whole operation is the uniform
+		// start with one of the fields
 		possibleLocations, err := locations.URLFor("Query", fields[0].Name)
 		if err != nil {
 			return nil, err

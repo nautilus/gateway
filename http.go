@@ -18,7 +18,7 @@ type QueryPOSTBody struct {
 // GraphQLHandler returns a http.HandlerFunc that should be used as the
 // primary endpoint for the gateway API. The endpoint will respond
 // to queries on both GET and POST requests.
-func (s *Schema) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
+func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// a place to store query params
 	payload := QueryPOSTBody{}
 
@@ -77,7 +77,7 @@ func (s *Schema) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// fire the query
-	result, err := s.Execute(payload.Query)
+	result, err := g.Execute(payload.Query)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "Encountered error during execution: %s", err.Error())
