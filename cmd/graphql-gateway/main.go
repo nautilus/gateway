@@ -22,13 +22,13 @@ func main() {
 	}
 
 	// create the gateway instance
-	gatewaySchema, err := gateway.New([]*graphql.RemoteSchema{serviceASchema, serviceBSchema})
+	gateway, err := gateway.New([]*graphql.RemoteSchema{serviceASchema, serviceBSchema})
 	if err != nil {
 		panic(err)
 	}
 
 	// add the graphql endpoints
-	http.HandleFunc("/graphql", gatewaySchema.GraphQLHandler)
+	http.HandleFunc("/graphql", gateway.GraphQLHandler)
 
 	// log the user
 	fmt.Println("Starting server")
