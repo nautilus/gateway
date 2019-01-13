@@ -80,15 +80,16 @@ func (q *SchemaQueryer) introspectSchema(schema *introspection.Schema, selection
 
 	for _, selection := range selectionSet {
 		if field, ok := selection.(*ast.Field); ok {
-			if field.Alias == "types" {
+			switch field.Alias {
+			case "types":
 				result[field.Alias] = q.introspectTypeSlice(schema.Types(), field.SelectionSet)
-			} else if field.Alias == "queryType" {
+			case "queryType":
 				result[field.Alias] = q.introspectType(schema.QueryType(), field.SelectionSet)
-			} else if field.Alias == "mutationType" {
+			case "mutationType":
 				result[field.Alias] = q.introspectType(schema.MutationType(), field.SelectionSet)
-			} else if field.Alias == "subscriptionType" {
+			case "subscriptionType":
 				result[field.Alias] = q.introspectType(schema.SubscriptionType(), field.SelectionSet)
-			} else if field.Alias == "directives" {
+			case "directives":
 				result[field.Alias] = q.introspectDirectiveSlice(schema.Directives(), field.SelectionSet)
 			}
 		}
