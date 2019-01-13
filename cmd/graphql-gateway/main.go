@@ -10,6 +10,7 @@ import (
 
 func enableCors(fn http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		// set the necessary CORS headers
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
@@ -22,8 +23,6 @@ func enableCors(fn http.HandlerFunc) http.HandlerFunc {
 
 		// invoke the handler
 		fn(w, req)
-
-		// set the cors headers
 	}
 }
 
