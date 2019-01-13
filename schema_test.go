@@ -13,7 +13,6 @@ func TestSchemaIntrospection(t *testing.T) {
 	schema, _ := graphql.LoadSchema(`
 		type User {
 			firstName: String!
-			lastName: String!
 		}
 
 		type Query {
@@ -54,7 +53,7 @@ func TestSchemaIntrospection(t *testing.T) {
 	}
 
 	// there are a few things we need to look for:
-	// 		Schema.queryType.name, Schema.mutationType, Schema.subscriptionType, Query.allUsers, User.firstName, and User.lastName
+	// 		Schema.queryType.name, Schema.mutationType, Schema.subscriptionType, Query.allUsers, and User.firstName
 	assert.Equal(t, "Query", result.Schema.QueryType.Name)
 	assert.Nil(t, result.Schema.MutationType)
 	assert.Nil(t, result.Schema.SubscriptionType)
