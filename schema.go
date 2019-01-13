@@ -149,7 +149,6 @@ func (q *SchemaQueryer) introspectField(fieldDef introspection.Field, selectionS
 			case "name":
 				result[field.Alias] = fieldDef.Name
 			case "description":
-				fmt.Println("Field description", "->", fieldDef)
 				result[field.Alias] = fieldDef.Description
 			case "args":
 				result[field.Alias] = q.introspectInputValueSlice(fieldDef.Args, field.SelectionSet)

@@ -315,7 +315,7 @@ type IntrospectionQueryFullType struct {
 	Kind          string                             `json:"kind"`
 	Name          string                             `json:"name"`
 	Description   string                             `json:"description"`
-	InputFields   []IntrospectionInputValue          `json:"inputField"`
+	InputFields   []IntrospectionInputValue          `json:"inputFields"`
 	Interfaces    []IntrospectionTypeRef             `json:"interfaces"`
 	PossibleTypes []IntrospectionTypeRef             `json:"possibleTypes"`
 	Fields        []IntrospectionQueryFullTypeField  `json:"fields"`

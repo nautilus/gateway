@@ -18,6 +18,16 @@ func schemaTestLoadQuery(query string, target interface{}) error {
 			"description"
 			allUsers: [User]
 		}
+
+		enum EnumValue {
+			"foo description"
+			FOO
+			BAR
+		}
+
+		input FooInput {
+			foo: String
+		}
 	`)
 
 	// create gateway schema we can test against
@@ -70,11 +80,18 @@ func TestSchemaIntrospection(t *testing.T) {
 	// definitions for the types we want to investigate
 	var queryType graphql.IntrospectionQueryFullType
 	var userType graphql.IntrospectionQueryFullType
+	var enumType graphql.IntrospectionQueryFullType
+	var fooInput graphql.IntrospectionQueryFullType
+
 	for _, schemaType := range result.Schema.Types {
 		if schemaType.Name == "Query" {
 			queryType = schemaType
 		} else if schemaType.Name == "User" {
 			userType = schemaType
+		} else if schemaType.Name == "EnumValue" {
+			enumType = schemaType
+		} else if schemaType.Name == "FooInput" {
+			fooInput = schemaType
 		}
 	}
 
@@ -112,8 +129,33 @@ func TestSchemaIntrospection(t *testing.T) {
 			Name: "String",
 		},
 	}, firstNameField.Type)
-}
 
-func TestSchemaIntrospection_typeNotFound(*testing.T) {
+	// make sure that the enums have the right values
+	assert.Equal(t, "EnumValue", enumType.Name)
+	assert.Equal(t, []graphql.IntrospectionQueryEnumDefinition{
+		{
+			Name:              "FOO",
+			Description:       "foo description",
+			IsDeprecated:      false,
+			DeprecationReason: "",
+		},
+		{
+			Name:              "BAR",
+			Description:       "",
+			IsDeprecated:      false,
+			DeprecationReason: "",
+		},
+	}, enumType.EnumValues)
 
+	// make sure the foo input matches exepectations
+	assert.Equal(t, "FooInput", fooInput.Name)
+	assert.Equal(t, []graphql.IntrospectionInputValue{
+		{
+			Name: "foo",
+			Type: graphql.IntrospectionTypeRef{
+				Kind: "SCALAR",
+				Name: "String",
+			},
+		},
+	}, fooInput.InputFields)
 }
