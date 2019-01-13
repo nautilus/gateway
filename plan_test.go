@@ -508,10 +508,6 @@ func TestApplyFragments_mergesFragments(t *testing.T) {
 		}
 		return
 	}
-
-	for _, selection := range selectedFields(friendsSelection.SelectionSet) {
-		fmt.Println(selection.Name)
-	}
 }
 
 func TestApplyFragments_skipAndIncludeDirectives(t *testing.T) {

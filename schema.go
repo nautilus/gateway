@@ -27,7 +27,6 @@ type SchemaQueryer struct {
 func (q *SchemaQueryer) Query(input *graphql.QueryInput, receiver interface{}) error {
 	// a place to store the result
 	result := map[string]interface{}{}
-	fmt.Println("executing locally")
 
 	// wrap the schema in something capable of introspection
 	introspectionSchema := introspection.WrapSchema(q.Schema)

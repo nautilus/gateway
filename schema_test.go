@@ -1,10 +1,11 @@
 package gateway
 
 import (
-	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,53 +37,72 @@ func TestSchemaIntrospection(t *testing.T) {
 		return
 	}
 
-	// a place to hold the marshaled version
-	responseMarshaled, err := json.Marshal(response)
-	if err != nil {
-		t.Error(err.Error())
-		return
-	}
+	// a place to hold the response of the query
+	result := &graphql.IntrospectionQueryResult{}
 
-	expectedMarshaled, err := json.Marshal(&graphql.IntrospectionQueryResult{
-		Schema: &graphql.IntrospectionQuerySchema{
-			QueryType: graphql.IntrospectionQueryRootType{
-				Name: "Query",
-			},
-			Types: []graphql.IntrospectionQueryFullType{
-				{
-					Name: "Query",
-					Fields: []graphql.IntrospectionQueryFullTypeField{
-						{
-							Name: "allUsers",
-							Type: graphql.IntrospectionTypeRef{
-								Kind: "LIST",
-								OfType: &graphql.IntrospectionTypeRef{
-									Kind: "OBJECT",
-									Name: "User",
-								},
-							},
-						}},
-				},
-				{
-					Name: "User",
-					Fields: []graphql.IntrospectionQueryFullTypeField{
-						{
-							Name: "firstName",
-							Type: graphql.IntrospectionTypeRef{
-								Kind: "SCALAR",
-								Name: "String",
-							},
-						},
-					},
-				},
-			},
-		},
+	// massage the map into the structure
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName: "json",
+		Result:  result,
 	})
 	if err != nil {
 		t.Error(err.Error())
-		return
+	}
+	err = decoder.Decode(response)
+	if err != nil {
+		t.Error(err.Error())
 	}
 
-	// make sure the 2 matched
-	assert.Equal(t, string(expectedMarshaled), string(responseMarshaled))
+	// there are a few things we need to look for:
+	// 		Schema.queryType.name, Schema.mutationType, Schema.subscriptionType, Query.allUsers, User.firstName, and User.lastName
+	assert.Equal(t, "Query", result.Schema.QueryType.Name)
+	assert.Nil(t, result.Schema.MutationType)
+	assert.Nil(t, result.Schema.SubscriptionType)
+
+	// definitions for the types we want to investigate
+	var queryType graphql.IntrospectionQueryFullType
+	var userType graphql.IntrospectionQueryFullType
+	for _, schemaType := range result.Schema.Types {
+		fmt.Println(schemaType.Name)
+		if schemaType.Name == "Query" {
+			queryType = schemaType
+			fmt.Println("assigning query type", schemaType.Name)
+		} else if schemaType.Name == "User" {
+			userType = schemaType
+		}
+	}
+
+	// make sure that Query.allUsers looks as expected
+	var allUsersField graphql.IntrospectionQueryFullTypeField
+	for _, field := range queryType.Fields {
+		if field.Name == "allUsers" {
+			allUsersField = field
+		}
+	}
+
+	// make sure the type definition for the field matches expectation
+	assert.Equal(t, graphql.IntrospectionTypeRef{
+		Kind: "LIST",
+		OfType: &graphql.IntrospectionTypeRef{
+			Kind: "OBJECT",
+			Name: "User",
+		},
+	}, allUsersField.Type)
+
+	// make sure that Query.allUsers looks as expected
+	var firstNameField graphql.IntrospectionQueryFullTypeField
+	for _, field := range userType.Fields {
+		if field.Name == "firstName" {
+			firstNameField = field
+		}
+	}
+
+	// make sure the type definition for the field matches expectation
+	assert.Equal(t, graphql.IntrospectionTypeRef{
+		Kind: "NON_NULL",
+		OfType: &graphql.IntrospectionTypeRef{
+			Kind: "SCALAR",
+			Name: "String",
+		},
+	}, firstNameField.Type)
 }
