@@ -15,6 +15,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 		Types:         map[string]*ast.Definition{},
 		PossibleTypes: map[string][]*ast.Definition{},
 		Implements:    map[string][]*ast.Definition{},
+		Directives:    map[string]*ast.DirectiveDefinition{},
 	}
 
 	// we have to visit each source schema
@@ -54,6 +55,11 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				// copy over the new fields for this type definition
 				previousDefinition.Fields = previousFields
 			}
+		}
+
+		// for each directive
+		for directiveName, definition := range schema.Directives {
+			result.Directives[directiveName] = definition
 		}
 	}
 

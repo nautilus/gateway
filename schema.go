@@ -90,6 +90,7 @@ func (q *SchemaQueryer) introspectSchema(schema *introspection.Schema, selection
 			case "subscriptionType":
 				result[field.Alias] = q.introspectType(schema.SubscriptionType(), field.SelectionSet)
 			case "directives":
+				fmt.Println("looking for directives")
 				result[field.Alias] = q.introspectDirectiveSlice(schema.Directives(), field.SelectionSet)
 			}
 		}

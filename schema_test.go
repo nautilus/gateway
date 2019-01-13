@@ -28,6 +28,8 @@ func schemaTestLoadQuery(query string, target interface{}) error {
 		input FooInput {
 			foo: String
 		}
+
+		directive @A on FIELD_DEFINITION
 	`)
 
 	// create gateway schema we can test against
@@ -158,4 +160,13 @@ func TestSchemaIntrospection(t *testing.T) {
 			},
 		},
 	}, fooInput.InputFields)
+
+	// grab the directive we've defined
+	var directive graphql.IntrospectionQueryDirective
+	for _, definition := range result.Schema.Directives {
+		if definition.Name == "A" {
+			directive = definition
+		}
+	}
+	assert.Equal(t, "A", directive.Name)
 }
