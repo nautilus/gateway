@@ -943,13 +943,15 @@ func TestExecutorGetPointData(t *testing.T) {
 	}
 
 	for _, row := range table {
-		pointData, err := executorGetPointData(row.point)
-		if err != nil {
-			t.Error(err.Error())
-			return
-		}
+		t.Run(row.point, func(t *testing.T) {
+			pointData, err := executorGetPointData(row.point)
+			if err != nil {
+				t.Error(err.Error())
+				return
+			}
 
-		assert.Equal(t, row.data, pointData)
+			assert.Equal(t, row.data, pointData)
+		})
 	}
 }
 

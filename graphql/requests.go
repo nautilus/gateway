@@ -23,6 +23,7 @@ type RemoteSchema struct {
 
 type QueryInput struct {
 	Query         string
+	QueryDocument *ast.OperationDefinition
 	OperationName string
 	Variables     map[string]interface{}
 }
@@ -50,6 +51,19 @@ func (q *MockQueryer) Query(input *QueryInput, receiver interface{}) error {
 type NetworkQueryer struct {
 	URL    string
 	Client *http.Client
+}
+
+func IntrospectRemoteSchema(url string) (*RemoteSchema, error) {
+	// introspect the schema at the designated url
+	schema, err := IntrospectAPI(NewNetworkQueryer(url))
+	if err != nil {
+		return nil, err
+	}
+
+	return &RemoteSchema{
+		URL:    url,
+		Schema: schema,
+	}, nil
 }
 
 // Query sends the query to the designated url and returns the response.

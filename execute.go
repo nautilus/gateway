@@ -159,7 +159,7 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 
 			for _, point := range path {
 				// look for the selection with that name
-				for _, selection := range applyFragments(target) {
+				for _, selection := range selectedFields(target) {
 					// if we still have to walk down the selection but we found the right branch
 					if selection.Name == point {
 						target = selection.SelectionSet
@@ -177,7 +177,7 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 
 			// if the target does not currently ask for id we need to add it
 			addID := true
-			for _, selection := range applyFragments(target) {
+			for _, selection := range selectedFields(target) {
 				if selection.Name == "id" {
 					addID = false
 					break
@@ -229,7 +229,10 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 	}
 	// execute the query
 	queryResult := map[string]interface{}{}
-	err = step.Queryer.Query(&graphql.QueryInput{Query: queryStr}, &queryResult)
+	err = step.Queryer.Query(&graphql.QueryInput{
+		Query:         queryStr,
+		QueryDocument: query,
+	}, &queryResult)
 	if err != nil {
 		errCh <- err
 		return
@@ -326,7 +329,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 			foundSelection := false
 
 			// there should be a field in the root selection set that has the target point
-			for _, selection := range applyFragments(selectionSetRoot) {
+			for _, selection := range selectedFields(selectionSetRoot) {
 				// if the selection has the right name we need to add it to the list
 				if selection.Alias == point || selection.Name == point {
 					// log.Debug("Found Selection for: ", point)

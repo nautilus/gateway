@@ -4,138 +4,221 @@ import (
 	"testing"
 
 	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/assert"
 )
 
-type schemaTableRow struct {
-	location string
-	query    string
-}
+func schemaTestLoadQuery(query string, target interface{}) error {
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			firstName: String!
+		}
 
-func TestSchema_computeFieldURLs(t *testing.T) {
-	schemas := []schemaTableRow{
-		{
-			"url1",
-			`
-				type Query {
-					allUsers: [User!]!
-				}
+		type Query {
+			"description"
+			allUsers: [User]
+		}
 
-				type User {
-					firstName: String!
-					lastName: String!
-				}
-			`,
-		},
-		{
-			"url2",
-			`
-				type User {
-					lastName: String!
-				}
-			`,
-		},
-	}
+		enum EnumValue {
+			"foo description"
+			FOO
+			BAR
+		}
 
-	// the list of remote schemas
-	sources := []graphql.RemoteSchema{}
+		input FooInput {
+			foo: String
+		}
 
-	for _, source := range schemas {
-		// turn the combo into a remote schema
-		schema, _ := graphql.LoadSchema(source.query)
+		directive @A on FIELD_DEFINITION
+	`)
 
-		// add the schema to list of sources
-		sources = append(sources, graphql.RemoteSchema{Schema: schema, URL: source.location})
-	}
-
-	locations := fieldURLs(sources)
-
-	allUsersURL, err := locations.URLFor("Query", "allUsers")
-	assert.Nil(t, err)
-	assert.Equal(t, []string{"url1"}, allUsersURL)
-
-	lastNameURL, err := locations.URLFor("User", "lastName")
-	assert.Nil(t, err)
-	assert.Equal(t, []string{"url1", "url2"}, lastNameURL)
-
-	firstNameURL, err := locations.URLFor("User", "firstName")
-	assert.Nil(t, err)
-	assert.Equal(t, []string{"url1"}, firstNameURL)
-}
-
-func TestNew_variadicConfiguration(t *testing.T) {
-
-	schemas := []schemaTableRow{
-		{
-			"url1",
-			`
-				type Query {
-					allUsers: [User!]!
-				}
-
-				type User {
-					firstName: String!
-					lastName: String!
-				}
-			`,
-		},
-		{
-			"url2",
-			`
-				type User {
-					lastName: String!
-				}
-			`,
-		},
-	}
-
-	// the list of remote schemas
-	sources := []graphql.RemoteSchema{}
-
-	for _, source := range schemas {
-		// turn the combo into a remote schema
-		schema, _ := graphql.LoadSchema(source.query)
-
-		// add the schema to list of sources
-		sources = append(sources, graphql.RemoteSchema{Schema: schema, URL: source.location})
-	}
-
-	// create a new schema with the sources and some configuration
-	gateway, err := New([]graphql.RemoteSchema{sources[0]}, func(schema *Schema) {
-		schema.sources = append(schema.sources, sources[1])
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url1"},
 	})
-
 	if err != nil {
-		t.Error(err.Error())
-		return
+		return err
 	}
 
-	// make sure that the schema has both sources
-	assert.Len(t, gateway.sources, 2)
+	// executing the introspection query should return a full description of the schema
+	response, err := gateway.Execute(query)
+	if err != nil {
+		return err
+	}
+
+	// massage the map into the structure
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName: "json",
+		Result:  target,
+	})
+	if err != nil {
+		return err
+	}
+	err = decoder.Decode(response)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func TestSchemaConfigurator_withPlanner(t *testing.T) {
-	schema, _ := graphql.LoadSchema(
-		`
-			type Query {
-				allUsers: [String!]!
-			}
-		`,
-	)
+func TestSchemaIntrospection_query(t *testing.T) {
+	// a place to hold the response of the query
+	result := &graphql.IntrospectionQueryResult{}
 
-	remoteSchema := graphql.RemoteSchema{
-		Schema: schema,
-		URL:    "hello",
-	}
-
-	// the planner we will assign
-	planner := &MockPlanner{}
-
-	gateway, err := New([]graphql.RemoteSchema{remoteSchema}, WithPlanner(planner))
+	// a place to hold the response of the query
+	err := schemaTestLoadQuery(graphql.IntrospectionQuery, result)
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	assert.Equal(t, planner, gateway.planner)
+	// there are a few things we need to look for:
+	// 		Schema.queryType.name, Schema.mutationType, Schema.subscriptionType, Query.allUsers, and User.firstName
+	assert.Equal(t, "Query", result.Schema.QueryType.Name)
+	assert.Nil(t, result.Schema.MutationType)
+	assert.Nil(t, result.Schema.SubscriptionType)
+
+	// definitions for the types we want to investigate
+	var queryType graphql.IntrospectionQueryFullType
+	var userType graphql.IntrospectionQueryFullType
+	var enumType graphql.IntrospectionQueryFullType
+	var fooInput graphql.IntrospectionQueryFullType
+
+	for _, schemaType := range result.Schema.Types {
+		if schemaType.Name == "Query" {
+			queryType = schemaType
+		} else if schemaType.Name == "User" {
+			userType = schemaType
+		} else if schemaType.Name == "EnumValue" {
+			enumType = schemaType
+		} else if schemaType.Name == "FooInput" {
+			fooInput = schemaType
+		}
+	}
+
+	// make sure that Query.allUsers looks as expected
+	var allUsersField graphql.IntrospectionQueryFullTypeField
+	for _, field := range queryType.Fields {
+		if field.Name == "allUsers" {
+			allUsersField = field
+		}
+	}
+
+	// make sure the type definition for the field matches expectation
+	assert.Equal(t, graphql.IntrospectionTypeRef{
+		Kind: "LIST",
+		OfType: &graphql.IntrospectionTypeRef{
+			Kind: "OBJECT",
+			Name: "User",
+		},
+	}, allUsersField.Type)
+	assert.Equal(t, "description", allUsersField.Description)
+
+	// make sure that Query.allUsers looks as expected
+	var firstNameField graphql.IntrospectionQueryFullTypeField
+	for _, field := range userType.Fields {
+		if field.Name == "firstName" {
+			firstNameField = field
+		}
+	}
+
+	// make sure the type definition for the field matches expectation
+	assert.Equal(t, graphql.IntrospectionTypeRef{
+		Kind: "NON_NULL",
+		OfType: &graphql.IntrospectionTypeRef{
+			Kind: "SCALAR",
+			Name: "String",
+		},
+	}, firstNameField.Type)
+
+	// make sure that the enums have the right values
+	assert.Equal(t, "EnumValue", enumType.Name)
+	assert.Equal(t, []graphql.IntrospectionQueryEnumDefinition{
+		{
+			Name:              "FOO",
+			Description:       "foo description",
+			IsDeprecated:      false,
+			DeprecationReason: "",
+		},
+		{
+			Name:              "BAR",
+			Description:       "",
+			IsDeprecated:      false,
+			DeprecationReason: "",
+		},
+	}, enumType.EnumValues)
+
+	// make sure the foo input matches exepectations
+	assert.Equal(t, "FooInput", fooInput.Name)
+	assert.Equal(t, []graphql.IntrospectionInputValue{
+		{
+			Name: "foo",
+			Type: graphql.IntrospectionTypeRef{
+				Kind: "SCALAR",
+				Name: "String",
+			},
+		},
+	}, fooInput.InputFields)
+
+	// grab the directive we've defined
+	var directive graphql.IntrospectionQueryDirective
+	for _, definition := range result.Schema.Directives {
+		if definition.Name == "A" {
+			directive = definition
+		}
+	}
+	assert.Equal(t, "A", directive.Name)
+}
+
+func TestSchemaIntrospection_lookUpType(t *testing.T) {
+	// a place to hold the response of the query
+	result := &struct {
+		Type struct {
+			Name string `json:"name"`
+		} `json:"__type"`
+	}{}
+
+	query := `
+		{
+			__type(name: "User") {
+				name
+			}
+		}
+	`
+
+	// a place to hold the response of the query
+	err := schemaTestLoadQuery(query, result)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	assert.Equal(t, "User", result.Type.Name)
+}
+
+func TestSchemaIntrospection_missingType(t *testing.T) {
+	// a place to hold the response of the query
+	result := &struct {
+		Type *struct {
+			Name string `json:"name"`
+		} `json:"__type"`
+	}{}
+
+	query := `
+		{
+			__type(name: "Foo") {
+				name
+			}
+		}
+	`
+
+	// a place to hold the response of the query
+	err := schemaTestLoadQuery(query, result)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	assert.Nil(t, result.Type)
 }

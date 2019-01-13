@@ -1,152 +1,305 @@
 package gateway
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/99designs/gqlgen/graphql/introspection"
+	"github.com/mitchellh/mapstructure"
 	"github.com/vektah/gqlparser/ast"
 
 	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
-// Schema is the top level entry for interacting with a gateway. It is responsible for merging a list of
-// remote schemas into one, generating a query plan to execute based on an incoming request, and following
-// that plan
-type Schema struct {
-	sources  []graphql.RemoteSchema
-	schema   *ast.Schema
-	planner  QueryPlanner
-	executor Executor
+// internalSchema is a graphql schema that exists at the gateway level and is merged with the
+// other schemas that the gateway wraps.
+var internalSchema *graphql.RemoteSchema
 
-	// the urls we have to visit to access certain fields
-	fieldURLs FieldURLMap
+// internalSchemaLocation is the location that functions should take to identify a remote schema
+// that points to the gateway's internal schema.
+const internalSchemaLocation = "🎉"
+
+// SchemaQueryer is a queryer that knows how to resolve a query according to a particular schema
+type SchemaQueryer struct {
+	Schema *ast.Schema
 }
 
-// Execute takes a query string, executes it, and returns the response
-func (s *Schema) Execute(query string) (map[string]interface{}, error) {
-	// generate a query plan for the query
-	plan, err := s.planner.Plan(query, s.schema, s.fieldURLs)
-	if err != nil {
-		return nil, err
-	}
+// Query takes a query definition and writes the result to the receiver
+func (q *SchemaQueryer) Query(input *graphql.QueryInput, receiver interface{}) error {
+	// a place to store the result
+	result := map[string]interface{}{}
 
-	// TODO: handle plans of more than one query
-	// execute the plan and return the results
-	return s.executor.Execute(plan[0])
-}
+	// wrap the schema in something capable of introspection
+	introspectionSchema := introspection.WrapSchema(q.Schema)
 
-// New instantiates a new schema with the required stuffs.
-func New(sources []graphql.RemoteSchema, configs ...SchemaConfigurator) (*Schema, error) {
-	// if there are no source schemas
-	if len(sources) == 0 {
-		return nil, errors.New("a gateway must have at least one schema")
-	}
+	// each value selected contributes to the response
+	for _, selection := range input.QueryDocument.SelectionSet {
+		if field, ok := selection.(*ast.Field); ok {
+			if field.Name == "__schema" {
+				result[field.Alias] = q.introspectSchema(introspectionSchema, field.SelectionSet)
+			}
+			if field.Name == "__type" {
+				// there is a name argument to look up the type
+				name := field.Arguments.ForName("name").Value.Raw
 
-	// grab the schemas to compute the sources
-	sourceSchemas := []*ast.Schema{}
-	for _, source := range sources {
-		sourceSchemas = append(sourceSchemas, source.Schema)
-	}
+				// look for the type with the designated name
+				var introspectedType *introspection.Type
+				for _, schemaType := range introspectionSchema.Types() {
+					if *schemaType.Name() == name {
+						introspectedType = &schemaType
+						break
+					}
+				}
 
-	// find the field URLs before we merge schemas
-	urls := fieldURLs(sources)
-
-	// merge them into one
-	schema, err := mergeSchemas(sourceSchemas)
-	if err != nil {
-		// if something went wrong during the merge, return the result
-		return nil, err
-	}
-
-	// return the resulting schema
-	gateway := &Schema{
-		sources:  sources,
-		schema:   schema,
-		planner:  &MinQueriesPlanner{},
-		executor: &ParallelExecutor{},
-
-		// internal fields
-		fieldURLs: urls,
-	}
-
-	// pass the gateway through any configurators
-	for _, config := range configs {
-		config(gateway)
-	}
-
-	// we're done here
-	return gateway, nil
-}
-
-// SchemaConfigurator is a function to be passed to New that configures the
-// resulting schema
-type SchemaConfigurator func(*Schema)
-
-// WithPlanner returns a SchemaConfigurator that sets the planner of the schema
-func WithPlanner(p QueryPlanner) SchemaConfigurator {
-	return func(s *Schema) {
-		s.planner = p
-	}
-}
-
-func fieldURLs(schemas []graphql.RemoteSchema) FieldURLMap {
-	// build the mapping of fields to urls
-	locations := FieldURLMap{}
-
-	// every schema we were given could define types
-	for _, remoteSchema := range schemas {
-		// each type defined by the schema can be found at remoteSchema.URL
-		for name, typeDef := range remoteSchema.Schema.Types {
-			// each field of each type can be found here
-			for _, fieldDef := range typeDef.Fields {
-				// register the location for the field
-				locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
+				// if we couldn't find the type
+				if introspectedType == nil {
+					result[field.Alias] = nil
+				} else {
+					// we found the type so introspect it
+					result[field.Alias] = q.introspectType(introspectedType, field.SelectionSet)
+				}
 			}
 		}
 	}
 
-	// return the location map
-	return locations
-}
-
-// FieldURLMap holds the intformation for retrieving the valid locations one can find the value for the field
-type FieldURLMap map[string][]string
-
-// URLFor returns the list of locations one can find parent.field.
-func (m FieldURLMap) URLFor(parent string, field string) ([]string, error) {
-	// compute the key for the field
-	key := m.keyFor(parent, field)
-
-	// look up the value in the map
-	value, exists := m[key]
-
-	// if it doesn't exist
-	if !exists {
-		return []string{}, fmt.Errorf("Could not find location for %s", key)
+	// assign the result under the data key to the receiver
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName: "json",
+		Result:  receiver,
+	})
+	if err != nil {
+		return err
 	}
 
-	// return the value to the caller
-	return value, nil
-}
-
-// RegisterURL adds a new location to the list of possible places to find the value for parent.field
-func (m FieldURLMap) RegisterURL(parent string, field string, location string) {
-	// compute the key for the field
-	key := m.keyFor(parent, field)
-
-	// look up the value in the map
-	_, exists := m[key]
-
-	// if we haven't seen this key before
-	if !exists {
-		// create a new list
-		m[key] = []string{location}
-	} else {
-		// we've seen this key before
-		m[key] = append(m[key], location)
+	err = decoder.Decode(result)
+	if err != nil {
+		return err
 	}
+
+	return nil
 }
 
-func (m FieldURLMap) keyFor(parent string, field string) string {
-	return fmt.Sprintf("%s.%s", parent, field)
+func (q *SchemaQueryer) introspectSchema(schema *introspection.Schema, selectionSet ast.SelectionSet) map[string]interface{} {
+	// a place to store the result
+	result := map[string]interface{}{}
+
+	for _, selection := range selectionSet {
+		if field, ok := selection.(*ast.Field); ok {
+			switch field.Alias {
+			case "types":
+				result[field.Alias] = q.introspectTypeSlice(schema.Types(), field.SelectionSet)
+			case "queryType":
+				result[field.Alias] = q.introspectType(schema.QueryType(), field.SelectionSet)
+			case "mutationType":
+				result[field.Alias] = q.introspectType(schema.MutationType(), field.SelectionSet)
+			case "subscriptionType":
+				result[field.Alias] = q.introspectType(schema.SubscriptionType(), field.SelectionSet)
+			case "directives":
+				fmt.Println("looking for directives")
+				result[field.Alias] = q.introspectDirectiveSlice(schema.Directives(), field.SelectionSet)
+			}
+		}
+	}
+
+	return result
+}
+
+func (q *SchemaQueryer) introspectType(schemaType *introspection.Type, selectionSet ast.SelectionSet) map[string]interface{} {
+	if schemaType == nil {
+		return nil
+	}
+
+	// a place to store the result
+	result := map[string]interface{}{}
+
+	for _, selection := range selectionSet {
+		if field, ok := selection.(*ast.Field); ok {
+			// the default behavior is to ignore deprecated fields
+			includeDeprecated := false
+			if passedValue := field.Arguments.ForName("includeDeprecated"); passedValue != nil && passedValue.Value.Raw == "true" {
+				includeDeprecated = true
+			}
+
+			switch field.Name {
+			case "kind":
+				result[field.Alias] = schemaType.Kind()
+			case "name":
+				result[field.Alias] = schemaType.Name()
+			case "description":
+				result[field.Alias] = schemaType.Description()
+			case "fields":
+				result[field.Alias] = q.introspectFieldSlice(schemaType.Fields(includeDeprecated), field.SelectionSet)
+			case "interfaces":
+				result[field.Alias] = q.introspectTypeSlice(schemaType.Interfaces(), field.SelectionSet)
+			case "possibleTypes":
+				result[field.Alias] = q.introspectTypeSlice(schemaType.PossibleTypes(), field.SelectionSet)
+			case "enumValues":
+				result[field.Alias] = q.introspectEnumValueSlice(schemaType.EnumValues(includeDeprecated), field.SelectionSet)
+			case "inputFields":
+				result[field.Alias] = q.introspectInputValueSlice(schemaType.InputFields(), field.SelectionSet)
+			case "ofType":
+				result[field.Alias] = q.introspectType(schemaType.OfType(), field.SelectionSet)
+			}
+		}
+	}
+	return result
+}
+
+func (q *SchemaQueryer) introspectField(fieldDef introspection.Field, selectionSet ast.SelectionSet) map[string]interface{} {
+	// a place to store the result
+	result := map[string]interface{}{}
+
+	for _, selection := range selectionSet {
+		if field, ok := selection.(*ast.Field); ok {
+			switch field.Name {
+			case "name":
+				result[field.Alias] = fieldDef.Name
+			case "description":
+				result[field.Alias] = fieldDef.Description
+			case "args":
+				result[field.Alias] = q.introspectInputValueSlice(fieldDef.Args, field.SelectionSet)
+			case "type":
+				result[field.Alias] = q.introspectType(fieldDef.Type, field.SelectionSet)
+			case "isDeprecated":
+				result[field.Alias] = fieldDef.IsDeprecated()
+			case "deprecationReason":
+				result[field.Alias] = fieldDef.DeprecationReason()
+			}
+		}
+	}
+	return result
+}
+
+func (q *SchemaQueryer) introspectEnumValue(definition *introspection.EnumValue, selectionSet ast.SelectionSet) map[string]interface{} {
+	// a place to store the result
+	result := map[string]interface{}{}
+
+	for _, selection := range selectionSet {
+		if field, ok := selection.(*ast.Field); ok {
+			switch field.Name {
+			case "name":
+				result[field.Alias] = definition.Name
+			case "description":
+				result[field.Alias] = definition.Description
+			case "isDeprecated":
+				result[field.Alias] = definition.IsDeprecated()
+			case "deprecationReason":
+				result[field.Alias] = definition.DeprecationReason()
+			}
+		}
+	}
+
+	return result
+}
+
+func (q *SchemaQueryer) introspectDirective(directive introspection.Directive, selectionSet ast.SelectionSet) map[string]interface{} {
+	// a place to store the result
+	result := map[string]interface{}{}
+
+	for _, selection := range selectionSet {
+		if field, ok := selection.(*ast.Field); ok {
+			switch field.Name {
+			case "name":
+				result[field.Alias] = directive.Name
+			case "description":
+				result[field.Alias] = directive.Description
+			case "args":
+				result[field.Alias] = q.introspectInputValueSlice(directive.Args, field.SelectionSet)
+			case "locations":
+				result[field.Alias] = directive.Locations
+			}
+		}
+	}
+	return result
+}
+
+func (q *SchemaQueryer) introspectInputValue(iv *introspection.InputValue, selectionSet ast.SelectionSet) map[string]interface{} {
+	// a place to store the result
+	result := map[string]interface{}{}
+
+	for _, selection := range selectionSet {
+		if field, ok := selection.(*ast.Field); ok {
+			switch field.Name {
+			case "name":
+				result[field.Alias] = iv.Name
+			case "description":
+				result[field.Alias] = iv.Description
+			case "type":
+				result[field.Alias] = q.introspectType(iv.Type, field.SelectionSet)
+			}
+		}
+	}
+
+	return result
+}
+
+func (q *SchemaQueryer) introspectInputValueSlice(values []introspection.InputValue, selectionSet ast.SelectionSet) []map[string]interface{} {
+	result := []map[string]interface{}{}
+
+	// each type in the schema
+	for _, field := range values {
+		result = append(result, q.introspectInputValue(&field, selectionSet))
+	}
+
+	return result
+}
+
+func (q *SchemaQueryer) introspectFieldSlice(fields []introspection.Field, selectionSet ast.SelectionSet) []map[string]interface{} {
+	result := []map[string]interface{}{}
+
+	// each type in the schema
+	for _, field := range fields {
+		result = append(result, q.introspectField(field, selectionSet))
+	}
+
+	return result
+}
+
+func (q *SchemaQueryer) introspectEnumValueSlice(values []introspection.EnumValue, selectionSet ast.SelectionSet) []map[string]interface{} {
+	result := []map[string]interface{}{}
+
+	// each type in the schema
+	for _, enumValue := range values {
+		result = append(result, q.introspectEnumValue(&enumValue, selectionSet))
+	}
+
+	return result
+}
+
+func (q *SchemaQueryer) introspectTypeSlice(types []introspection.Type, selectionSet ast.SelectionSet) []map[string]interface{} {
+	result := []map[string]interface{}{}
+
+	// each type in the schema
+	for _, field := range types {
+		result = append(result, q.introspectType(&field, selectionSet))
+	}
+
+	return result
+}
+
+func (q *SchemaQueryer) introspectDirectiveSlice(directives []introspection.Directive, selectionSet ast.SelectionSet) []map[string]interface{} {
+	result := []map[string]interface{}{}
+
+	// each type in the schema
+	for _, directive := range directives {
+		result = append(result, q.introspectDirective(directive, selectionSet))
+	}
+
+	return result
+}
+
+func init() {
+	// load the internal
+	schema, err := graphql.LoadSchema(`
+		type Query {
+			_apiVersion: String
+		}
+	`)
+	if schema == nil {
+		panic(fmt.Sprintf("Syntax error in schema string: %s", err.Error()))
+	}
+
+	internalSchema = &graphql.RemoteSchema{
+		URL:    internalSchemaLocation,
+		Schema: schema,
+	}
 }

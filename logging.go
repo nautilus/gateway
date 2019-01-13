@@ -76,7 +76,7 @@ func logPlanStep(level int, selectionSet ast.SelectionSet) {
 		prefix += "    "
 	}
 	prefix += "|- "
-	for _, selection := range applyFragments(selectionSet) {
+	for _, selection := range selectedFields(selectionSet) {
 		log.Info(prefix, selection.Name)
 		logPlanStep(level+1, selection.SelectionSet)
 	}

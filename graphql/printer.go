@@ -93,7 +93,7 @@ func printerConvertField(selectedField *ast.Field) (*gAst.Field, error) {
 	}
 
 	// if there is an alias
-	if selectedField.Alias != "" {
+	if selectedField.Alias != selectedField.Name {
 		field.Alias = &gAst.Name{
 			Kind:  "Name",
 			Value: selectedField.Alias,
