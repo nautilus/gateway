@@ -41,16 +41,20 @@ func (q *SchemaQueryer) Query(input *graphql.QueryInput, receiver interface{}) e
 				// there is a name argument to look up the type
 				name := field.Arguments.ForName("name").Value.Raw
 
+				// look for the type with the designated name
 				var introspectedType *introspection.Type
 				for _, schemaType := range introspectionSchema.Types() {
 					if *schemaType.Name() == name {
 						introspectedType = &schemaType
+						break
 					}
 				}
 
+				// if we couldn't find the type
 				if introspectedType == nil {
 					result[field.Alias] = nil
 				} else {
+					// we found the type so introspect it
 					result[field.Alias] = q.introspectType(introspectedType, field.SelectionSet)
 				}
 			}

@@ -62,7 +62,7 @@ func schemaTestLoadQuery(query string, target interface{}) error {
 	return nil
 }
 
-func TestSchemaIntrospection(t *testing.T) {
+func TestSchemaIntrospection_query(t *testing.T) {
 	// a place to hold the response of the query
 	result := &graphql.IntrospectionQueryResult{}
 
@@ -169,4 +169,56 @@ func TestSchemaIntrospection(t *testing.T) {
 		}
 	}
 	assert.Equal(t, "A", directive.Name)
+}
+
+func TestSchemaIntrospection_lookUpType(t *testing.T) {
+	// a place to hold the response of the query
+	result := &struct {
+		Type struct {
+			Name string `json:"name"`
+		} `json:"__type"`
+	}{}
+
+	query := `
+		{
+			__type(name: "User") {
+				name
+			}
+		}
+	`
+
+	// a place to hold the response of the query
+	err := schemaTestLoadQuery(query, result)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	assert.Equal(t, "User", result.Type.Name)
+}
+
+func TestSchemaIntrospection_missingType(t *testing.T) {
+	// a place to hold the response of the query
+	result := &struct {
+		Type *struct {
+			Name string `json:"name"`
+		} `json:"__type"`
+	}{}
+
+	query := `
+		{
+			__type(name: "Foo") {
+				name
+			}
+		}
+	`
+
+	// a place to hold the response of the query
+	err := schemaTestLoadQuery(query, result)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	assert.Nil(t, result.Type)
 }
