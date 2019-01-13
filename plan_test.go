@@ -28,7 +28,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 		{
 			foo
 		}
-	`, schema, locations, ast.VariableDefinitionList{})
+	`, schema, locations)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -90,7 +90,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 				}
 			}
 		}
-	`, schema, locations, ast.VariableDefinitionList{})
+	`, schema, locations)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -198,7 +198,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 				}
 			}
 		}
-	`, schema, locations, ast.VariableDefinitionList{})
+	`, schema, locations)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -218,7 +218,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 
 	// make sure there's a selection set
 	if len(firstStep.SelectionSet) != 1 {
-		t.Error("first strep did not have a selection set")
+		t.Error("first step did not have a selection set")
 		return
 	}
 	firstField := selectedFields(firstStep.SelectionSet)[0]
@@ -353,7 +353,8 @@ func TestApplyFragments_mergesFragments(t *testing.T) {
 	// }
 	selectionSet := ast.SelectionSet{
 		&ast.Field{
-			Name: "birthday",
+			Name:  "birthday",
+			Alias: "birthday",
 			Definition: &ast.FieldDefinition{
 				Type: ast.NamedType("DateTime", &ast.Position{}),
 			},
@@ -365,25 +366,29 @@ func TestApplyFragments_mergesFragments(t *testing.T) {
 			TypeCondition: "User",
 			SelectionSet: ast.SelectionSet{
 				&ast.Field{
-					Name: "firstName",
+					Name:  "lastName",
+					Alias: "lastName",
 					Definition: &ast.FieldDefinition{
 						Type: ast.NamedType("String", &ast.Position{}),
 					},
 				},
 				&ast.Field{
-					Name: "lastName",
+					Name:  "firstName",
+					Alias: "firstName",
 					Definition: &ast.FieldDefinition{
 						Type: ast.NamedType("String", &ast.Position{}),
 					},
 				},
 				&ast.Field{
-					Name: "friends",
+					Name:  "friends",
+					Alias: "friends",
 					Definition: &ast.FieldDefinition{
 						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 					},
 					SelectionSet: ast.SelectionSet{
 						&ast.Field{
-							Name: "firstName",
+							Name:  "firstName",
+							Alias: "firstName",
 							Definition: &ast.FieldDefinition{
 								Type: ast.NamedType("String", &ast.Position{}),
 							},
@@ -399,31 +404,36 @@ func TestApplyFragments_mergesFragments(t *testing.T) {
 			Name: "SecondFragment",
 			SelectionSet: ast.SelectionSet{
 				&ast.Field{
-					Name: "lastName",
+					Name:  "lastName",
+					Alias: "lastName",
 					Definition: &ast.FieldDefinition{
 						Type: ast.NamedType("String", &ast.Position{}),
 					},
 				},
 				&ast.Field{
-					Name: "friends",
+					Name:  "friends",
+					Alias: "friends",
 					Definition: &ast.FieldDefinition{
 						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 					},
 					SelectionSet: ast.SelectionSet{
 						&ast.Field{
-							Name: "lastName",
+							Name:  "lastName",
+							Alias: "lastName",
 							Definition: &ast.FieldDefinition{
 								Type: ast.NamedType("String", &ast.Position{}),
 							},
 						},
 						&ast.Field{
-							Name: "friends",
+							Name:  "friends",
+							Alias: "friends",
 							Definition: &ast.FieldDefinition{
 								Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 							},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
-									Name: "lastName",
+									Name:  "lastName",
+									Alias: "lastName",
 									Definition: &ast.FieldDefinition{
 										Type: ast.NamedType("String", &ast.Position{}),
 									},
@@ -436,13 +446,71 @@ func TestApplyFragments_mergesFragments(t *testing.T) {
 		},
 	}
 
+	// should be flattened into
+	// {
+	//		birthday
+	// 		firstName
+	// 		lastName
+	// 		friends {
+	// 			firstName
+	// 			lastName
+	//			friends {
+	//				lastName
+	//			}
+	// 		}
+	// }
+
 	// flatten the selection
-	finalSelection := applyFragments(selectionSet, fragmentDefinition, ast.VariableDefinitionList{})
+	finalSelection, err := plannerApplyFragments(selectionSet, fragmentDefinition)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	fields := selectedFields(finalSelection)
 
 	// make sure there are 4 fields at the root of the selection
-	if len(finalSelection) != 4 {
-		t.Error("Encountered the inccorect number of selections")
+	if len(fields) != 4 {
+		t.Errorf("Encountered the incorrect number of selections: %v", len(fields))
 		return
+	}
+
+	// get the selection set for birthday
+	var birthdaySelection *ast.Field
+	var firstNameSelection *ast.Field
+	var lastNameSelection *ast.Field
+	var friendsSelection *ast.Field
+
+	for _, selection := range fields {
+		switch selection.Alias {
+		case "birthday":
+			birthdaySelection = selection
+		case "firstName":
+			firstNameSelection = selection
+		case "lastName":
+			lastNameSelection = selection
+		case "friends":
+			friendsSelection = selection
+		}
+	}
+
+	// make sure we got each definition
+	assert.NotNil(t, birthdaySelection)
+	assert.NotNil(t, firstNameSelection)
+	assert.NotNil(t, lastNameSelection)
+	assert.NotNil(t, friendsSelection)
+
+	// make sure there are 3 selections under friends (firstName, lastName, and friends)
+	if len(friendsSelection.SelectionSet) != 3 {
+		t.Errorf("Encountered the wrong number of selections under .friends: len = %v)", len(friendsSelection.SelectionSet))
+		for _, selection := range friendsSelection.SelectionSet {
+			field, _ := selection.(*collectedField)
+			t.Errorf("    %s", field.Name)
+		}
+		return
+	}
+
+	for _, selection := range selectedFields(friendsSelection.SelectionSet) {
+		fmt.Println(selection.Name)
 	}
 }
 
