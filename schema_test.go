@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/alecaivazis/graphql-gateway/graphql"
@@ -9,13 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSchemaIntrospection(t *testing.T) {
+func schemaTestLoadQuery(query string, target interface{}) error {
 	schema, _ := graphql.LoadSchema(`
 		type User {
 			firstName: String!
 		}
 
 		type Query {
+			"description"
 			allUsers: [User]
 		}
 	`)
@@ -25,31 +25,40 @@ func TestSchemaIntrospection(t *testing.T) {
 		{Schema: schema, URL: "url1"},
 	})
 	if err != nil {
-		t.Error(err.Error())
-		return
+		return err
 	}
 
 	// executing the introspection query should return a full description of the schema
-	response, err := gateway.Execute(graphql.IntrospectionQuery)
+	response, err := gateway.Execute(query)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		return err
 	}
-
-	// a place to hold the response of the query
-	result := &graphql.IntrospectionQueryResult{}
 
 	// massage the map into the structure
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		TagName: "json",
-		Result:  result,
+		Result:  target,
 	})
 	if err != nil {
-		t.Error(err.Error())
+		return err
 	}
 	err = decoder.Decode(response)
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func TestSchemaIntrospection(t *testing.T) {
+	// a place to hold the response of the query
+	result := &graphql.IntrospectionQueryResult{}
+
+	// a place to hold the response of the query
+	err := schemaTestLoadQuery(graphql.IntrospectionQuery, result)
+	if err != nil {
 		t.Error(err.Error())
+		return
 	}
 
 	// there are a few things we need to look for:
@@ -62,10 +71,8 @@ func TestSchemaIntrospection(t *testing.T) {
 	var queryType graphql.IntrospectionQueryFullType
 	var userType graphql.IntrospectionQueryFullType
 	for _, schemaType := range result.Schema.Types {
-		fmt.Println(schemaType.Name)
 		if schemaType.Name == "Query" {
 			queryType = schemaType
-			fmt.Println("assigning query type", schemaType.Name)
 		} else if schemaType.Name == "User" {
 			userType = schemaType
 		}
@@ -87,6 +94,7 @@ func TestSchemaIntrospection(t *testing.T) {
 			Name: "User",
 		},
 	}, allUsersField.Type)
+	assert.Equal(t, "description", allUsersField.Description)
 
 	// make sure that Query.allUsers looks as expected
 	var firstNameField graphql.IntrospectionQueryFullTypeField
@@ -104,4 +112,8 @@ func TestSchemaIntrospection(t *testing.T) {
 			Name: "String",
 		},
 	}, firstNameField.Type)
+}
+
+func TestSchemaIntrospection_typeNotFound(*testing.T) {
+
 }

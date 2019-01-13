@@ -34,10 +34,10 @@ func (q *SchemaQueryer) Query(input *graphql.QueryInput, receiver interface{}) e
 	// each value selected contributes to the response
 	for _, selection := range input.QueryDocument.SelectionSet {
 		if field, ok := selection.(*ast.Field); ok {
-			if field.Alias == "__schema" {
+			if field.Name == "__schema" {
 				result[field.Alias] = q.introspectSchema(introspectionSchema, field.SelectionSet)
 			}
-			if field.Alias == "__type" {
+			if field.Name == "__type" {
 				// there is a name argument to look up the type
 				name := field.Arguments.ForName("name").Value.Raw
 
@@ -148,7 +148,8 @@ func (q *SchemaQueryer) introspectField(fieldDef introspection.Field, selectionS
 			switch field.Name {
 			case "name":
 				result[field.Alias] = fieldDef.Name
-			case "descripition":
+			case "description":
+				fmt.Println("Field description", "->", fieldDef)
 				result[field.Alias] = fieldDef.Description
 			case "args":
 				result[field.Alias] = q.introspectInputValueSlice(fieldDef.Args, field.SelectionSet)
