@@ -104,11 +104,16 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// we are garunteed at least one query
 		stepWg.Add(1)
 
+		selectionSet, err := plannerApplyFragments(operation.SelectionSet, parsedQuery.Fragments)
+		if err != nil {
+			return nil, err
+		}
+
 		// start a new step
 		stepCh <- &newQueryPlanStepPayload{
 			// make sure that we apply any fragments before we start planning
-			// SelectionSet:   plannerApplyFragments([]ast.SelectionSet{operation.SelectionSet}, parsedQuery.Fragments),
-			SelectionSet:   operation.SelectionSet,
+			SelectionSet: selectionSet,
+			// SelectionSet:   operation.SelectionSet,
 			ParentType:     "Query",
 			ServiceName:    currentLocation,
 			Parent:         plan.RootStep,
@@ -490,6 +495,8 @@ func selectedFields(source ast.SelectionSet) []*ast.Field {
 		switch selection := selection.(type) {
 		case *ast.Field:
 			fields = append(fields, selection)
+		case *collectedField:
+			fields = append(fields, selection.Field)
 		}
 	}
 
