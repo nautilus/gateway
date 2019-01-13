@@ -10,9 +10,9 @@ import (
 
 // QueryPOSTBody is the incoming payload when sending POST requests to the gateway
 type QueryPOSTBody struct {
-	Query         string `json:"query"`
-	Variables     string `json:"variables"`
-	OperationName string `json:"operationName"`
+	Query         string                 `json:"query"`
+	Variables     map[string]interface{} `json:"variables"`
+	OperationName string                 `json:"operationName"`
 }
 
 // GraphQLHandler returns a http.HandlerFunc that should be used as the
@@ -32,9 +32,17 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		if query, ok := parameters["query"]; ok {
 			payload.Query = query[0]
 
-			// include variables
-			if variables, ok := parameters["variables"]; ok {
-				payload.Variables = variables[0]
+			// include operationName
+			if variableInput, ok := parameters["variables"]; ok {
+				variables := map[string]interface{}{}
+
+				err := json.Unmarshal([]byte(variableInput[0]), variables)
+				if err != nil {
+					payloadErr = errors.New("must include query as parameter")
+				}
+
+				// assign the variables to the payload
+				payload.Variables = variables
 			}
 
 			// include operationName
@@ -84,7 +92,9 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := json.Marshal(result)
+	response, err := json.Marshal(map[string]interface{}{
+		"data": result,
+	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "Encountered error marshaling response: %s", err.Error())
