@@ -38,7 +38,7 @@ type newQueryPlanStepPayload struct {
 // QueryPlanner is responsible for taking a parsed graphql string, and returning the steps to
 // fulfill the response
 type QueryPlanner interface {
-	Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error)
+	Plan(string, *ast.Schema, FieldURLMap, ast.VariableDefinitionList) ([]*QueryPlan, error)
 }
 
 // Planner is meant to be embedded in other QueryPlanners to share configuration
@@ -52,7 +52,7 @@ type MinQueriesPlanner struct {
 }
 
 // Plan computes the nested selections that will need to be performed
-func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap, variables ast.VariableDefinitionList) ([]*QueryPlan, error) {
 	// the first thing to do is to parse the query
 	parsedQuery, err := gqlparser.LoadQuery(schema, query)
 	if err != nil {
@@ -72,17 +72,6 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// add the plan to the top level list
 		plans = append(plans, plan)
 
-		// the list of fields we care about
-		fields := applyFragments(operation.SelectionSet)
-
-		// start with one of the fields
-		possibleLocations, err := locations.URLFor("Query", fields[0].Name)
-		if err != nil {
-			return nil, err
-		}
-
-		currentLocation := possibleLocations[0]
-
 		// a channel to register new steps
 		stepCh := make(chan *newQueryPlanStepPayload, 10)
 
@@ -98,9 +87,10 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 		// start a new step
 		stepCh <- &newQueryPlanStepPayload{
-			SelectionSet:   operation.SelectionSet,
+			// make sure that we apply any fragments before we start planning
+			SelectionSet:   applyFragments(operation.SelectionSet, parsedQuery.Fragments, variables),
 			ParentType:     "Query",
-			ServiceName:    currentLocation,
+			ServiceName:    "",
 			Parent:         plan.RootStep,
 			InsertionPoint: []string{},
 		}
@@ -129,7 +119,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 					// log some stuffs
 					selectionNames := []string{}
-					for _, selection := range applyFragments(step.SelectionSet) {
+					for _, selection := range selectedFields(step.SelectionSet) {
 						selectionNames = append(selectionNames, selection.Name)
 					}
 
@@ -140,7 +130,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					selectionSet := ast.SelectionSet{}
 
 					// for each field in the
-					for _, selectedField := range applyFragments(step.SelectionSet) {
+					for _, selectedField := range selectedFields(step.SelectionSet) {
 						log.Debug("extracting selection ", selectedField.Name)
 						// we always ignore the latest insertion point since we will add it to the list
 						// in the extracts
@@ -181,7 +171,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					stepWg.Done()
 
 					log.Debug("Step selection set:")
-					for _, selection := range applyFragments(step.SelectionSet) {
+					for _, selection := range selectedFields(step.SelectionSet) {
 						log.Debug(selection.Name)
 					}
 				}
@@ -268,7 +258,7 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 			newSelection := ast.SelectionSet{}
 
 			// get the list of fields underneath the taret field
-			for _, selection := range applyFragments(config.field.SelectionSet) {
+			for _, selection := range selectedFields(config.field.SelectionSet) {
 				// add any possible selections provided by selections
 				subSelection, err := p.extractSelection(&extractSelectionConfig{
 					stepCh:         config.stepCh,
@@ -326,7 +316,13 @@ func coreFieldType(source *ast.Field) *ast.Type {
 	return source.Definition.Type
 }
 
-func applyFragments(source ast.SelectionSet) []*ast.Field {
+func applyFragments(source ast.SelectionSet, fragments ast.FragmentDefinitionList, variables ast.VariableDefinitionList) ast.SelectionSet {
+
+	return nil
+}
+
+// func applyFragments(source ast.SelectionSet)
+func selectedFields(source ast.SelectionSet) []*ast.Field {
 	// build up a list of fields
 	fields := []*ast.Field{}
 
@@ -365,7 +361,7 @@ type MockErrPlanner struct {
 	Err error
 }
 
-func (p *MockErrPlanner) Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error) {
+func (p *MockErrPlanner) Plan(string, *ast.Schema, FieldURLMap, ast.VariableDefinitionList) ([]*QueryPlan, error) {
 	return nil, p.Err
 }
 
@@ -374,6 +370,6 @@ type MockPlanner struct {
 	Plans []*QueryPlan
 }
 
-func (p *MockPlanner) Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error) {
+func (p *MockPlanner) Plan(string, *ast.Schema, FieldURLMap, ast.VariableDefinitionList) ([]*QueryPlan, error) {
 	return p.Plans, nil
 }

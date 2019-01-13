@@ -28,7 +28,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 		{
 			foo
 		}
-	`, schema, locations)
+	`, schema, locations, ast.VariableDefinitionList{})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -43,7 +43,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 		t.Error("encountered the wrong number of selections under root step")
 		return
 	}
-	rootField := applyFragments(root.SelectionSet)[0]
+	rootField := selectedFields(root.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
 	queryer := root.Queryer.(*graphql.NetworkQueryer)
@@ -90,7 +90,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 				}
 			}
 		}
-	`, schema, locations)
+	`, schema, locations, ast.VariableDefinitionList{})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -107,7 +107,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 		return
 	}
 
-	rootField := applyFragments(rootStep.SelectionSet)[0]
+	rootField := selectedFields(rootStep.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
 	queryer := rootStep.Queryer.(*graphql.NetworkQueryer)
@@ -198,7 +198,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 				}
 			}
 		}
-	`, schema, locations)
+	`, schema, locations, ast.VariableDefinitionList{})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -221,7 +221,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 		t.Error("first strep did not have a selection set")
 		return
 	}
-	firstField := applyFragments(firstStep.SelectionSet)[0]
+	firstField := selectedFields(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
 	queryer := firstStep.Queryer.(*graphql.NetworkQueryer)
 	assert.Equal(t, userLocation, queryer.URL)
@@ -231,7 +231,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 
 	// all users should have only one selected value since `catPhotos` is from another service
 	if len(firstField.SelectionSet) > 1 {
-		for _, selection := range applyFragments(firstField.SelectionSet) {
+		for _, selection := range selectedFields(firstField.SelectionSet) {
 			fmt.Println(selection.Name)
 		}
 		t.Error("Encountered too many fields on allUsers selection set")
@@ -269,11 +269,11 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 
 	// make sure we selected the catPhotos field
-	selectedSecondField := applyFragments(secondStep.SelectionSet)[0]
+	selectedSecondField := selectedFields(secondStep.SelectionSet)[0]
 	assert.Equal(t, "catPhotos", selectedSecondField.Name)
 
 	// we should have also asked for one field underneath
-	secondSubSelection := applyFragments(selectedSecondField.SelectionSet)
+	secondSubSelection := selectedFields(selectedSecondField.SelectionSet)
 	if len(secondSubSelection) != 1 {
 		t.Error("Encountered the incorrect number of fields selected under User.catPhotos")
 	}
@@ -301,11 +301,11 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 
 	// make sure we selected the catPhotos field
-	selectedThirdField := applyFragments(thirdStep.SelectionSet)[0]
+	selectedThirdField := selectedFields(thirdStep.SelectionSet)[0]
 	assert.Equal(t, "owner", selectedThirdField.Name)
 
 	// we should have also asked for one field underneath
-	thirdSubSelection := applyFragments(selectedThirdField.SelectionSet)
+	thirdSubSelection := selectedFields(selectedThirdField.SelectionSet)
 	if len(thirdSubSelection) != 1 {
 		t.Error("Encountered the incorrect number of fields selected under User.catPhotos")
 	}
@@ -313,37 +313,174 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, "firstName", thirdSubSelectionField.Name)
 }
 
-// func TestPlanQuery_insertionPointFragments(t *testing.T) {
-//
-// }
+func TestApplyFragments_mergesFragments(t *testing.T) {
+	// a selection set representing
+	// {
+	//      birthday
+	// 		... on User {
+	// 			firstName
+	//			lastName
+	// 			friends {
+	// 				firstName
+	// 			}
+	// 		}
+	//      ...SecondFragment
+	// 	}
+	//
+	// 	fragment SecondFragment on User {
+	// 		lastName
+	// 		friends {
+	// 			lastName
+	//			friends {
+	//				lastName
+	//			}
+	// 		}
+	// 	}
+	//
+	//
+	// should be flattened into
+	// {
+	//		birthday
+	// 		firstName
+	// 		lastName
+	// 		friends {
+	// 			firstName
+	// 			lastName
+	//			friends {
+	//				lastName
+	//			}
+	// 		}
+	// }
+	selectionSet := ast.SelectionSet{
+		&ast.Field{
+			Name: "birthday",
+			Definition: &ast.FieldDefinition{
+				Type: ast.NamedType("DateTime", &ast.Position{}),
+			},
+		},
+		&ast.FragmentSpread{
+			Name: "SecondFragment",
+		},
+		&ast.InlineFragment{
+			TypeCondition: "User",
+			SelectionSet: ast.SelectionSet{
+				&ast.Field{
+					Name: "firstName",
+					Definition: &ast.FieldDefinition{
+						Type: ast.NamedType("String", &ast.Position{}),
+					},
+				},
+				&ast.Field{
+					Name: "lastName",
+					Definition: &ast.FieldDefinition{
+						Type: ast.NamedType("String", &ast.Position{}),
+					},
+				},
+				&ast.Field{
+					Name: "friends",
+					Definition: &ast.FieldDefinition{
+						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+					},
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "firstName",
+							Definition: &ast.FieldDefinition{
+								Type: ast.NamedType("String", &ast.Position{}),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 
-// func TestPlanQuery_multipleRootFields(t *testing.T) {
-// 	t.Error("Not implemented")
-// }
+	fragmentDefinition := ast.FragmentDefinitionList{
+		&ast.FragmentDefinition{
+			Name: "SecondFragment",
+			SelectionSet: ast.SelectionSet{
+				&ast.Field{
+					Name: "lastName",
+					Definition: &ast.FieldDefinition{
+						Type: ast.NamedType("String", &ast.Position{}),
+					},
+				},
+				&ast.Field{
+					Name: "friends",
+					Definition: &ast.FieldDefinition{
+						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+					},
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "lastName",
+							Definition: &ast.FieldDefinition{
+								Type: ast.NamedType("String", &ast.Position{}),
+							},
+						},
+						&ast.Field{
+							Name: "friends",
+							Definition: &ast.FieldDefinition{
+								Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+							},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "lastName",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("String", &ast.Position{}),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 
-// func TestPlanQuery_mutationsInSeries(t *testing.T) {
-// 	t.Error("Not implemented")
-// }
+	// flatten the selection
+	finalSelection := applyFragments(selectionSet, fragmentDefinition, ast.VariableDefinitionList{})
 
-// func TestPlanQuery_siblingFields(t *testing.T) {
-// 	t.Error("Not implemented")
-// }
+	// make sure there are 4 fields at the root of the selection
+	if len(finalSelection) != 4 {
+		t.Error("Encountered the inccorect number of selections")
+		return
+	}
+}
 
-// func TestPlanQuery_duplicateFieldsOnEither(t *testing.T) {
-// 	// make sure that if I have the same field defined on both schemas we dont create extraneous calls
-// 	t.Error("Not implemented")
-// }
+func TestApplyFragments_skipAndIncludeDirectives(t *testing.T) {
+	t.Skip("Not yet implemented")
+}
 
-// func TestPlanQuery_groupsConflictingFields(t *testing.T) {
-// 	// if I can find a field in 4 different services, look for the one I"m already going to
-// 	t.Error("Not implemented")
-// }
+func TestApplyFragments_leavesUnionsAndInterfaces(t *testing.T) {
+	t.Skip("Not yet implemented")
+}
 
-// func TestPlanQuery_combineFragments(t *testing.T) {
-// 	// fragments could bring in different fields from different services
-// 	t.Error("Not implemented")
-// }
+func TestPlanQuery_multipleRootFields(t *testing.T) {
+	t.Skip("Not implemented")
+}
 
-// func TestPlanQuery_threadVariables(t *testing.T) {
-// 	t.Error("Not implemented")
-// }
+func TestPlanQuery_mutationsInSeries(t *testing.T) {
+	t.Skip("Not implemented")
+}
+
+func TestPlanQuery_siblingFields(t *testing.T) {
+	t.Skip("Not implemented")
+}
+
+func TestPlanQuery_duplicateFieldsOnEither(t *testing.T) {
+	// make sure that if I have the same field defined on both schemas we dont create extraneous calls
+	t.Skip("Not implemented")
+}
+
+func TestPlanQuery_groupsConflictingFields(t *testing.T) {
+	// if I can find a field in 4 different services, look for the one I"m already going to
+	t.Skip("Not implemented")
+}
+
+func TestPlanQuery_combineFragments(t *testing.T) {
+	// fragments could bring in different fields from different services
+	t.Skip("Not implemented")
+}
+
+func TestPlanQuery_threadVariables(t *testing.T) {
+	t.Skip("Not implemented")
+}

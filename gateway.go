@@ -26,7 +26,7 @@ type Gateway struct {
 // Execute takes a query string, executes it, and returns the response
 func (g *Gateway) Execute(query string) (map[string]interface{}, error) {
 	// generate a query plan for the query
-	plan, err := g.planner.Plan(query, g.schema, g.fieldURLs)
+	plan, err := g.planner.Plan(query, g.schema, g.fieldURLs, ast.VariableDefinitionList{})
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +63,6 @@ func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Gatew
 		// if something went wrong during the merge, return the result
 		return nil, err
 	}
-
-	for _, field := range schema.Query.Fields {
-		fmt.Println(field.Name)
-	}
-	// fmt.Println(schema.Query.Fields)
 
 	// return the resulting gateway
 	gateway := &Gateway{
