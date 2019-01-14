@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHttpHandler_postMissingQuery(t *testing.T) {
+func TestGraphQLHandler_postMissingQuery(t *testing.T) {
 	schema, err := graphql.LoadSchema(`
 		type Query {
 			allUsers: [String!]!
@@ -43,7 +43,7 @@ func TestHttpHandler_postMissingQuery(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
 }
 
-func TestHttpHandler_getMissingQuery(t *testing.T) {
+func TestGraphQLHandler_getMissingQuery(t *testing.T) {
 	schema, _ := graphql.LoadSchema(`
 		type Query {
 			allUsers: [String!]!
@@ -70,7 +70,7 @@ func TestHttpHandler_getMissingQuery(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
 }
 
-func TestHttpHandler_executionError(t *testing.T) {
+func TestPlaygroundHandler_postRequest(t *testing.T) {
 	// a planner that always returns an error
 	planner := &MockErrPlanner{Err: errors.New("Planning error")}
 
@@ -98,7 +98,7 @@ func TestHttpHandler_executionError(t *testing.T) {
 	responseRecorder := httptest.NewRecorder()
 
 	// call the http hander
-	gateway.GraphQLHandler(responseRecorder, request)
+	gateway.PlaygroundHandler(responseRecorder, request)
 
 	// get the response from the handler
 	response := responseRecorder.Result()
