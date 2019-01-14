@@ -105,6 +105,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// we are garunteed at least one query
 		stepWg.Add(1)
 
+		// make sure that we apply any fragments before we start planning
 		selectionSet, err := plannerApplyFragments(operation.SelectionSet, parsedQuery.Fragments)
 		if err != nil {
 			return nil, err
@@ -112,10 +113,8 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 		// start a new step
 		stepCh <- &newQueryPlanStepPayload{
-			// make sure that we apply any fragments before we start planning
-			SelectionSet: selectionSet,
-			// SelectionSet:   operation.SelectionSet,
-			ParentType:     "Query",
+			SelectionSet:   selectionSet,
+			ParentType:     operationType,
 			ServiceName:    currentLocation,
 			Parent:         plan.RootStep,
 			InsertionPoint: []string{},
@@ -398,6 +397,7 @@ func plannerCollectFields(sources []ast.SelectionSet, fragments ast.FragmentDefi
 		for _, selection := range selectionSet {
 			// a selection can be one of 3 things: a field, a fragment reference, or an inline fragment
 			switch selection := selection.(type) {
+
 			// a selection could either have a collected field or a real one. either way, we need to add the selection
 			// set to the entry in the map
 			case *ast.Field, *collectedField:
@@ -416,40 +416,31 @@ func plannerCollectFields(sources []ast.SelectionSet, fragments ast.FragmentDefi
 				// add the fields selection set to the list
 				collected.NestedSelections = append(collected.NestedSelections, selectedField.SelectionSet)
 
-			case *ast.InlineFragment:
+			// fragment selections need to be unwrapped and added to the final selection
+			case *ast.InlineFragment, *ast.FragmentSpread:
+				var selectionSet ast.SelectionSet
+
+				// inline fragments
+				if inlineFragment, ok := selection.(*ast.InlineFragment); ok {
+					selectionSet = inlineFragment.SelectionSet
+				} else if fragment, ok := selection.(*ast.FragmentSpread); ok {
+					// grab the definition for the fragment
+					definition := fragments.ForName(fragment.Name)
+					if definition == nil {
+						// this shouldn't happen since validation has already ran
+						return nil, fmt.Errorf("Could not find fragment definition: %s", fragment.Name)
+					}
+
+					selectionSet = definition.SelectionSet
+				}
+
 				// fields underneath the inline fragment could be fragments themselves
-				fields, err := plannerCollectFields([]ast.SelectionSet{selection.SelectionSet}, fragments)
+				fields, err := plannerCollectFields([]ast.SelectionSet{selectionSet}, fragments)
 				if err != nil {
 					return nil, err
 				}
 
 				// each field in the inline fragment needs to be added to the selection
-				for _, fragmentSelection := range *fields {
-					// add the selection from the field to our accumulator
-					collected := selectedFields.GetOrCreateForAlias(fragmentSelection.Alias, func() *collectedField {
-						return fragmentSelection
-					})
-
-					// add the fragment selection set to the list of selections for the field
-					collected.NestedSelections = append(collected.NestedSelections, fragmentSelection.SelectionSet)
-				}
-
-			case *ast.FragmentSpread:
-
-				// grab the definition for the fragment
-				definition := fragments.ForName(selection.Name)
-				if definition == nil {
-					// this shouldn't happen since validation has already ran
-					return nil, fmt.Errorf("Could not find fragment definition: %s", selection.Name)
-				}
-
-				// fields underneath the fragment could be fragments themselves
-				fields, err := plannerCollectFields([]ast.SelectionSet{definition.SelectionSet}, fragments)
-				if err != nil {
-					return nil, err
-				}
-
-				// each field in the fragment needs to be added to the selection
 				for _, fragmentSelection := range *fields {
 					// add the selection from the field to our accumulator
 					collected := selectedFields.GetOrCreateForAlias(fragmentSelection.Alias, func() *collectedField {
