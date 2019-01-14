@@ -9,13 +9,11 @@ import (
 )
 
 func main() {
-	// introspect the api
+	// introspect the apis
 	serviceASchema, err := graphql.IntrospectRemoteSchema("http://localhost:4000")
 	if err != nil {
 		panic(err)
 	}
-
-	// introspect the api
 	serviceBSchema, err := graphql.IntrospectRemoteSchema("http://localhost:4001")
 	if err != nil {
 		panic(err)
@@ -27,13 +25,11 @@ func main() {
 		panic(err)
 	}
 
-	// add the graphql endpoints
+	// add the graphql endpoints to the router
 	http.HandleFunc("/graphql", setCORSHeaders(gateway.PlaygroundHandler))
 
-	// log the user
-	fmt.Println("Starting server")
-
 	// start the server
+	fmt.Println("Starting server")
 	err = http.ListenAndServe(":3001", nil)
 	if err != nil {
 		fmt.Println(err.Error())
