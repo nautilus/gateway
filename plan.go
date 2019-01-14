@@ -19,6 +19,7 @@ type QueryPlanStep struct {
 	SelectionSet   ast.SelectionSet
 	InsertionPoint []string
 	Then           []*QueryPlanStep
+	Variables      ast.VariableDefinitionList
 }
 
 // QueryPlan is the full plan to resolve a particular query

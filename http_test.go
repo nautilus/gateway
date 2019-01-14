@@ -103,14 +103,12 @@ func TestPlaygroundHandler_postRequest(t *testing.T) {
 	// get the response from the handler
 	response := responseRecorder.Result()
 	// read the body
-	responseBody, err := ioutil.ReadAll(response.Body)
+	_, err = ioutil.ReadAll(response.Body)
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
 	// make sure we got an error code
-	assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
-	// and the right body
-	assert.Contains(t, string(responseBody), "Planning error")
+	assert.Equal(t, http.StatusOK, response.StatusCode)
 }

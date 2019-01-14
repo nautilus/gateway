@@ -313,6 +313,66 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, "firstName", thirdSubSelectionField.Name)
 }
 
+func TestPlanQuery_stepVariables(t *testing.T) {
+	// the query to test
+	// query($id: ID!, $category: String!) {
+	// 		user(id: $id) {
+	// 			favoriteCatPhoto(category: $category) {
+	// 				URL
+	// 			}
+	// 		}
+	// }
+	//
+	// it should result in one query that depends on $id and the second one
+	// which requires $category
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "user", "url1")
+	locations.RegisterURL("User", "favoriteCatPhoto", "url2")
+	locations.RegisterURL("CatPhoto", "URL", "url2")
+
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			favoriteCatPhoto(category: String!): CatPhoto!
+		}
+
+		type CatPhoto {
+			URL: String!
+		}
+
+		type Query {
+			user(id: ID!): User
+		}
+	`)
+
+	// compute the plan for a query that just hits one service
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query($id: ID!, $category: String!) {
+			user(id: $id) {
+				favoriteCatPhoto(category: $category) {
+					URL
+				}
+			}
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when building schema: %s", err.Error())
+		return
+	}
+
+	// there is only one step
+	firstStep := plans[0].RootStep.Then[0]
+
+	// make sure it has the right variable dependencies
+	if len(firstStep.Variables) != 1 {
+		t.Errorf("Encountered incorrect number of variables for the root step: %v", len(firstStep.Variables))
+		return
+	}
+}
+
 func TestApplyFragments_mergesFragments(t *testing.T) {
 	// a selection set representing
 	// {
