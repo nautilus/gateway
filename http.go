@@ -104,3 +104,17 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// send the result to the user
 	fmt.Fprint(w, string(response))
 }
+
+// PlaygroundHandler returns a http.HandlerFunc which on GET requests shows
+// the user an interface that they can use to interact with the API. On
+// POSTs the endpoint executes the designated query
+func (g *Gateway) PlaygroundHandler(w http.ResponseWriter, r *http.Request) {
+	// on POSTs, we have to send the request to the graphqlHandler
+	if r.Method == http.MethodPost {
+		g.GraphQLHandler(w, r)
+		return
+	}
+
+	// we are not handling a POST request so we have to show the user the playground
+	fmt.Fprint(w, "Playground")
+}

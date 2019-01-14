@@ -46,7 +46,7 @@ func main() {
 	}
 
 	// add the graphql endpoints
-	http.HandleFunc("/graphql", enableCors(gateway.GraphiQLHandler))
+	http.HandleFunc("/graphql", enableCors(gateway.PlaygroundHandler))
 
 	// log the user
 	fmt.Println("Starting server")
