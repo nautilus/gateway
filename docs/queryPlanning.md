@@ -2,7 +2,7 @@
 
 Given schema1 located at `location1`:
 ```graphql
-type Query { 
+type User { 
     lastName:String!
 }
 
