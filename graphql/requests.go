@@ -137,7 +137,7 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 			messages = append(messages, message)
 		}
 
-		return fmt.Errorf("Encountered errors: %v", strings.Join(messages, " "))
+		return fmt.Errorf(strings.Join(messages, " "))
 	}
 
 	// assign the result under the data key to the receiver
