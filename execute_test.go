@@ -575,7 +575,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := findInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
+	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -1025,7 +1025,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := findInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
+	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
 	if err != nil {
 		t.Error(t, err)
 		return

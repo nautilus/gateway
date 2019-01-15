@@ -255,7 +255,7 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 			clip := max(len(insertionPoint)-1, 0)
 
 			// log.Debug("Looking for insertion points for ", dependent.InsertionPoint, "\n\n")
-			insertPoints, err := findInsertionPoints(dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint[:clip]}, stripNode)
+			insertPoints, err := executorFindInsertionPoints(dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint[:clip]}, stripNode)
 			if err != nil {
 				errCh <- err
 				return
@@ -286,8 +286,8 @@ func max(a, b int) int {
 	return b
 }
 
-// findInsertionPoints returns the list of insertion points where this step should be executed.
-func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, stripNode bool) ([][]string, error) {
+// executorFindInsertionPoints returns the list of insertion points where this step should be executed.
+func executorFindInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, stripNode bool) ([][]string, error) {
 
 	// log.Debug("Looking for insertion points. target: ", targetPoints)
 	oldBranch := startingPoints
@@ -413,7 +413,7 @@ func findInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, r
 							}
 
 							// compute the insertion points for that entry
-							entryInsertionPoints, err := findInsertionPoints(targetPoints, selectionSetRoot, resultEntry, newBranchSet, false)
+							entryInsertionPoints, err := executorFindInsertionPoints(targetPoints, selectionSetRoot, resultEntry, newBranchSet, false)
 							if err != nil {
 								return nil, err
 							}
