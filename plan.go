@@ -516,7 +516,7 @@ func plannerExtractVariables(args ast.ArgumentList) []string {
 	return variables
 }
 
-func plannerExtractVariablesFromValues(accumulator *[]string, value *ast.Value) []string {
+func plannerExtractVariablesFromValues(accumulator *[]string, value *ast.Value) {
 	// we have to look out for a few different kinds of values
 	switch value.Kind {
 	// if the value is a reference to a variable
@@ -530,8 +530,6 @@ func plannerExtractVariablesFromValues(accumulator *[]string, value *ast.Value) 
 			plannerExtractVariablesFromValues(accumulator, child.Value)
 		}
 	}
-
-	return *accumulator
 }
 
 func selectedFields(source ast.SelectionSet) []*ast.Field {
