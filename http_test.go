@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -55,7 +56,7 @@ func TestGraphQLHandler(t *testing.T) {
 		{Schema: schema, URL: "url1"},
 	}, WithExecutor(&ExecutorFn{
 		func(*QueryPlan, map[string]interface{}) (map[string]interface{}, error) {
-			return map[string]interface{}{}, errors.New("New error!")
+			return map[string]interface{}{}, nil
 		},
 	}))
 
@@ -79,12 +80,11 @@ func TestGraphQLHandler(t *testing.T) {
 
 	t.Run("Non-object variables fails", func(t *testing.T) {
 		// the incoming request
-		request := httptest.NewRequest("GET", "/graphql", strings.NewReader(""))
-		request.URL.Query().Set("query", "{allUsers}")
-		request.URL.Query().Set("variables", "true")
+		request := httptest.NewRequest("GET", `/graphql?query={allUsers}&variables=true`, strings.NewReader(""))
+
 		// a recorder so we can check what the handler responded with
 		responseRecorder := httptest.NewRecorder()
-
+		fmt.Println("query ->", request.URL.Query()["query"])
 		// call the http hander
 		gateway.GraphQLHandler(responseRecorder, request)
 
@@ -94,9 +94,7 @@ func TestGraphQLHandler(t *testing.T) {
 
 	t.Run("Object variables succeeds", func(t *testing.T) {
 		// the incoming request
-		request := httptest.NewRequest("GET", "/graphql", strings.NewReader(""))
-		request.URL.Query().Set("query", "{allUsers}")
-		request.URL.Query().Set("variables", "{\"foo\": 2}")
+		request := httptest.NewRequest("GET", `/graphql?query={allusers}&variables={"foo":2}`, strings.NewReader(""))
 		// a recorder so we can check what the handler responded with
 		responseRecorder := httptest.NewRecorder()
 
@@ -104,7 +102,7 @@ func TestGraphQLHandler(t *testing.T) {
 		gateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
 	})
 }
 

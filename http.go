@@ -44,12 +44,13 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// a place to store query params
 	payload := QueryPOSTBody{}
 
-	var payloadErr error = nil
+	// the error we have encountered when extracting query input
+	var payloadErr error
 
 	// if we got a GET request
 	if r.Method == http.MethodGet {
 		parameters := r.URL.Query()
-
+		fmt.Println(parameters)
 		// get the query paramter
 		if query, ok := parameters["query"]; ok {
 			payload.Query = query[0]
