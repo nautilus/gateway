@@ -3,6 +3,7 @@ package graphql
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"testing"
@@ -191,7 +192,7 @@ func TestNewNetworkQueryer(t *testing.T) {
 	assert.Equal(t, "foo", NewNetworkQueryer("foo").URL)
 }
 
-func TestQueryerFunc(t *testing.T) {
+func TestQueryerFunc_success(t *testing.T) {
 	expected := map[string]interface{}{"hello": "world"}
 
 	queryer := QueryerFunc{
@@ -203,8 +204,27 @@ func TestQueryerFunc(t *testing.T) {
 	// a place to write the result
 	result := map[string]interface{}{}
 
-	queryer.Query(&QueryInput{}, &result)
+	err := queryer.Query(&QueryInput{}, &result)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
 
 	// make sure we copied the right result
 	assert.Equal(t, expected, result)
+}
+
+func TestQueryerFunc_failure(t *testing.T) {
+	expected := errors.New("message")
+
+	queryer := QueryerFunc{
+		func(*QueryInput) (interface{}, error) {
+			return nil, expected
+		},
+	}
+
+	err := queryer.Query(&QueryInput{}, &map[string]interface{}{})
+
+	// make sure we got the right error
+	assert.Equal(t, expected, err)
 }
