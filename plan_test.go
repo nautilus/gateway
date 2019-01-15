@@ -365,11 +365,110 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 
 	// there is only one step
 	firstStep := plans[0].RootStep.Then[0]
-
 	// make sure it has the right variable dependencies
-	if len(firstStep.Variables) != 1 {
-		t.Errorf("Encountered incorrect number of variables for the root step: %v", len(firstStep.Variables))
-		return
+	assert.Equal(t, Set{"id": true}, firstStep.Variables)
+
+	// there is a step after
+	nextStep := firstStep.Then[0]
+	// make sure it has the right variable dependencies
+	assert.Equal(t, Set{"category": true}, nextStep.Variables)
+}
+
+func TestExtractVariables(t *testing.T) {
+	table := []struct {
+		Name      string
+		Arguments ast.ArgumentList
+		Variables []string
+	}{
+		//  user(id: $id, name:$name) should extract ["id", "name"]
+		{
+			Name:      "Top Level arugments",
+			Variables: []string{"id", "name"},
+			Arguments: ast.ArgumentList{
+				&ast.Argument{
+					Name: "id",
+					Value: &ast.Value{
+						Kind: ast.Variable,
+						Raw:  "id",
+					},
+				},
+				&ast.Argument{
+					Name: "name",
+					Value: &ast.Value{
+						Kind: ast.Variable,
+						Raw:  "name",
+					},
+				},
+			},
+		},
+		//  catPhotos(categories: [$a, "foo", $b]) should extract ["a", "b"]
+		{
+			Name:      "List nested arugments",
+			Variables: []string{"a", "b"},
+			Arguments: ast.ArgumentList{
+				&ast.Argument{
+					Name: "category",
+					Value: &ast.Value{
+						Kind: ast.ListValue,
+						Children: ast.ChildValueList{
+							&ast.ChildValue{
+								Value: &ast.Value{
+									Kind: ast.Variable,
+									Raw:  "a",
+								},
+							},
+							&ast.ChildValue{
+								Value: &ast.Value{
+									Kind: ast.StringValue,
+									Raw:  "foo",
+								},
+							},
+							&ast.ChildValue{
+								Value: &ast.Value{
+									Kind: ast.Variable,
+									Raw:  "b",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		//  users(favoriteMovieFilter: {category: $targetCategory, rating: $targetRating}) should extract ["targetCategory", "targetRating"]
+		{
+			Name:      "Object nested arguments",
+			Variables: []string{"targetCategory", "targetRating"},
+			Arguments: ast.ArgumentList{
+				&ast.Argument{
+					Name: "favoriteMovieFilter",
+					Value: &ast.Value{
+						Kind: ast.ObjectValue,
+						Children: ast.ChildValueList{
+							&ast.ChildValue{
+								Name: "category",
+								Value: &ast.Value{
+									Kind: ast.Variable,
+									Raw:  "targetCategory",
+								},
+							},
+							&ast.ChildValue{
+								Name: "rating",
+								Value: &ast.Value{
+									Kind: ast.Variable,
+									Raw:  "targetRating",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, row := range table {
+		t.Run(row.Name, func(t *testing.T) {
+			assert.Equal(t, row.Variables, plannerExtractVariables(row.Arguments))
+		})
 	}
 }
 
@@ -597,14 +696,5 @@ func TestPlanQuery_duplicateFieldsOnEither(t *testing.T) {
 
 func TestPlanQuery_groupsConflictingFields(t *testing.T) {
 	// if I can find a field in 4 different services, look for the one I"m already going to
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_combineFragments(t *testing.T) {
-	// fragments could bring in different fields from different services
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_threadVariables(t *testing.T) {
 	t.Skip("Not implemented")
 }
