@@ -32,21 +32,22 @@ results in a 2-step plan:
 ```json5
 [
   {
+      type: "Query",
       url: location1,
-      query: `{
+      insertionPoint: [],
+      selection: `{
          allUsers { 
              id
              firstName
          }
       }`,
       then: [
-          // an entry for each user
           {
+              type: "User",
               url: location2,
-              query: `{
-                  node(id: "1234") {
-                      lastName
-                  }
+              insertionPoint: ["allUsers"],
+              selection: `{
+                  lastName
               }`
           }
       ]
