@@ -102,6 +102,35 @@ func TestGraphQLHandler(t *testing.T) {
 		// make sure we got an error code
 		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
 	})
+
+	t.Run("error marhsalling response", func(t *testing.T) {
+		// create gateway schema we can test against
+		innerGateway, err := New([]*graphql.RemoteSchema{
+			{Schema: schema, URL: "url1"},
+		}, WithExecutor(&ExecutorFn{
+			func(*QueryPlan, map[string]interface{}) (map[string]interface{}, error) {
+				return map[string]interface{}{
+					"foo": func() {},
+				}, nil
+			},
+		}))
+
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// the incoming request
+		request := httptest.NewRequest("GET", `/graphql?query={allUsers}`, strings.NewReader(""))
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		innerGateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusInternalServerError, responseRecorder.Result().StatusCode)
+	})
 }
 
 func TestPlaygroundHandler_postRequest(t *testing.T) {
