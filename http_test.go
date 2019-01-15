@@ -43,7 +43,7 @@ func TestGraphQLHandler_postMissingQuery(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
 }
 
-func TestGraphQLHandler_getMissingQuery(t *testing.T) {
+func TestGraphQLHandler(t *testing.T) {
 	schema, _ := graphql.LoadSchema(`
 		type Query {
 			allUsers: [String!]!
@@ -53,21 +53,59 @@ func TestGraphQLHandler_getMissingQuery(t *testing.T) {
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
 		{Schema: schema, URL: "url1"},
-	})
+	}, WithExecutor(&ExecutorFn{
+		func(*QueryPlan, map[string]interface{}) (map[string]interface{}, error) {
+			return map[string]interface{}{}, errors.New("New error!")
+		},
+	}))
+
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
-	// the incoming request
-	request := httptest.NewRequest("GET", "/graphql", strings.NewReader(""))
-	// a recorder so we can check what the handler responded with
-	responseRecorder := httptest.NewRecorder()
 
-	// call the http hander
-	gateway.GraphQLHandler(responseRecorder, request)
+	t.Run("Missing query", func(t *testing.T) {
+		// the incoming request
+		request := httptest.NewRequest("GET", "/graphql", strings.NewReader(""))
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
 
-	// make sure we got an error code
-	assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Non-object variables fails", func(t *testing.T) {
+		// the incoming request
+		request := httptest.NewRequest("GET", "/graphql", strings.NewReader(""))
+		request.URL.Query().Set("query", "{allUsers}")
+		request.URL.Query().Set("variables", "true")
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Object variables succeeds", func(t *testing.T) {
+		// the incoming request
+		request := httptest.NewRequest("GET", "/graphql", strings.NewReader(""))
+		request.URL.Query().Set("query", "{allUsers}")
+		request.URL.Query().Set("variables", "{\"foo\": 2}")
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
 }
 
 func TestPlaygroundHandler_postRequest(t *testing.T) {

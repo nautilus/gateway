@@ -60,7 +60,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 
 				err := json.Unmarshal([]byte(variableInput[0]), variables)
 				if err != nil {
-					payloadErr = errors.New("must include query as parameter")
+					payloadErr = errors.New("variables must be a json object")
 				}
 
 				// assign the variables to the payload

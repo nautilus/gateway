@@ -37,7 +37,7 @@ func (g *Gateway) Execute(query string, variables map[string]interface{}) (map[s
 }
 
 // New instantiates a new schema with the required stuffs.
-func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Gateway, error) {
+func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, error) {
 	// if there are no source schemas
 	if len(sources) == 0 {
 		return nil, errors.New("a gateway must have at least one schema")
@@ -84,14 +84,21 @@ func New(sources []*graphql.RemoteSchema, configs ...SchemaConfigurator) (*Gatew
 	return gateway, nil
 }
 
-// SchemaConfigurator is a function to be passed to New that configures the
+// Configurator is a function to be passed to New that configures the
 // resulting schema
-type SchemaConfigurator func(*Gateway)
+type Configurator func(*Gateway)
 
-// WithPlanner returns a SchemaConfigurator that sets the planner of the schema
-func WithPlanner(p QueryPlanner) SchemaConfigurator {
+// WithPlanner returns a Configurator that sets the planner of the gateway
+func WithPlanner(p QueryPlanner) Configurator {
 	return func(g *Gateway) {
 		g.planner = p
+	}
+}
+
+// WithExecutor returns a Configurator that sets the executor of the gateway
+func WithExecutor(e Executor) Configurator {
+	return func(g *Gateway) {
+		g.executor = e
 	}
 }
 

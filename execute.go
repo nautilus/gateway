@@ -756,3 +756,13 @@ func executorBuildQuery(parentType string, parentID string, variables ast.Variab
 	// add the operation to a QueryDocument
 	return operation
 }
+
+// ExecutorFn wraps a function to be used as an executor.
+type ExecutorFn struct {
+	Fn func(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
+}
+
+// Execute invokes and returns the internal function
+func (e *ExecutorFn) Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+	return e.Fn(plan, variables)
+}
