@@ -10,7 +10,7 @@ import (
 
 func TestIntrospectQuery_savesQueryType(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -55,7 +55,7 @@ func TestIntrospectQuery_savesQueryType(t *testing.T) {
 
 func TestIntrospectQuery_savesMutationType(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -103,7 +103,7 @@ func TestIntrospectQuery_savesMutationType(t *testing.T) {
 
 func TestIntrospectQuery_savesSubscriptionType(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -151,7 +151,7 @@ func TestIntrospectQuery_savesSubscriptionType(t *testing.T) {
 
 func TestIntrospectQuery_multipleTypes(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -203,7 +203,7 @@ func TestIntrospectQuery_multipleTypes(t *testing.T) {
 
 func TestIntrospectQuery_interfaces(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -314,7 +314,7 @@ func TestIntrospectQuery_interfaces(t *testing.T) {
 
 func TestIntrospectQuery_unions(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -408,7 +408,7 @@ func TestIntrospectQuery_unions(t *testing.T) {
 
 func TestIntrospectQueryUnmarshalType_scalarFields(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -444,7 +444,7 @@ func TestIntrospectQueryUnmarshalType_scalarFields(t *testing.T) {
 
 func TestIntrospectQueryUnmarshalType_objects(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -521,7 +521,7 @@ func TestIntrospectQueryUnmarshalType_objects(t *testing.T) {
 }
 
 func TestIntrospectQueryUnmarshalType_directives(t *testing.T) { // introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -605,7 +605,7 @@ func TestIntrospectQueryUnmarshalType_directives(t *testing.T) { // introspect t
 
 func TestIntrospectQueryUnmarshalType_enums(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{
@@ -674,7 +674,7 @@ func TestIntrospectQuery_deprecatedEnums(t *testing.T) {
 
 func TestIntrospectQueryUnmarshalType_inputObjects(t *testing.T) {
 	// introspect the api with a known response
-	schema, err := IntrospectAPI(&MockQueryer{
+	schema, err := IntrospectAPI(&MockSuccessQueryer{
 		IntrospectionQueryResult{
 			Schema: &IntrospectionQuerySchema{
 				QueryType: IntrospectionQueryRootType{

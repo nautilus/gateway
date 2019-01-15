@@ -55,7 +55,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 	// the root step could have multiple steps that have to happen
 	for _, step := range plan.RootStep.Then {
 		stepWg.Add(1)
-		go executeStep(plan, step, []string{}, resultCh, errCh, stepWg)
+		go executeStep(plan, step, []string{}, variables, resultCh, errCh, stepWg)
 	}
 
 	// start a goroutine to add results to the list
@@ -138,7 +138,16 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 	}
 }
 
-func executeStep(plan *QueryPlan, step *QueryPlanStep, insertionPoint []string, resultCh chan queryExecutionResult, errCh chan error, stepWg *sync.WaitGroup) {
+// TODO: ugh... so... many... variables...
+func executeStep(
+	plan *QueryPlan,
+	step *QueryPlanStep,
+	insertionPoint []string,
+	queryVariables map[string]interface{},
+	resultCh chan queryExecutionResult,
+	errCh chan error,
+	stepWg *sync.WaitGroup,
+) {
 	log.Debug("")
 	log.Debug("Executing step to be inserted in ", step.ParentType, " ", insertionPoint)
 
@@ -220,12 +229,15 @@ func executeStep(plan *QueryPlan, step *QueryPlanStep, insertionPoint []string, 
 
 	// we need to grab the variable definitions and values for each variable in the step
 	for variable := range step.Variables {
+		fmt.Println("looking for ", variable)
 		// add the definition
 		variableDefs = append(variableDefs, plan.Variables.ForName(variable))
 		// and the value if it exists
-		if value, ok := variables[variable]; ok {
+		if value, ok := queryVariables[variable]; ok {
+			fmt.Println("found value")
 			variables[variable] = value
 		}
+		fmt.Println(variableDefs)
 	}
 
 	// generate the query that we have to send for this step
@@ -280,7 +292,7 @@ func executeStep(plan *QueryPlan, step *QueryPlanStep, insertionPoint []string, 
 			for _, insertionPoint := range insertPoints {
 				log.Info("Spawn ", insertionPoint)
 				stepWg.Add(1)
-				go executeStep(plan, dependent, insertionPoint, resultCh, errCh, stepWg)
+				go executeStep(plan, dependent, insertionPoint, queryVariables, resultCh, errCh, stepWg)
 			}
 		}
 	}
