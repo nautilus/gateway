@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -84,7 +83,6 @@ func TestGraphQLHandler(t *testing.T) {
 
 		// a recorder so we can check what the handler responded with
 		responseRecorder := httptest.NewRecorder()
-		fmt.Println("query ->", request.URL.Query()["query"])
 		// call the http hander
 		gateway.GraphQLHandler(responseRecorder, request)
 

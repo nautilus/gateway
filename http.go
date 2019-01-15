@@ -50,7 +50,6 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// if we got a GET request
 	if r.Method == http.MethodGet {
 		parameters := r.URL.Query()
-		fmt.Println(parameters)
 		// get the query paramter
 		if query, ok := parameters["query"]; ok {
 			payload.Query = query[0]
@@ -59,7 +58,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			if variableInput, ok := parameters["variables"]; ok {
 				variables := map[string]interface{}{}
 
-				err := json.Unmarshal([]byte(variableInput[0]), variables)
+				err := json.Unmarshal([]byte(variableInput[0]), &variables)
 				if err != nil {
 					payloadErr = errors.New("variables must be a json object")
 				}
