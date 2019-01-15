@@ -30,8 +30,8 @@ func TestMergeSchema_fields(t *testing.T) {
 
 	// merge the schemas together
 	schema, err := New([]*graphql.RemoteSchema{
-		&graphql.RemoteSchema{Schema: schema1, URL: "url1"},
-		&graphql.RemoteSchema{Schema: schema2, URL: "url2"},
+		{Schema: schema1, URL: "url1"},
+		{Schema: schema2, URL: "url2"},
 	})
 	// make sure nothing went wrong
 	assert.Nil(t, err)
@@ -91,8 +91,8 @@ func TestMergeSchema_assignQueryType(t *testing.T) {
 
 	// merge the schemas together
 	schema, err := New([]*graphql.RemoteSchema{
-		&graphql.RemoteSchema{Schema: schema1, URL: "url1"},
-		&graphql.RemoteSchema{Schema: schema2, URL: "url2"},
+		{Schema: schema1, URL: "url1"},
+		{Schema: schema2, URL: "url2"},
 	})
 	// make sure nothing went wrong
 	assert.Nil(t, err)
@@ -126,8 +126,8 @@ func TestMergeSchema_assignMutationType(t *testing.T) {
 
 	// merge the schemas together
 	schema, err := New([]*graphql.RemoteSchema{
-		&graphql.RemoteSchema{Schema: schema1, URL: "url1"},
-		&graphql.RemoteSchema{Schema: schema2, URL: "url2"},
+		{Schema: schema1, URL: "url1"},
+		{Schema: schema2, URL: "url2"},
 	})
 	// make sure nothing went wrong
 	assert.Nil(t, err)
@@ -161,8 +161,8 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 
 	// merge the schemas together
 	_, err = New([]*graphql.RemoteSchema{
-		&graphql.RemoteSchema{Schema: schema1, URL: "url1"},
-		&graphql.RemoteSchema{Schema: schema2, URL: "url2"},
+		{Schema: schema1, URL: "url1"},
+		{Schema: schema2, URL: "url2"},
 	})
 	// make sure nothing went wrong
 	if err == nil {

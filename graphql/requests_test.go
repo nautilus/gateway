@@ -106,7 +106,7 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 			result, err := json.Marshal(map[string]interface{}{
 				"data": nil,
 				"errors": []map[string]interface{}{
-					map[string]interface{}{
+					{
 						"message": "message",
 					},
 				},
