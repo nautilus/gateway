@@ -469,14 +469,20 @@ func TestExecutor_threadsVariables(t *testing.T) {
 		"goodbye": "moon",
 	}
 
+	fullVariableDefs := ast.VariableDefinitionList{
+		&ast.VariableDefinition{
+			Variable: "hello",
+			Type:     ast.NamedType("ID", &ast.Position{}),
+		},
+		&ast.VariableDefinition{
+			Variable: "goodbye",
+			Type:     ast.NamedType("ID", &ast.Position{}),
+		},
+	}
+
 	// build a query plan that the executor will follow
 	_, err := (&ParallelExecutor{}).Execute(&QueryPlan{
-		Variables: ast.VariableDefinitionList{
-			&ast.VariableDefinition{
-				Variable: "hello",
-				Type:     ast.NamedType("ID", &ast.Position{}),
-			},
-		},
+		Variables: fullVariableDefs,
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -497,6 +503,8 @@ func TestExecutor_threadsVariables(t *testing.T) {
 						func(input *graphql.QueryInput) (interface{}, error) {
 							// make sure that we got the right variable inputs
 							assert.Equal(t, map[string]interface{}{"hello": "world"}, input.Variables)
+							// and definitions
+							assert.Equal(t, ast.VariableDefinitionList{fullVariableDefs[0]}, input.QueryDocument.VariableDefinitions)
 
 							return map[string]interface{}{"values": []string{"world"}}, nil
 						}},
