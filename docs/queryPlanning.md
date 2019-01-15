@@ -3,7 +3,7 @@
 Given schema1 located at `location1`:
 ```graphql
 type User { 
-    lastName:String!
+    firstName:String!
 }
 
 type Query {
@@ -14,7 +14,7 @@ type Query {
 And `schema2` located at `location2`:
 ```graphql
 type User { 
-    firstName: String!
+    lastName: String!
 }
 ```
 
