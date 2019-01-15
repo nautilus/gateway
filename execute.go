@@ -229,15 +229,12 @@ func executeStep(
 
 	// we need to grab the variable definitions and values for each variable in the step
 	for variable := range step.Variables {
-		fmt.Println("looking for ", variable)
 		// add the definition
 		variableDefs = append(variableDefs, plan.Variables.ForName(variable))
 		// and the value if it exists
 		if value, ok := queryVariables[variable]; ok {
-			fmt.Println("found value")
 			variables[variable] = value
 		}
-		fmt.Println(variableDefs)
 	}
 
 	// generate the query that we have to send for this step
