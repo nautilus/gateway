@@ -15,6 +15,28 @@ type QueryPOSTBody struct {
 	OperationName string                 `json:"operationName"`
 }
 
+func writeErrors(errs []error, w http.ResponseWriter) {
+	// the final list of formatted errors
+	finalList := []map[string]interface{}{}
+
+	for _, err := range errs {
+		finalList = append(finalList, map[string]interface{}{
+			"message": err.Error(),
+		})
+	}
+
+	response, err := json.Marshal(map[string]interface{}{
+		"errors": finalList,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		writeErrors([]error{err}, w)
+		return
+	}
+
+	w.Write(response)
+}
+
 // GraphQLHandler returns a http.HandlerFunc that should be used as the
 // primary endpoint for the gateway API. The endpoint will respond
 // to queries on both GET and POST requests.
@@ -69,26 +91,22 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 
 	// if there was an error retrieving the payload
 	if payloadErr != nil {
-		// set the right header
 		w.WriteHeader(http.StatusUnprocessableEntity)
-
-		// send the error body back
-		fmt.Fprint(w, payloadErr.Error())
+		writeErrors([]error{payloadErr}, w)
 		return
 	}
 
 	// if we dont have a query
 	if payload.Query == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprint(w, "Could not find a query in request payload.")
+		writeErrors([]error{errors.New("could not find a query in request payload")}, w)
 		return
 	}
 
 	// fire the query
-	result, err := g.Execute(payload.Query)
+	result, err := g.Execute(payload.Query, payload.Variables)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Encountered error during execution: %s", err.Error())
+		writeErrors([]error{err}, w)
 		return
 	}
 
@@ -97,7 +115,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Encountered error marshaling response: %s", err.Error())
+		writeErrors([]error{err}, w)
 		return
 	}
 

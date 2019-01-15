@@ -19,11 +19,13 @@ type QueryPlanStep struct {
 	SelectionSet   ast.SelectionSet
 	InsertionPoint []string
 	Then           []*QueryPlanStep
+	Variables      Set
 }
 
 // QueryPlan is the full plan to resolve a particular query
 type QueryPlan struct {
 	Operation string
+	Variables ast.VariableDefinitionList
 	RootStep  *QueryPlanStep
 }
 
@@ -66,6 +68,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// each operation results in a new query
 		plan := &QueryPlan{
 			Operation: operation.Name,
+			Variables: operation.VariableDefinitions,
 			RootStep:  &QueryPlanStep{},
 		}
 
@@ -104,6 +107,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		// we are garunteed at least one query
 		stepWg.Add(1)
 
+		// make sure that we apply any fragments before we start planning
 		selectionSet, err := plannerApplyFragments(operation.SelectionSet, parsedQuery.Fragments)
 		if err != nil {
 			return nil, err
@@ -111,10 +115,8 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 		// start a new step
 		stepCh <- &newQueryPlanStepPayload{
-			// make sure that we apply any fragments before we start planning
-			SelectionSet: selectionSet,
-			// SelectionSet:   operation.SelectionSet,
-			ParentType:     "Query",
+			SelectionSet:   selectionSet,
+			ParentType:     operationType,
 			ServiceName:    currentLocation,
 			Parent:         plan.RootStep,
 			InsertionPoint: []string{},
@@ -133,6 +135,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 						ParentType:     payload.ParentType,
 						SelectionSet:   payload.SelectionSet,
 						InsertionPoint: payload.InsertionPoint,
+						Variables:      Set{},
 					}
 
 					// if there is a parent to this query
@@ -273,10 +276,13 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 	insertionPoint = append(insertionPoint, config.field.Name)
 
 	log.Debug(fmt.Sprintf("Insertion point: %v", insertionPoint))
-	// if the location of this targetField is the same as its parent
+	// if the location of this targetField is the same as its parent then we have to include it in the
+	// selection set that we are building up.
 	if config.parentLocation == currentLocation {
 		log.Debug("same service")
-		// if the targetField has subtargetFields and it cannot be added naively to the parent
+
+		// if the targetField has a selection, it cannot be added naively to the parent. We first have to
+		// modify its selection set to only include fields that are at the same location as the parent.
 		if len(config.field.SelectionSet) > 0 {
 			log.Debug("found a thing with a selection")
 			// we are going to redefine this fields selection set
@@ -313,8 +319,14 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 		} else {
 			log.Debug("found a scalar")
 		}
+		// the field is now safe to add to the parents selection set
 
-		// we should include this field regardless
+		// any variables that this field depends on need to be added to the steps list of variables
+		for _, variable := range plannerExtractVariables(config.field.Arguments) {
+			config.step.Variables.Add(variable)
+		}
+
+		// return the field to be included in the parents selection
 		return config.field, nil
 	}
 
@@ -332,13 +344,26 @@ func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selectio
 		Parent:         config.step,
 		InsertionPoint: insertionPoint,
 	}
-	// we didn't encounter an error and dont have any fields to add
+	// we didn't encounter an error and dont have any fields to add to the parent
 	return nil, nil
 }
 
 func coreFieldType(source *ast.Field) *ast.Type {
 	// if we are looking at a
 	return source.Definition.Type
+}
+
+// Set is a set
+type Set map[string]bool
+
+// Add adds the item to the set
+func (set Set) Add(k string) {
+	set[k] = true
+}
+
+// Remove removes the item from the set
+func (set Set) Remove(k string) {
+	delete(set, k)
 }
 
 // collectedFields are representations of a field with the list of selection sets that
@@ -397,6 +422,7 @@ func plannerCollectFields(sources []ast.SelectionSet, fragments ast.FragmentDefi
 		for _, selection := range selectionSet {
 			// a selection can be one of 3 things: a field, a fragment reference, or an inline fragment
 			switch selection := selection.(type) {
+
 			// a selection could either have a collected field or a real one. either way, we need to add the selection
 			// set to the entry in the map
 			case *ast.Field, *collectedField:
@@ -415,40 +441,33 @@ func plannerCollectFields(sources []ast.SelectionSet, fragments ast.FragmentDefi
 				// add the fields selection set to the list
 				collected.NestedSelections = append(collected.NestedSelections, selectedField.SelectionSet)
 
-			case *ast.InlineFragment:
+			// fragment selections need to be unwrapped and added to the final selection
+			case *ast.InlineFragment, *ast.FragmentSpread:
+				var selectionSet ast.SelectionSet
+
+				// inline fragments
+				if inlineFragment, ok := selection.(*ast.InlineFragment); ok {
+					selectionSet = inlineFragment.SelectionSet
+
+					// fragment spread
+				} else if fragment, ok := selection.(*ast.FragmentSpread); ok {
+					// grab the definition for the fragment
+					definition := fragments.ForName(fragment.Name)
+					if definition == nil {
+						// this shouldn't happen since validation has already ran
+						return nil, fmt.Errorf("Could not find fragment definition: %s", fragment.Name)
+					}
+
+					selectionSet = definition.SelectionSet
+				}
+
 				// fields underneath the inline fragment could be fragments themselves
-				fields, err := plannerCollectFields([]ast.SelectionSet{selection.SelectionSet}, fragments)
+				fields, err := plannerCollectFields([]ast.SelectionSet{selectionSet}, fragments)
 				if err != nil {
 					return nil, err
 				}
 
 				// each field in the inline fragment needs to be added to the selection
-				for _, fragmentSelection := range *fields {
-					// add the selection from the field to our accumulator
-					collected := selectedFields.GetOrCreateForAlias(fragmentSelection.Alias, func() *collectedField {
-						return fragmentSelection
-					})
-
-					// add the fragment selection set to the list of selections for the field
-					collected.NestedSelections = append(collected.NestedSelections, fragmentSelection.SelectionSet)
-				}
-
-			case *ast.FragmentSpread:
-
-				// grab the definition for the fragment
-				definition := fragments.ForName(selection.Name)
-				if definition == nil {
-					// this shouldn't happen since validation has already ran
-					return nil, fmt.Errorf("Could not find fragment definition: %s", selection.Name)
-				}
-
-				// fields underneath the fragment could be fragments themselves
-				fields, err := plannerCollectFields([]ast.SelectionSet{definition.SelectionSet}, fragments)
-				if err != nil {
-					return nil, err
-				}
-
-				// each field in the fragment needs to be added to the selection
 				for _, fragmentSelection := range *fields {
 					// add the selection from the field to our accumulator
 					collected := selectedFields.GetOrCreateForAlias(fragmentSelection.Alias, func() *collectedField {
@@ -484,7 +503,35 @@ func plannerCollectFields(sources []ast.SelectionSet, fragments ast.FragmentDefi
 	return selectedFields, nil
 }
 
-// func plannerApplyFragments(source ast.SelectionSet)
+func plannerExtractVariables(args ast.ArgumentList) []string {
+	// the list of variables
+	variables := []string{}
+
+	// each argument could contain variables
+	for _, arg := range args {
+		plannerExtractVariablesFromValues(&variables, arg.Value)
+	}
+
+	// return the list
+	return variables
+}
+
+func plannerExtractVariablesFromValues(accumulator *[]string, value *ast.Value) {
+	// we have to look out for a few different kinds of values
+	switch value.Kind {
+	// if the value is a reference to a variable
+	case ast.Variable:
+		// add the ference to the list
+		*accumulator = append(*accumulator, value.Raw)
+	// the value could be a list
+	case ast.ListValue, ast.ObjectValue:
+		// each entry in the list or object could contribute a variable
+		for _, child := range value.Children {
+			plannerExtractVariablesFromValues(accumulator, child.Value)
+		}
+	}
+}
+
 func selectedFields(source ast.SelectionSet) []*ast.Field {
 	// build up a list of fields
 	fields := []*ast.Field{}

@@ -26,7 +26,7 @@ func TestExecutor_plansOfOne(t *testing.T) {
 						},
 					},
 					// return a known value we can test against
-					Queryer: &graphql.MockQueryer{map[string]interface{}{
+					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 						"values": []string{
 							"hello",
 							"world",
@@ -35,7 +35,7 @@ func TestExecutor_plansOfOne(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, map[string]interface{}{})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 	}
@@ -88,7 +88,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 						},
 					},
 					// return a known value we can test against
-					Queryer: &graphql.MockQueryer{map[string]interface{}{
+					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 						"user": map[string]interface{}{
 							"id":        "1",
 							"firstName": "hello",
@@ -115,7 +115,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 									},
 								},
 							},
-							Queryer: &graphql.MockQueryer{map[string]interface{}{
+							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 								"node": map[string]interface{}{
 									"favoriteCatPhoto": map[string]interface{}{
 										"url": "hello world",
@@ -127,7 +127,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, map[string]interface{}{})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 		return
@@ -162,7 +162,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 					ParentType:     "Query",
 					InsertionPoint: []string{},
 					// return a known value we can test against
-					Queryer: &graphql.MockQueryer{map[string]interface{}{
+					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 						"user": map[string]interface{}{
 							"id":        "1",
 							"firstName": "hello",
@@ -190,7 +190,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 								},
 							},
 							// return a known value we can test against
-							Queryer: &graphql.MockQueryer{map[string]interface{}{
+							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 								"user": map[string]interface{}{
 									"id":        "1",
 									"firstName": "hello",
@@ -201,7 +201,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, map[string]interface{}{})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 		return
@@ -276,7 +276,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 					// planner will actually leave behind a queryer that hits service A
 					// for testing we can just return a known value
-					Queryer: &graphql.MockQueryer{map[string]interface{}{
+					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 						"users": []interface{}{
 							map[string]interface{}{
 								"firstName": "hello",
@@ -337,7 +337,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							},
 							// planner will actually leave behind a queryer that hits service B
 							// for testing we can just return a known value
-							Queryer: &graphql.MockQueryer{map[string]interface{}{
+							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 								"node": map[string]interface{}{
 									"photoGallery": []interface{}{
 										map[string]interface{}{
@@ -366,7 +366,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 									},
 									// planner will actually leave behind a queryer that hits service B
 									// for testing we can just return a known value
-									Queryer: &graphql.MockQueryer{map[string]interface{}{
+									Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 										"node": map[string]interface{}{
 											"firstName": followerName,
 										},
@@ -378,7 +378,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, map[string]interface{}{})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 		return
@@ -462,6 +462,61 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 	}, result)
 }
 
+func TestExecutor_threadsVariables(t *testing.T) {
+	// the variables we'll be threading through
+	fullVariables := map[string]interface{}{
+		"hello":   "world",
+		"goodbye": "moon",
+	}
+
+	fullVariableDefs := ast.VariableDefinitionList{
+		&ast.VariableDefinition{
+			Variable: "hello",
+			Type:     ast.NamedType("ID", &ast.Position{}),
+		},
+		&ast.VariableDefinition{
+			Variable: "goodbye",
+			Type:     ast.NamedType("ID", &ast.Position{}),
+		},
+	}
+
+	// build a query plan that the executor will follow
+	_, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+		Variables: fullVariableDefs,
+		RootStep: &QueryPlanStep{
+			Then: []*QueryPlanStep{
+				{
+					// this is equivalent to
+					// query { values }
+					ParentType: "Query",
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "values",
+							Definition: &ast.FieldDefinition{
+								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+							},
+						},
+					},
+					Variables: Set{"hello": true},
+					// return a known value we can test against
+					Queryer: &graphql.QueryerFunc{
+						func(input *graphql.QueryInput) (interface{}, error) {
+							// make sure that we got the right variable inputs
+							assert.Equal(t, map[string]interface{}{"hello": "world"}, input.Variables)
+							// and definitions
+							assert.Equal(t, ast.VariableDefinitionList{fullVariableDefs[0]}, input.QueryDocument.VariableDefinitions)
+
+							return map[string]interface{}{"values": []string{"world"}}, nil
+						}},
+				},
+			},
+		},
+	}, fullVariables)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+}
 func TestFindInsertionPoint_rootList(t *testing.T) {
 	// in this example, the step before would have just resolved (need to be inserted at)
 	// ["users", "photoGallery"]. There would be an id field underneath each photo in the list
@@ -575,7 +630,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := findInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
+	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -827,8 +882,15 @@ func TestExecutorBuildQuery_query(t *testing.T) {
 		},
 	}
 
+	variables := ast.VariableDefinitionList{
+		{
+			Variable: "Foo",
+			Type:     ast.NamedType("String", &ast.Position{}),
+		},
+	}
+
 	// the query we're building goes to the top level Query object
-	operation := executorBuildQuery("Query", "", selection)
+	operation := executorBuildQuery("Query", "", variables, selection)
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -836,6 +898,7 @@ func TestExecutorBuildQuery_query(t *testing.T) {
 
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operation)
+	assert.Equal(t, variables, operation.VariableDefinitions)
 
 	// the selection set should be the same as what we passed in
 	assert.Equal(t, selection, operation.SelectionSet)
@@ -867,7 +930,7 @@ func TestExecutorBuildQuery_node(t *testing.T) {
 	}
 
 	// the query we're building goes to the User object
-	operation := executorBuildQuery(objType, objID, selection)
+	operation := executorBuildQuery(objType, objID, ast.VariableDefinitionList{}, selection)
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -1025,7 +1088,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := findInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
+	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
 	if err != nil {
 		t.Error(t, err)
 		return

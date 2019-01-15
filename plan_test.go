@@ -313,6 +313,165 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, "firstName", thirdSubSelectionField.Name)
 }
 
+func TestPlanQuery_stepVariables(t *testing.T) {
+	// the query to test
+	// query($id: ID!, $category: String!) {
+	// 		user(id: $id) {
+	// 			favoriteCatPhoto(category: $category) {
+	// 				URL
+	// 			}
+	// 		}
+	// }
+	//
+	// it should result in one query that depends on $id and the second one
+	// which requires $category and $id
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "user", "url1")
+	locations.RegisterURL("User", "favoriteCatPhoto", "url2")
+	locations.RegisterURL("CatPhoto", "URL", "url2")
+
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			favoriteCatPhoto(category: String!, owner: ID!): CatPhoto!
+		}
+
+		type CatPhoto {
+			URL: String!
+		}
+
+		type Query {
+			user(id: ID!): User
+		}
+	`)
+
+	// compute the plan for a query that just hits one service
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query($id: ID!, $category: String!) {
+			user(id: $id) {
+				favoriteCatPhoto(category: $category, owner:$id) {
+					URL
+				}
+			}
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when building schema: %s", err.Error())
+		return
+	}
+
+	// there is only one step
+	firstStep := plans[0].RootStep.Then[0]
+	// make sure it has the right variable dependencies
+	assert.Equal(t, Set{"id": true}, firstStep.Variables)
+
+	// there is a step after
+	nextStep := firstStep.Then[0]
+	// make sure it has the right variable dependencies
+	assert.Equal(t, Set{"category": true, "id": true}, nextStep.Variables)
+}
+
+func TestExtractVariables(t *testing.T) {
+	table := []struct {
+		Name      string
+		Arguments ast.ArgumentList
+		Variables []string
+	}{
+		//  user(id: $id, name:$name) should extract ["id", "name"]
+		{
+			Name:      "Top Level arugments",
+			Variables: []string{"id", "name"},
+			Arguments: ast.ArgumentList{
+				&ast.Argument{
+					Name: "id",
+					Value: &ast.Value{
+						Kind: ast.Variable,
+						Raw:  "id",
+					},
+				},
+				&ast.Argument{
+					Name: "name",
+					Value: &ast.Value{
+						Kind: ast.Variable,
+						Raw:  "name",
+					},
+				},
+			},
+		},
+		//  catPhotos(categories: [$a, "foo", $b]) should extract ["a", "b"]
+		{
+			Name:      "List nested arugments",
+			Variables: []string{"a", "b"},
+			Arguments: ast.ArgumentList{
+				&ast.Argument{
+					Name: "category",
+					Value: &ast.Value{
+						Kind: ast.ListValue,
+						Children: ast.ChildValueList{
+							&ast.ChildValue{
+								Value: &ast.Value{
+									Kind: ast.Variable,
+									Raw:  "a",
+								},
+							},
+							&ast.ChildValue{
+								Value: &ast.Value{
+									Kind: ast.StringValue,
+									Raw:  "foo",
+								},
+							},
+							&ast.ChildValue{
+								Value: &ast.Value{
+									Kind: ast.Variable,
+									Raw:  "b",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		//  users(favoriteMovieFilter: {category: $targetCategory, rating: $targetRating}) should extract ["targetCategory", "targetRating"]
+		{
+			Name:      "Object nested arguments",
+			Variables: []string{"targetCategory", "targetRating"},
+			Arguments: ast.ArgumentList{
+				&ast.Argument{
+					Name: "favoriteMovieFilter",
+					Value: &ast.Value{
+						Kind: ast.ObjectValue,
+						Children: ast.ChildValueList{
+							&ast.ChildValue{
+								Name: "category",
+								Value: &ast.Value{
+									Kind: ast.Variable,
+									Raw:  "targetCategory",
+								},
+							},
+							&ast.ChildValue{
+								Name: "rating",
+								Value: &ast.Value{
+									Kind: ast.Variable,
+									Raw:  "targetRating",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, row := range table {
+		t.Run(row.Name, func(t *testing.T) {
+			assert.Equal(t, row.Variables, plannerExtractVariables(row.Arguments))
+		})
+	}
+}
+
 func TestApplyFragments_mergesFragments(t *testing.T) {
 	// a selection set representing
 	// {
@@ -537,14 +696,5 @@ func TestPlanQuery_duplicateFieldsOnEither(t *testing.T) {
 
 func TestPlanQuery_groupsConflictingFields(t *testing.T) {
 	// if I can find a field in 4 different services, look for the one I"m already going to
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_combineFragments(t *testing.T) {
-	// fragments could bring in different fields from different services
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_threadVariables(t *testing.T) {
 	t.Skip("Not implemented")
 }

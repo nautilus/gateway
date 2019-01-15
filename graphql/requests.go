@@ -33,17 +33,33 @@ type Queryer interface {
 	Query(*QueryInput, interface{}) error
 }
 
-// MockQueryer responds with pre-defined known values when executing a query
-type MockQueryer struct {
+// MockSuccessQueryer responds with pre-defined value when executing a query
+type MockSuccessQueryer struct {
 	Value interface{}
 }
 
 // Query looks up the name of the query in the map of responses and returns the value
-func (q *MockQueryer) Query(input *QueryInput, receiver interface{}) error {
+func (q *MockSuccessQueryer) Query(input *QueryInput, receiver interface{}) error {
 	// assume the mock is writing the same kind as the receiver
 	reflect.ValueOf(receiver).Elem().Set(reflect.ValueOf(q.Value))
 
 	// this will panic if something goes wrong
+	return nil
+}
+
+// QueryerFunc responds to the query by calling the provided function
+type QueryerFunc struct {
+	Fn func(*QueryInput) (interface{}, error)
+}
+
+func (q *QueryerFunc) Query(input *QueryInput, receiver interface{}) error {
+	response, err := q.Fn(input)
+	if err != nil {
+		return err
+	}
+
+	// assume the mock is writing the same kind as the receiver
+	reflect.ValueOf(receiver).Elem().Set(reflect.ValueOf(response))
 	return nil
 }
 
