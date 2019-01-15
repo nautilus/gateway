@@ -324,7 +324,7 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	// }
 	//
 	// it should result in one query that depends on $id and the second one
-	// which requires $category
+	// which requires $category and $id
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
@@ -334,7 +334,7 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 
 	schema, _ := graphql.LoadSchema(`
 		type User {
-			favoriteCatPhoto(category: String!): CatPhoto!
+			favoriteCatPhoto(category: String!, owner: ID!): CatPhoto!
 		}
 
 		type CatPhoto {
@@ -350,7 +350,7 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	plans, err := (&MinQueriesPlanner{}).Plan(`
 		query($id: ID!, $category: String!) {
 			user(id: $id) {
-				favoriteCatPhoto(category: $category) {
+				favoriteCatPhoto(category: $category, owner:$id) {
 					URL
 				}
 			}
@@ -371,7 +371,7 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	// there is a step after
 	nextStep := firstStep.Then[0]
 	// make sure it has the right variable dependencies
-	assert.Equal(t, Set{"category": true}, nextStep.Variables)
+	assert.Equal(t, Set{"category": true, "id": true}, nextStep.Variables)
 }
 
 func TestExtractVariables(t *testing.T) {
