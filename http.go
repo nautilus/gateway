@@ -50,7 +50,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// if we got a GET request
 	if r.Method == http.MethodGet {
 		parameters := r.URL.Query()
-		// get the query paramter
+		// get the query parameter
 		if query, ok := parameters["query"]; ok {
 			payload.Query = query[0]
 

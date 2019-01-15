@@ -178,7 +178,7 @@ func TestIntrospectQuery_multipleTypes(t *testing.T) {
 
 	// make sure that the schema has both types
 	if len(schema.Types) != 2 {
-		t.Errorf("Encounted incorrect number of types: %v", len(schema.Types))
+		t.Errorf("Encountered incorrect number of types: %v", len(schema.Types))
 		return
 	}
 

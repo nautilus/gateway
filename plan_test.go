@@ -382,7 +382,7 @@ func TestExtractVariables(t *testing.T) {
 	}{
 		//  user(id: $id, name:$name) should extract ["id", "name"]
 		{
-			Name:      "Top Level arugments",
+			Name:      "Top Level arguments",
 			Variables: []string{"id", "name"},
 			Arguments: ast.ArgumentList{
 				&ast.Argument{
@@ -403,7 +403,7 @@ func TestExtractVariables(t *testing.T) {
 		},
 		//  catPhotos(categories: [$a, "foo", $b]) should extract ["a", "b"]
 		{
-			Name:      "List nested arugments",
+			Name:      "List nested arguments",
 			Variables: []string{"a", "b"},
 			Arguments: ast.ArgumentList{
 				&ast.Argument{
