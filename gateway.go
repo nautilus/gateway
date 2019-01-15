@@ -24,7 +24,7 @@ type Gateway struct {
 }
 
 // Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(query string) (map[string]interface{}, error) {
+func (g *Gateway) Execute(query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	// generate a query plan for the query
 	plan, err := g.planner.Plan(query, g.schema, g.fieldURLs)
 	if err != nil {
@@ -33,7 +33,7 @@ func (g *Gateway) Execute(query string) (map[string]interface{}, error) {
 
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	return g.executor.Execute(plan[0])
+	return g.executor.Execute(plan[0], variables)
 }
 
 // New instantiates a new schema with the required stuffs.

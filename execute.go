@@ -14,7 +14,7 @@ import (
 // Executor is responsible for executing a query plan against the remote
 // schemas and returning the result
 type Executor interface {
-	Execute(*QueryPlan) (map[string]interface{}, error)
+	Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
 }
 
 // ParallelExecutor executes the given query plan by starting at the root of the plan and
@@ -28,7 +28,7 @@ type queryExecutionResult struct {
 }
 
 // Execute returns the result of the query plan
-func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface{}, error) {
+func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -55,7 +55,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface
 	// the root step could have multiple steps that have to happen
 	for _, step := range plan.RootStep.Then {
 		stepWg.Add(1)
-		go executeStep(step, []string{}, resultCh, errCh, stepWg)
+		go executeStep(plan, step, []string{}, resultCh, errCh, stepWg)
 	}
 
 	// start a goroutine to add results to the list
@@ -138,7 +138,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan) (map[string]interface
 	}
 }
 
-func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan queryExecutionResult, errCh chan error, stepWg *sync.WaitGroup) {
+func executeStep(plan *QueryPlan, step *QueryPlanStep, insertionPoint []string, resultCh chan queryExecutionResult, errCh chan error, stepWg *sync.WaitGroup) {
 	log.Debug("")
 	log.Debug("Executing step to be inserted in ", step.ParentType, " ", insertionPoint)
 
@@ -214,8 +214,22 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 		// reassign the id
 		id = pointData.ID
 	}
+	// the list of variables and their definitions that pertain to this query
+	variableDefs := ast.VariableDefinitionList{}
+	variables := map[string]interface{}{}
+
+	// we need to grab the variable definitions and values for each variable in the step
+	for variable := range step.Variables {
+		// add the definition
+		variableDefs = append(variableDefs, plan.Variables.ForName(variable))
+		// and the value if it exists
+		if value, ok := variables[variable]; ok {
+			variables[variable] = value
+		}
+	}
+
 	// generate the query that we have to send for this step
-	query := executorBuildQuery(step.ParentType, id, step.SelectionSet)
+	query := executorBuildQuery(step.ParentType, id, variableDefs, step.SelectionSet)
 	queryStr, err := graphql.PrintQuery(query)
 	if err != nil {
 		errCh <- err
@@ -232,6 +246,7 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 	err = step.Queryer.Query(&graphql.QueryInput{
 		Query:         queryStr,
 		QueryDocument: query,
+		Variables:     variables,
 	}, &queryResult)
 	if err != nil {
 		errCh <- err
@@ -265,7 +280,7 @@ func executeStep(step *QueryPlanStep, insertionPoint []string, resultCh chan que
 			for _, insertionPoint := range insertPoints {
 				log.Info("Spawn ", insertionPoint)
 				stepWg.Add(1)
-				go executeStep(dependent, insertionPoint, resultCh, errCh, stepWg)
+				go executeStep(plan, dependent, insertionPoint, resultCh, errCh, stepWg)
 			}
 		}
 	}
@@ -682,11 +697,12 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 	}, nil
 }
 
-func executorBuildQuery(parentType string, parentID string, selectionSet ast.SelectionSet) *ast.OperationDefinition {
+func executorBuildQuery(parentType string, parentID string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet) *ast.OperationDefinition {
 	log.Debug("Querying ", parentType, " ", parentID)
 	// build up an operation for the query
 	operation := &ast.OperationDefinition{
-		Operation: ast.Query,
+		Operation:           ast.Query,
+		VariableDefinitions: variables,
 	}
 
 	// if we are querying the top level Query all we need to do is add

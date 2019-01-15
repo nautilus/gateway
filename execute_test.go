@@ -827,8 +827,15 @@ func TestExecutorBuildQuery_query(t *testing.T) {
 		},
 	}
 
+	variables := ast.VariableDefinitionList{
+		{
+			Variable: "Foo",
+			Type:     ast.NamedType("String", &ast.Position{}),
+		},
+	}
+
 	// the query we're building goes to the top level Query object
-	operation := executorBuildQuery("Query", "", selection)
+	operation := executorBuildQuery("Query", "", variables, selection)
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -836,6 +843,7 @@ func TestExecutorBuildQuery_query(t *testing.T) {
 
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operation)
+	assert.Equal(t, variables, operation.VariableDefinitions)
 
 	// the selection set should be the same as what we passed in
 	assert.Equal(t, selection, operation.SelectionSet)
@@ -867,7 +875,7 @@ func TestExecutorBuildQuery_node(t *testing.T) {
 	}
 
 	// the query we're building goes to the User object
-	operation := executorBuildQuery(objType, objID, selection)
+	operation := executorBuildQuery(objType, objID, ast.VariableDefinitionList{}, selection)
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return

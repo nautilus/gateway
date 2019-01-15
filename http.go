@@ -104,7 +104,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// fire the query
-	result, err := g.Execute(payload.Query)
+	result, err := g.Execute(payload.Query, payload.Variables)
 	if err != nil {
 		writeErrors([]error{err}, w)
 		return

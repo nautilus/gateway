@@ -354,15 +354,15 @@ func coreFieldType(source *ast.Field) *ast.Type {
 }
 
 // Set is a set
-type Set map[interface{}]bool
+type Set map[string]bool
 
 // Add adds the item to the set
-func (set Set) Add(k interface{}) {
+func (set Set) Add(k string) {
 	set[k] = true
 }
 
 // Remove removes the item from the set
-func (set Set) Remove(k interface{}) {
+func (set Set) Remove(k string) {
 	delete(set, k)
 }
 
