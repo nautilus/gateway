@@ -20,7 +20,7 @@ type User {
 
 A query that looks like:
 ```gql
-query { 
+query AllUsersQuery { 
     allUsers { 
         firstName
         lastName
