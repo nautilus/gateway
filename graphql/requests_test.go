@@ -190,3 +190,21 @@ func TestNewNetworkQueryer(t *testing.T) {
 	// make sure that create a new query renderer saves the right URL
 	assert.Equal(t, "foo", NewNetworkQueryer("foo").URL)
 }
+
+func TestQueryerFunc(t *testing.T) {
+	expected := map[string]interface{}{"hello": "world"}
+
+	queryer := QueryerFunc{
+		func(*QueryInput) (interface{}, error) {
+			return expected, nil
+		},
+	}
+
+	// a place to write the result
+	result := map[string]interface{}{}
+
+	queryer.Query(&QueryInput{}, &result)
+
+	// make sure we copied the right result
+	assert.Equal(t, expected, result)
+}
