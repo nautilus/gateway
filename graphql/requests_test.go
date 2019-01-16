@@ -93,12 +93,10 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 	// the table for the tests
 	for _, row := range []struct {
 		Message    string
-		HasError   bool
 		ErrorShape interface{}
 	}{
 		{
 			"Well Structured Error",
-			true,
 			[]map[string]interface{}{
 				{
 					"message": "message",
@@ -107,24 +105,20 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 		},
 		{
 			"Errors Not Lists",
-			true,
 			map[string]interface{}{
 				"message": "message",
 			},
 		},
 		{
 			"Errors Lists of Not Strings",
-			true,
 			[]string{"hello"},
 		},
 		{
 			"Errors No messages",
-			true,
 			[]map[string]interface{}{},
 		},
 		{
 			"Message not string",
-			true,
 			[]map[string]interface{}{
 				{
 					"message": true,
@@ -133,7 +127,6 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 		},
 		{
 			"No Errors",
-			false,
 			nil,
 		},
 	} {
@@ -191,7 +184,7 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 			err := queryer.Query(&QueryInput{Query: query}, &result)
 
 			// if we're supposed to hav ean error
-			if row.HasError {
+			if row.ErrorShape != nil {
 				assert.NotNil(t, err)
 			} else {
 				assert.Nil(t, err)
