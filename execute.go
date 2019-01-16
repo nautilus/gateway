@@ -191,13 +191,19 @@ func executeStep(
 
 	// the id of the object we are query is defined by the last step in the realized insertion point
 	id := ""
-	if len(insertionPoint) > 1 {
-		head := insertionPoint[max(len(insertionPoint)-2, 0)]
+	if len(insertionPoint) > 0 {
+		head := insertionPoint[max(len(insertionPoint)-1, 0)]
 
 		// get the data of the point
 		pointData, err := executorGetPointData(head)
 		if err != nil {
 			errCh <- err
+			return
+		}
+
+		// if we dont have an id
+		if pointData.ID == "" {
+			errCh <- fmt.Errorf("Could not find id in path")
 			return
 		}
 
@@ -225,7 +231,7 @@ func executeStep(
 		errCh <- err
 		return
 	}
-	log.Debug("Sending network query: ", queryStr)
+	log.Debug("Sending network query: ", queryStr, "id: ", id)
 	// if there is no queryer
 	if step.Queryer == nil {
 		errCh <- errors.New("could not find queryer for step")
@@ -573,7 +579,7 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 }
 
 func executorInsertObject(target map[string]interface{}, path []string, value interface{}) error {
-	log.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
+	// log.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
 	if len(path) > 0 {
 		// a pointer to the objects we are modifying
 		obj, err := executorExtractValue(target, path)
