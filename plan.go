@@ -154,46 +154,29 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					log.Debug("")
 					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery (%v) @ %v \n", step.ParentType, strings.Join(selectionNames, ","), payload.InsertionPoint))
 
-					// the list of root selection steps
-					selectionSet := ast.SelectionSet{}
-
-					// for each field in the
-					for _, selectedField := range selectedFields(step.SelectionSet) {
-						log.Debug("extracting selection ", selectedField.Name)
-						// we always ignore the latest insertion point since we will add it to the list
-						// in the extracts
-						insertionPoint := []string{}
-						if len(payload.InsertionPoint) != 0 {
-							insertionPoint = payload.InsertionPoint[:len(payload.InsertionPoint)-1]
-						}
-
-						// we are going to start walking down the operations selection set and let
-						// the steps of the walk add any necessary selectedFields
-						newSelection, err := p.extractSelection(&extractSelectionConfig{
-							stepCh:         stepCh,
-							stepWg:         stepWg,
-							locations:      locations,
-							parentLocation: payload.ServiceName,
-							parentType:     step.ParentType,
-							field:          selectedField,
-							step:           step,
-							insertionPoint: insertionPoint,
-						})
-						if err != nil {
-							errCh <- err
-							continue SelectLoop
-						}
-
-						// if some of the fields are from the same location as the field on the operation
-						if newSelection != nil {
-							// we have a selection set from one of the root operation fields in the same location
-							// so add it to the query we are sending to the service
-							selectionSet = append(selectionSet, newSelection)
-						}
+					// we are going to start walking down the operations selection set and let
+					// the steps of the walk add any necessary selectedFields
+					newSelection, err := p.extractSelection(&extractSelectionConfig{
+						stepCh:         stepCh,
+						stepWg:         stepWg,
+						locations:      locations,
+						parentLocation: payload.ServiceName,
+						parentType:     step.ParentType,
+						selection:      step.SelectionSet,
+						step:           step,
+						insertionPoint: payload.InsertionPoint,
+					})
+					if err != nil {
+						errCh <- err
+						continue SelectLoop
 					}
 
-					// assign the new selection set
-					step.SelectionSet = selectionSet
+					// if some of the fields are from the same location as the field on the operation
+					if newSelection != nil {
+						// we have a selection set from one of the root operation fields in the same location
+						// so add it to the query we are sending to the service
+						step.SelectionSet = newSelection
+					}
 
 					// we're done processing this step
 					stepWg.Done()
@@ -248,104 +231,143 @@ type extractSelectionConfig struct {
 	parentLocation string
 	parentType     string
 	step           *QueryPlanStep
-	field          *ast.Field
+	selection      ast.SelectionSet
 	insertionPoint []string
 }
 
-func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.Selection, error) {
-	// look up the current location
-	possibleLocations, err := config.locations.URLFor(config.parentType, config.field.Name)
-	if err != nil {
-		return nil, err
+func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.SelectionSet, error) {
+	// in order to group together fields in as few queries as possible, we need to group
+	// the selection set by the location
+	locationFields := map[string]ast.SelectionSet{}
+	// we have to pass over this list twice so we can place selections that can go in more than one place
+	fieldsLeft := []*ast.Field{}
+
+	for _, field := range selectedFields(config.selection) {
+		// look up the location for this field
+		possibleLocations, err := config.locations.URLFor(config.parentType, field.Name)
+		if err != nil {
+			return nil, err
+		}
+
+		// if this field can only be found in one location
+		if len(possibleLocations) == 1 {
+			locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
+			// the field can be found in many locations
+		} else {
+			// add the field to fields for second pass
+			fieldsLeft = append(fieldsLeft, field)
+		}
 	}
 
-	// grab the current one
-	currentLocation := possibleLocations[0]
+	// each field that can go in more than one spot should be "favored" to go in the same location as the parent
+FieldLoop:
+	for _, field := range fieldsLeft {
+		// look up the location for this field
+		possibleLocations, err := config.locations.URLFor(config.parentType, field.Name)
+		if err != nil {
+			return nil, err
+		}
 
-	// get the current type we are resolving
-	currentType := coreFieldType(config.field).Name()
+		// look to see if the current location is one of the possible locations
+		for _, location := range possibleLocations {
+			// if the location is the same as the parent
+			if location == config.parentLocation {
+				// assign this field to the parents entry
+				locationFields[location] = append(locationFields[location], field)
+				// we're done with this field
+				continue FieldLoop
+			}
+		}
+
+		// if we got here then this field can be found in multiple services that are not the parent
+		// for now, just use the first one
+		locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
+	}
 
 	log.Debug("-----")
-	log.Debug("Looking at: ", config.field.Name)
 	log.Debug("Parent location: ", config.parentLocation)
-	log.Debug("Current location: ", currentLocation)
+	log.Debug("Locations: ", locationFields)
 
-	// the insertion point for this field is the previous one with the new field name
-	insertionPoint := make([]string, len(config.insertionPoint))
-	copy(insertionPoint, config.insertionPoint)
-	insertionPoint = append(insertionPoint, config.field.Name)
+	// we have to make sure we spawn any more goroutines before this one terminates. This means that
+	// we first have to look at any locations that are not the current one
+	for location, fields := range locationFields {
+		if location == config.parentLocation {
+			continue
+		}
 
-	log.Debug(fmt.Sprintf("Insertion point: %v", insertionPoint))
-	// if the location of this targetField is the same as its parent then we have to include it in the
-	// selection set that we are building up.
-	if config.parentLocation == currentLocation {
-		log.Debug("same service")
+		// we are dealing with a selection to another location that isn't the current one
+		log.Debug(fmt.Sprintf("Adding the new step to resolve %s @ %v. Insertion point: %v\n", config.parentType, location, config.insertionPoint))
 
+		// since we're adding another step we need to wait for at least one more goroutine to finish processing
+		config.stepWg.Add(1)
+
+		// add the new step
+		config.stepCh <- &newQueryPlanStepPayload{
+			ServiceName:    location,
+			ParentType:     config.parentType,
+			SelectionSet:   fields,
+			Parent:         config.step,
+			InsertionPoint: config.insertionPoint,
+		}
+	}
+
+	// now we have to generate a selection set for fields that are coming from the same location as the parent
+	currentLocationFields, ok := locationFields[config.parentLocation]
+	if !ok {
+		// there are no fields in the current location so we're done
+		return nil, nil
+
+	}
+
+	// build up a selection set for the parent
+	finalSelection := ast.SelectionSet{}
+
+	// we need to repeat this process for each field in the current location selection set
+	for _, field := range selectedFields(currentLocationFields) {
 		// if the targetField has a selection, it cannot be added naively to the parent. We first have to
 		// modify its selection set to only include fields that are at the same location as the parent.
-		if len(config.field.SelectionSet) > 0 {
-			log.Debug("found a thing with a selection")
-			// we are going to redefine this fields selection set
-			newSelection := ast.SelectionSet{}
+		if len(field.SelectionSet) > 0 {
+			// the insertion point for this field is the previous one with the new field name
+			insertionPoint := make([]string, len(config.insertionPoint))
+			copy(insertionPoint, config.insertionPoint)
+			insertionPoint = append(insertionPoint, field.Alias)
 
-			// get the list of fields underneath the taret field
-			for _, selection := range selectedFields(config.field.SelectionSet) {
-				// add any possible selections provided by selections
-				subSelection, err := p.extractSelection(&extractSelectionConfig{
-					stepCh:         config.stepCh,
-					stepWg:         config.stepWg,
-					step:           config.step,
-					locations:      config.locations,
-					parentLocation: currentLocation,
-					parentType:     currentType,
-					field:          selection,
-					insertionPoint: insertionPoint,
-				})
-				if err != nil {
-					return nil, err
-				}
-
-				// if we got a selection
-				if subSelection != nil {
-					// add it to the list
-					newSelection = append(newSelection, subSelection)
-				}
+			log.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
+			// add any possible selections provided by selections
+			subSelection, err := p.extractSelection(&extractSelectionConfig{
+				stepCh:         config.stepCh,
+				stepWg:         config.stepWg,
+				step:           config.step,
+				locations:      config.locations,
+				parentLocation: config.parentLocation,
+				parentType:     coreFieldType(field).Name(),
+				selection:      field.SelectionSet,
+				insertionPoint: insertionPoint,
+			})
+			if err != nil {
+				return nil, err
 			}
 
-			log.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, config.field.Name, newSelection))
+			log.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, field.Name, subSelection))
 
 			// overwrite the selection set for this selection
-			config.field.SelectionSet = newSelection
+			field.SelectionSet = subSelection
 		} else {
 			log.Debug("found a scalar")
 		}
 		// the field is now safe to add to the parents selection set
 
 		// any variables that this field depends on need to be added to the steps list of variables
-		for _, variable := range plannerExtractVariables(config.field.Arguments) {
+		for _, variable := range plannerExtractVariables(field.Arguments) {
 			config.step.Variables.Add(variable)
 		}
 
-		// return the field to be included in the parents selection
-		return config.field, nil
+		// add it to the list
+		finalSelection = append(finalSelection, field)
 	}
 
-	// we're dealing with a field whose location does not match the parent
-
-	// since we're adding another step we need to track at least one more execution
-	config.stepWg.Add(1)
-	log.Debug(fmt.Sprintf("Adding the new step to resolve %s.%s @%v\n", config.parentType, config.field.Name, currentLocation))
-
-	// add the new step
-	config.stepCh <- &newQueryPlanStepPayload{
-		ServiceName:    currentLocation,
-		ParentType:     config.parentType,
-		SelectionSet:   ast.SelectionSet{config.field},
-		Parent:         config.step,
-		InsertionPoint: insertionPoint,
-	}
-	// we didn't encounter an error and dont have any fields to add to the parent
-	return nil, nil
+	// we should have added every field that needs to be added to this list
+	return finalSelection, nil
 }
 
 func coreFieldType(source *ast.Field) *ast.Type {

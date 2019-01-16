@@ -6,7 +6,9 @@ require (
 	github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883 // indirect
 	github.com/carted/graphql v0.7.6
 	github.com/google/pprof v0.0.0-20181206194817-3ea8567a2e57 // indirect
+	github.com/gorilla/websocket v1.4.0 // indirect
 	github.com/graphql-go/graphql v0.7.7
+	github.com/hashicorp/golang-lru v0.5.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20181102032728-5e5cf60278f6 // indirect
 	github.com/jtolds/gls v4.2.1+incompatible // indirect
 	github.com/kr/pretty v0.1.0 // indirect

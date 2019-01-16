@@ -255,7 +255,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 	secondStep := firstStep.Then[0]
 	// make sure we will insert the step in the right place
-	assert.Equal(t, []string{"allUsers", "catPhotos"}, secondStep.InsertionPoint)
+	assert.Equal(t, []string{"allUsers"}, secondStep.InsertionPoint)
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "User", secondStep.ParentType)
@@ -287,13 +287,16 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 	thirdStep := secondStep.Then[0]
 	// make sure we will insert the step in the right place
-	assert.Equal(t, []string{"allUsers", "catPhotos", "owner"}, thirdStep.InsertionPoint)
+	assert.Equal(t, []string{"allUsers", "catPhotos"}, thirdStep.InsertionPoint)
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "CatPhoto", thirdStep.ParentType)
 	// we should be going to the catePhoto service
 	queryer = thirdStep.Queryer.(*graphql.NetworkQueryer)
 	assert.Equal(t, userLocation, queryer.URL)
+	// make sure we will insert the step in the right place
+	assert.Equal(t, []string{"allUsers", "catPhotos"}, thirdStep.InsertionPoint)
+
 	// we should only want one field selected
 	if len(thirdStep.SelectionSet) != 1 {
 		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(thirdStep.SelectionSet))
@@ -311,6 +314,119 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 	thirdSubSelectionField := thirdSubSelection[0]
 	assert.Equal(t, "firstName", thirdSubSelectionField.Name)
+}
+
+func TestPlanQuery_preferParentLocation(t *testing.T) {
+
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			id: ID!
+		}
+
+		type Query {
+			allUsers: [User!]!
+		}
+	`)
+
+	// the location of the user service
+	userLocation := "user-location"
+	// the location of the cat service
+	catLocation := "cat-location"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "allUsers", userLocation)
+	// add the
+	locations.RegisterURL("User", "id", catLocation)
+	locations.RegisterURL("User", "id", userLocation)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		{
+			allUsers {
+				id
+			}
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when building schema: %s", err.Error())
+		return
+	}
+
+	// there should only be 1 step to this query
+
+	// the first step should have all users
+	firstStep := plans[0].RootStep.Then[0]
+	// make sure we are grabbing values off of Query since its the root
+	assert.Equal(t, "Query", firstStep.ParentType)
+
+	// make sure there's a selection set
+	if len(firstStep.Then) != 0 {
+		t.Errorf("There shouldn't be any dependent step on this one. Found %v.", len(firstStep.Then))
+		return
+	}
+}
+
+func TestPlanQuery_groupSiblings(t *testing.T) {
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			favoriteCatSpecies: String!
+			catPhotos: [CatPhoto!]!
+		}
+
+		type CatPhoto {
+			URL: String!
+		}
+
+		type Query {
+			allUsers: [User!]!
+		}
+	`)
+
+	// the location of the user service
+	userLocation := "user-location"
+	// the location of the cat service
+	catLocation := "cat-location"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "allUsers", userLocation)
+	locations.RegisterURL("User", "favoriteCatSpecies", catLocation)
+	locations.RegisterURL("User", "catPhotos", catLocation)
+	locations.RegisterURL("CatPhoto", "URL", catLocation)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		{
+			allUsers {
+				favoriteCatSpecies
+				catPhotos {
+					URL
+				}
+			}
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when building schema: %s", err.Error())
+		return
+	}
+
+	// there should be 2 steps to this plan.
+	// the first queries Query.allUsers
+	// the second queries User.favoriteCatSpecies and User.catPhotos
+
+	// the first step should have all users
+	firstStep := plans[0].RootStep.Then[0]
+	// make sure we are grabbing values off of Query since its the root
+	assert.Equal(t, "Query", firstStep.ParentType)
+
+	// make sure there's a selection set
+	if len(firstStep.Then) != 1 {
+		t.Errorf("Encountered incorrect number of dependent steps on root. Expected 1 found %v", len(firstStep.Then))
+		return
+	}
 }
 
 func TestPlanQuery_stepVariables(t *testing.T) {
