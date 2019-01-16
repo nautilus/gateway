@@ -216,11 +216,11 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 	// {
 	// 		users {                  	<- Query.services @ serviceA
 	//      	firstName
-	//          friends {
+	//          friends {				<- list
 	//              firstName
-	//              photoGallery {   	<- User.photoGallery @ serviceB
+	//              photoGallery {   	<- list, User.photoGallery @ serviceB
 	// 			    	url
-	// 					followers {
+	// 					followers { .   <- list
 	//                  	firstName	<- User.firstName @ serviceA
 	//                  }
 	// 			    }
@@ -291,11 +291,11 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 								"friends": []interface{}{
 									map[string]interface{}{
 										"firstName": "Jingleheymer",
-										"id":        "1",
+										"id":        "3",
 									},
 									map[string]interface{}{
 										"firstName": "Schmidt",
-										"id":        "2",
+										"id":        "4",
 									},
 								},
 							},
@@ -350,7 +350,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 								// a query to satisfy User.firstName
 								{
 									ParentType:     "User",
-									InsertionPoint: []string{"users", "friends", "photoGallery", "followers", "firstName"},
+									InsertionPoint: []string{"users", "friends", "photoGallery", "followers"},
 									SelectionSet: ast.SelectionSet{
 										&ast.Field{
 											Name: "firstName",
@@ -423,7 +423,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 				"friends": []interface{}{
 					map[string]interface{}{
 						"firstName": "Jingleheymer",
-						"id":        "1",
+						"id":        "3",
 						"photoGallery": []interface{}{
 							map[string]interface{}{
 								"url": photoGalleryURL,
@@ -438,7 +438,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 					map[string]interface{}{
 						"firstName": "Schmidt",
-						"id":        "2",
+						"id":        "4",
 						"photoGallery": []interface{}{
 							map[string]interface{}{
 								"url": photoGalleryURL,
@@ -518,22 +518,22 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 	// of users.photoGallery
 
 	// we want the list of insertion points that point to
-	planInsertionPoint := []string{"users", "photoGallery", "likedBy", "firstName"}
+	planInsertionPoint := []string{"users", "photoGallery", "likedBy"}
 
 	// pretend we are in the middle of stitching a larger object
 	startingPoint := [][]string{}
 
 	// there are 6 total insertion points in this example
 	finalInsertionPoint := [][]string{
-		// photo 0 is liked by 2 users whose firstName we have to resolve
-		{"users:0", "photoGallery:0", "likedBy:0#1", "firstName"},
-		{"users:0", "photoGallery:0", "likedBy:1#2", "firstName"},
-		// photo 1 is liked by 3 users whose firstName we have to resolve
-		{"users:0", "photoGallery:1", "likedBy:0#3", "firstName"},
-		{"users:0", "photoGallery:1", "likedBy:1#4", "firstName"},
-		{"users:0", "photoGallery:1", "likedBy:2#5", "firstName"},
-		// photo 2 is liked by 1 user whose firstName we have to resolve
-		{"users:0", "photoGallery:2", "likedBy:0#6", "firstName"},
+		// photo 0 is liked by 2 users
+		{"users:0", "photoGallery:0", "likedBy:0#1"},
+		{"users:0", "photoGallery:0", "likedBy:1#2"},
+		// photo 1 is liked by 3 users
+		{"users:0", "photoGallery:1", "likedBy:0#3"},
+		{"users:0", "photoGallery:1", "likedBy:1#4"},
+		{"users:0", "photoGallery:1", "likedBy:2#5"},
+		// photo 2 is liked by 1 user
+		{"users:0", "photoGallery:2", "likedBy:0#6"},
 	}
 
 	// the selection we're going to make
@@ -625,7 +625,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
+	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -732,15 +732,15 @@ func TestFindString(t *testing.T) {
 	assert.Equal(t, "3", value)
 }
 
-func TestExecutorInsertObject_insertValue(t *testing.T) {
+func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
 	// the object to mutate
 	source := map[string]interface{}{}
 
 	// the object to insert
-	inserted := "world"
+	inserted := map[string]interface{}{"hello": "world"}
 
 	// insert the string deeeeep down
-	err := executorInsertObject(source, []string{"hello:5#1", "message", "body:2", "hello"}, inserted)
+	err := executorInsertObject(source, []string{"hello:5#1", "message", "body:2"}, inserted)
 	if err != nil {
 		t.Error(err)
 		return
@@ -806,7 +806,7 @@ func TestExecutorInsertObject_insertValue(t *testing.T) {
 	}
 
 	// make sure that the value is what we expect
-	assert.Equal(t, inserted, body["hello"])
+	assert.Equal(t, inserted, body)
 }
 
 func TestExecutorInsertObject_insertListElements(t *testing.T) {
@@ -1015,7 +1015,7 @@ func TestExecutorGetPointData(t *testing.T) {
 
 func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	// we want the list of insertion points that point to
-	planInsertionPoint := []string{"users", "photoGallery", "author", "firstName"}
+	planInsertionPoint := []string{"users", "photoGallery", "author"}
 
 	// pretend we are in the middle of stitching a larger object
 	startingPoint := [][]string{{"users:0"}}
@@ -1023,11 +1023,11 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	// there are 6 total insertion points in this example
 	finalInsertionPoint := [][]string{
 		// photo 0 is liked by 2 users whose firstName we have to resolve
-		{"users:0", "photoGallery:0", "author#1", "firstName"},
+		{"users:0", "photoGallery:0", "author#1"},
 		// photo 1 is liked by 3 users whose firstName we have to resolve
-		{"users:0", "photoGallery:1", "author#2", "firstName"},
+		{"users:0", "photoGallery:1", "author#2"},
 		// photo 2 is liked by 1 user whose firstName we have to resolve
-		{"users:0", "photoGallery:2", "author#3", "firstName"},
+		{"users:0", "photoGallery:2", "author#3"},
 	}
 
 	// the selection we're going to make
@@ -1083,7 +1083,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint, false)
+	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint)
 	if err != nil {
 		t.Error(t, err)
 		return

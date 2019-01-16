@@ -67,35 +67,16 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 			case payload := <-resultCh:
 				log.Debug("Inserting result into ", payload.InsertionPoint)
 				log.Debug("Result: ", payload.Result)
+
 				// we have to grab the value in the result and write it to the appropriate spot in the
 				// acumulator.
-
-				// the path that we want out of the result
-				path := []string{}
-				// if we want to strip node from the response
-				if payload.StripNode {
-					path = append(path, "node")
-					path = append(path, payload.InsertionPoint[max(len(payload.InsertionPoint)-1, 0):][0])
-				}
-
-				// get the result from the response that we have to stitch there
-				queryResult, err := executorExtractValue(payload.Result, path)
-				if err != nil {
-					errCh <- err
-					continue ConsumptionLoop
-				}
-				log.Debug("raw value: ", queryResult)
-
-				log.Debug("Inserting result into ", payload.InsertionPoint)
-				log.Debug("Result: ", queryResult)
-				// copy the result into the accumulator
-				err = executorInsertObject(result, payload.InsertionPoint, queryResult)
+				err := executorInsertObject(result, payload.InsertionPoint, payload.Result)
 				if err != nil {
 					errCh <- err
 					continue ConsumptionLoop
 				}
 
-				log.Debug("Done")
+				log.Debug("Done. ", result)
 				// one of the queries is done
 				stepWg.Done()
 
@@ -149,7 +130,7 @@ func executeStep(
 	stepWg *sync.WaitGroup,
 ) {
 	log.Debug("")
-	log.Debug("Executing step to be inserted in ", step.ParentType, " ", insertionPoint)
+	log.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
 
 	log.Debug(step.SelectionSet)
 
@@ -159,8 +140,8 @@ func executeStep(
 		// each selection set that is the parent of another query must ask for the id
 		for _, nextStep := range step.Then {
 			// the next query will go
-			path := nextStep.InsertionPoint[:max(len(nextStep.InsertionPoint)-1, 0)]
-			log.Debug("Step has children. Need to add ids ", path, nextStep.InsertionPoint)
+			path := nextStep.InsertionPoint[:]
+			log.Debug("Step has children. Need to add ids ")
 
 			// the selection set we need to add `id` to
 			target := step.SelectionSet
@@ -266,8 +247,26 @@ func executeStep(
 	//       passed it to the this invocation of this function. It is safe to trust this
 	//       InsertionPoint as the right place to insert this result.
 
-	// this is the only place we know for sure if we have to strip the node
+	// if this is a query that falls underneath a `node(id: ???)` query then we only want to consider the object
+	// underneath the `node` field as the result for the query
 	stripNode := step.ParentType != "Query"
+	if stripNode {
+		log.Debug("Should strip node")
+		// get the result from the response that we have to stitch there
+		extractedResult, err := executorExtractValue(queryResult, []string{"node"})
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		resultObj, ok := extractedResult.(map[string]interface{})
+		if !ok {
+			errCh <- fmt.Errorf("Query result of node query was not an object: %v", queryResult)
+			return
+		}
+
+		queryResult = resultObj
+	}
 
 	// if there are next steps
 	if len(step.Then) > 0 {
@@ -275,15 +274,19 @@ func executeStep(
 		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
 		// insertion point. For lists, insertion points look like: ["user", "friends:0", "catPhotos:0", "owner"]
 		for _, dependent := range step.Then {
-			// the insertion point for this step needs to go one behind so we can build up a list if the root is one
-			clip := max(len(insertionPoint)-1, 0)
+			log.Debug("Looking for insertion points for ", dependent.InsertionPoint, "\n\n")
 
-			// log.Debug("Looking for insertion points for ", dependent.InsertionPoint, "\n\n")
-			insertPoints, err := executorFindInsertionPoints(dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint[:clip]}, stripNode)
+			insertPoints, err := executorFindInsertionPoints(dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint})
 			if err != nil {
 				errCh <- err
 				return
 			}
+
+			// if len(insertPoints) > 0 {
+			// 	log.Info("Spawn ", insertPoints[0])
+			// 	stepWg.Add(1)
+			// 	go executeStep(plan, dependent, insertPoints[0], queryVariables, resultCh, errCh, stepWg)
+			// }
 
 			// this dependent needs to fire for every object that the insertion point references
 			for _, insertionPoint := range insertPoints {
@@ -294,12 +297,11 @@ func executeStep(
 		}
 	}
 
-	log.Debug("Pushing Result ", insertionPoint)
+	log.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	// send the result to be stitched in with our accumulator
 	resultCh <- queryExecutionResult{
 		InsertionPoint: insertionPoint,
 		Result:         queryResult,
-		StripNode:      stripNode,
 	}
 }
 
@@ -311,15 +313,9 @@ func max(a, b int) int {
 }
 
 // executorFindInsertionPoints returns the list of insertion points where this step should be executed.
-func executorFindInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, stripNode bool) ([][]string, error) {
-
-	// log.Debug("Looking for insertion points. target: ", targetPoints)
+func executorFindInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string) ([][]string, error) {
+	log.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
 	oldBranch := startingPoints
-	for _, branch := range oldBranch {
-		if len(branch) > 1 {
-			branch = branch[:max(len(branch)-1, 1)]
-		}
-	}
 
 	// track the root of the selection set while  we walk
 	selectionSetRoot := selectionSet
@@ -331,185 +327,169 @@ func executorFindInsertionPoints(targetPoints []string, selectionSet ast.Selecti
 	startingIndex := 0
 	if len(oldBranch) > 0 {
 		startingIndex = len(oldBranch[0])
+
+		if len(targetPoints) == len(oldBranch[0]) {
+			return startingPoints, nil
+		}
 	}
 
+	log.Debug("First meaningful path point: ", targetPoints[startingIndex])
 	log.Debug("result ", resultChunk)
 
-	// if our starting point is []string{"users:0", "photoGallery"} then we know everything up until photoGallery
+	// if our starting point is []string{"users:0"} then we know everything so far
 	// is along the path of the steps insertion point
 	for pointI := startingIndex; pointI < len(targetPoints); pointI++ {
 		// the point in the steps insertion path that we want to add
 		point := targetPoints[pointI]
 
-		// log.Debug("Looking for ", point)
+		log.Debug("Looking for ", point)
 
-		// if we are at the last field, just add it
-		if pointI == len(targetPoints)-1 {
-			for i, points := range oldBranch {
-				oldBranch[i] = append(points, point)
-			}
-		} else {
-			// track wether we found a selection
-			foundSelection := false
+		// track wether we found a selection
+		var foundSelection *ast.Field
 
-			// there should be a field in the root selection set that has the target point
-			for _, selection := range selectedFields(selectionSetRoot) {
-				// if the selection has the right name we need to add it to the list
-				if selection.Alias == point || selection.Name == point {
-					// log.Debug("Found Selection for: ", point)
-					// log.Debug("Strip node: ", stripNode)
-					// log.Debug("Result Chunk: ", resultChunk)
-					// make sure we are looking at the top of the selection set next time
-					selectionSetRoot = selection.SelectionSet
-
-					var value = resultChunk
-					// if we are supposed to strip the top level node
-					if stripNode {
-						// grab the value of the top level node
-						nodeValue, ok := value["node"]
-						if !ok {
-							return nil, errors.New("Could not find top level node value")
-						}
-
-						// make sure the node value is an object
-						objValue, ok := nodeValue.(map[string]interface{})
-						if !ok {
-							return nil, errors.New("node value was not an object")
-						}
-
-						value = objValue
-					}
-					// the bit of result chunk with the appropriate key should be a list
-					rootValue, ok := value[point]
-					if !ok {
-						return nil, errors.New("Root value of result chunk could not be found")
-					}
-
-					// get the type of the object in question
-					selectionType := selection.Definition.Type
-					// if the type is a list
-					if selectionType.Elem != nil {
-						log.Debug("Selection is a list")
-						// make sure the root value is a list
-						rootList, ok := rootValue.([]interface{})
-						if !ok {
-							return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootValue)
-						}
-
-						// build up a new list of insertion points
-						newInsertionPoints := [][]string{}
-
-						// each value in this list contributes an insertion point
-						for entryI, iEntry := range rootList {
-							resultEntry, ok := iEntry.(map[string]interface{})
-							if !ok {
-								return nil, errors.New("entry in result wasn't a map")
-							}
-							// the point we are going to add to the list
-							entryPoint := fmt.Sprintf("%s:%v", selection.Name, entryI)
-							// log.Debug("Adding ", entryPoint, " to list")
-
-							newBranchSet := make([][]string, len(oldBranch))
-							copy(newBranchSet, oldBranch)
-
-							// if we are adding to an existing branch
-							if len(newBranchSet) > 0 {
-								// add the path to the end of this for the entry we just added
-								for i, newBranch := range newBranchSet {
-									// if we are looking at the second to last thing in the insertion list
-									if pointI == len(targetPoints)-2 {
-										// look for an id
-										id, ok := resultEntry["id"]
-										if !ok {
-											return nil, errors.New("Could not find the id for elements in target list")
-										}
-
-										// add the id to the entry so that the executor can use it to form its query
-										entryPoint = fmt.Sprintf("%s#%v", entryPoint, id)
-
-									}
-
-									// add the point for this entry in the list
-									newBranchSet[i] = append(newBranch, entryPoint)
-								}
-							} else {
-								newBranchSet = append(newBranchSet, []string{entryPoint})
-							}
-
-							// compute the insertion points for that entry
-							entryInsertionPoints, err := executorFindInsertionPoints(targetPoints, selectionSetRoot, resultEntry, newBranchSet, false)
-							if err != nil {
-								return nil, err
-							}
-
-							for _, point := range entryInsertionPoints {
-								// add the list of insertion points to the acumulator
-								newInsertionPoints = append(newInsertionPoints, point)
-							}
-						}
-
-						// return the flat list of insertion points created by our children
-						return newInsertionPoints, nil
-					}
-
-					// we are encountering something that isn't a list so it must be an object or a scalar
-					// regardless, we just need to add the point to the end of each list
-					for i, points := range oldBranch {
-						oldBranch[i] = append(points, point)
-					}
-
-					if pointI == len(targetPoints)-2 {
-						// the root value could be a list in which case the id is the id of the corresponding entry
-						// or the root value could be an object in which case the id is the id of the root value
-
-						// if the root value is a list
-						if rootList, ok := rootValue.([]interface{}); ok {
-							for i := range oldBranch {
-								entry, ok := rootList[i].(map[string]interface{})
-								if !ok {
-									return nil, errors.New("Item in root list isn't a map")
-								}
-
-								// look up the id of the object
-								id, ok := entry["id"]
-								if !ok {
-									return nil, errors.New("Could not find the id for the object")
-								}
-
-								// log.Debug("Adding id to ", oldBranch[i][pointI])
-
-								oldBranch[i][pointI] = fmt.Sprintf("%s:%v#%v", oldBranch[i][pointI], i, id)
-
-							}
-						} else {
-							rootObj, ok := rootValue.(map[string]interface{})
-							if !ok {
-								return nil, fmt.Errorf("Root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
-							}
-
-							for i := range oldBranch {
-								// look up the id of the object
-								id := rootObj["id"]
-								if !ok {
-									return nil, errors.New("Could not find the id for the object")
-								}
-
-								oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
-							}
-						}
-					}
-
-					// we're done looking through the selection set
-					foundSelection = true
-					break
-				}
-
-			}
-
-			if !foundSelection {
-				return nil, fmt.Errorf("Could not find selection for %v", point)
+		// there should be a field in the root selection set that has the target point
+		for _, selection := range selectedFields(selectionSetRoot) {
+			// if the selection has the right name we need to add it to the list
+			if selection.Alias == point || selection.Name == point {
+				foundSelection = selection
 			}
 		}
+
+		// if we didn't find a selection
+		if foundSelection == nil {
+			return nil, fmt.Errorf("Could not find selection for %v", point)
+		}
+
+		log.Debug("")
+		log.Debug("Found Selection for: ", point)
+		log.Debug("Result Chunk: ", resultChunk)
+		// make sure we are looking at the top of the selection set next time
+		selectionSetRoot = foundSelection.SelectionSet
+
+		var value = resultChunk
+
+		// the bit of result chunk with the appropriate key should be a list
+		rootValue, ok := value[point]
+		if !ok {
+			return nil, errors.New("Root value of result chunk could not be found")
+		}
+
+		// get the type of the object in question
+		selectionType := foundSelection.Definition.Type
+
+		// if the type is a list
+		if selectionType.Elem != nil {
+			log.Debug("Selection should be a list")
+			// make sure the root value is a list
+			rootList, ok := rootValue.([]interface{})
+			if !ok {
+				return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootValue)
+			}
+
+			// build up a new list of insertion points
+			newInsertionPoints := [][]string{}
+
+			// each value in the result contributes an insertion point
+			for entryI, iEntry := range rootList {
+				resultEntry, ok := iEntry.(map[string]interface{})
+				if !ok {
+					return nil, errors.New("entry in result wasn't a map")
+				}
+
+				// the point we are going to add to the list
+				entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
+				log.Debug("Adding ", entryPoint, " to list")
+
+				newBranchSet := make([][]string, len(oldBranch))
+				copy(newBranchSet, oldBranch)
+
+				// if we are adding to an existing branch
+				if len(newBranchSet) > 0 {
+					// add the path to the end of this for the entry we just added
+					for i, newBranch := range newBranchSet {
+						// if we are looking at the second to last thing in the insertion list
+						if pointI == len(targetPoints)-1 {
+							// look for an id
+							id, ok := resultEntry["id"]
+							if !ok {
+								return nil, errors.New("Could not find the id for elements in target list")
+							}
+
+							// add the id to the entry so that the executor can use it to form its query
+							entryPoint = fmt.Sprintf("%s#%v", entryPoint, id)
+
+						}
+
+						// add the point for this entry in the list
+						newBranchSet[i] = append(newBranch, entryPoint)
+					}
+				} else {
+					newBranchSet = append(newBranchSet, []string{entryPoint})
+				}
+
+				// compute the insertion points for that entry
+				entryInsertionPoints, err := executorFindInsertionPoints(targetPoints, selectionSetRoot, resultEntry, newBranchSet)
+				if err != nil {
+					return nil, err
+				}
+
+				for _, point := range entryInsertionPoints {
+					// add the list of insertion points to the acumulator
+					newInsertionPoints = append(newInsertionPoints, point)
+				}
+			}
+
+			// return the flat list of insertion points created by our children
+			return newInsertionPoints, nil
+		}
+
+		// we are encountering something that isn't a list so it must be an object or a scalar
+		// regardless, we just need to add the point to the end of each list
+		for i, points := range oldBranch {
+			oldBranch[i] = append(points, point)
+		}
+
+		if pointI == len(targetPoints)-1 {
+			// the root value could be a list in which case the id is the id of the corresponding entry
+			// or the root value could be an object in which case the id is the id of the root value
+
+			// if the root value is a list
+			if rootList, ok := rootValue.([]interface{}); ok {
+				for i := range oldBranch {
+					entry, ok := rootList[i].(map[string]interface{})
+					if !ok {
+						return nil, errors.New("Item in root list isn't a map")
+					}
+
+					// look up the id of the object
+					id, ok := entry["id"]
+					if !ok {
+						return nil, errors.New("Could not find the id for the object")
+					}
+
+					// log.Debug("Adding id to ", oldBranch[i][pointI])
+
+					oldBranch[i][pointI] = fmt.Sprintf("%s:%v#%v", oldBranch[i][pointI], i, id)
+
+				}
+			} else {
+				rootObj, ok := rootValue.(map[string]interface{})
+				if !ok {
+					return nil, fmt.Errorf("Root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
+				}
+
+				for i := range oldBranch {
+					// look up the id of the object
+					id := rootObj["id"]
+					if !ok {
+						return nil, errors.New("Could not find the id for the object")
+					}
+
+					oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
+				}
+			}
+		}
+
 	}
 
 	// return the aggregation
@@ -593,73 +573,35 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 }
 
 func executorInsertObject(target map[string]interface{}, path []string, value interface{}) error {
+	log.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
 	if len(path) > 0 {
-		head := path[len(path)-1]
-		// the path to the key we want to set
-		tail := path[:max(len(path)-1, 0)]
-
 		// a pointer to the objects we are modifying
-		obj, err := executorExtractValue(target, tail)
+		obj, err := executorExtractValue(target, path)
 		if err != nil {
 			return err
 		}
+		fmt.Println("Found container", obj)
 
-		valueObj, ok := obj.(map[string]interface{})
+		targetObj, ok := obj.(map[string]interface{})
 		if !ok {
-			return errors.New("something went wrong")
+			fmt.Println(obj, path)
+			return errors.New("target object is not an object")
 		}
 
-		// if the head points to a list
-		if strings.Contains(head, ":") {
-			// {head} is a key for a list, and value needs to go in the right place
-			pointData, err := executorGetPointData(head)
-			if err != nil {
-				return err
+		fmt.Println("Here!")
+		// if the value we are assigning is an object
+		if newValue, ok := value.(map[string]interface{}); ok {
+			for k, v := range newValue {
+				targetObj[k] = v
 			}
-
-			// if there is no list at that location
-			if _, ok := valueObj[pointData.Field]; !ok {
-				valueObj[pointData.Field] = []interface{}{}
-			}
-
-			// if its not a list
-			valueList, ok := valueObj[pointData.Field].([]interface{})
-			if !ok {
-				return errors.New("Found a non-list at the insertion point")
-			}
-
-			if len(valueList) <= pointData.Index {
-				// make sure that the list has enough entries
-				for i := max(len(valueList)-1, 0); i <= pointData.Index; i++ {
-					valueList = append(valueList, map[string]interface{}{})
-				}
-			}
-
-			field := valueList[pointData.Index]
-			mapField, ok := field.(map[string]interface{})
-
-			objValue, ok := value.(map[string]interface{})
-			if ok {
-				// make sure we update the object at that location with each value
-				for k, v := range objValue {
-					mapField[k] = v
-				}
-			}
-
-			// re-assign the list back to the object
-			valueObj[pointData.Field] = valueList
-
-		} else {
-			// we are just assigning a value
-			valueObj[head] = value
 		}
 	} else {
-		valueObj, ok := value.(map[string]interface{})
+		targetObj, ok := value.(map[string]interface{})
 		if !ok {
 			return errors.New("something went wrong")
 		}
 
-		for key, value := range valueObj {
+		for key, value := range targetObj {
 			target[key] = value
 		}
 	}
