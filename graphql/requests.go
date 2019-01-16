@@ -21,6 +21,7 @@ type RemoteSchema struct {
 	URL    string
 }
 
+// QueryInput provides all of the information required to fire a query
 type QueryInput struct {
 	Query         string
 	QueryDocument *ast.OperationDefinition
@@ -52,7 +53,9 @@ type QueryerFunc struct {
 	Fn func(*QueryInput) (interface{}, error)
 }
 
+// Query invokes the provided function and writes the response to the receiver
 func (q *QueryerFunc) Query(input *QueryInput, receiver interface{}) error {
+	// invoke the handler
 	response, err := q.Fn(input)
 	if err != nil {
 		return err
@@ -60,6 +63,8 @@ func (q *QueryerFunc) Query(input *QueryInput, receiver interface{}) error {
 
 	// assume the mock is writing the same kind as the receiver
 	reflect.ValueOf(receiver).Elem().Set(reflect.ValueOf(response))
+
+	// no errors
 	return nil
 }
 
@@ -69,6 +74,8 @@ type NetworkQueryer struct {
 	Client *http.Client
 }
 
+// IntrospectRemoteSchema is used to build a RemoteSchema by firing the introspection query
+// at a remote service and reconstructing the schema object from the response
 func IntrospectRemoteSchema(url string) (*RemoteSchema, error) {
 	// introspect the schema at the designated url
 	schema, err := IntrospectAPI(NewNetworkQueryer(url))

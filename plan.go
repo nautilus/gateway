@@ -37,8 +37,8 @@ type newQueryPlanStepPayload struct {
 	InsertionPoint []string
 }
 
-// QueryPlanner is responsible for taking a parsed graphql string, and returning the steps to
-// fulfill the response
+// QueryPlanner is responsible for taking a string with a graphql query and returns
+// the steps to fulfill it
 type QueryPlanner interface {
 	Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error)
 }

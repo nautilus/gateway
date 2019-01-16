@@ -178,7 +178,7 @@ func TestIntrospectQuery_multipleTypes(t *testing.T) {
 
 	// make sure that the schema has both types
 	if len(schema.Types) != 2 {
-		t.Errorf("Encounted incorrect number of types: %v", len(schema.Types))
+		t.Errorf("Encountered incorrect number of types: %v", len(schema.Types))
 		return
 	}
 
@@ -415,7 +415,7 @@ func TestIntrospectQueryUnmarshalType_scalarFields(t *testing.T) {
 					Name: "Query",
 				},
 				Types: []IntrospectionQueryFullType{
-					IntrospectionQueryFullType{
+					{
 						Kind:        "SCALAR",
 						Name:        "Name",
 						Description: "Description",
@@ -451,7 +451,7 @@ func TestIntrospectQueryUnmarshalType_objects(t *testing.T) {
 					Name: "Query",
 				},
 				Types: []IntrospectionQueryFullType{
-					IntrospectionQueryFullType{
+					{
 						Kind:        "OBJECT",
 						Name:        "Query",
 						Description: "Description",
@@ -528,7 +528,7 @@ func TestIntrospectQueryUnmarshalType_directives(t *testing.T) { // introspect t
 					Name: "Query",
 				},
 				Types: []IntrospectionQueryFullType{
-					IntrospectionQueryFullType{
+					{
 						Kind:        "OBJECT",
 						Name:        "Query",
 						Description: "Description",
@@ -612,7 +612,7 @@ func TestIntrospectQueryUnmarshalType_enums(t *testing.T) {
 					Name: "Query",
 				},
 				Types: []IntrospectionQueryFullType{
-					IntrospectionQueryFullType{
+					{
 						Kind:        "ENUM",
 						Name:        "Word",
 						Description: "enum-description",
@@ -681,7 +681,7 @@ func TestIntrospectQueryUnmarshalType_inputObjects(t *testing.T) {
 					Name: "Query",
 				},
 				Types: []IntrospectionQueryFullType{
-					IntrospectionQueryFullType{
+					{
 						Kind:        "INPUT_OBJECT",
 						Name:        "InputObjectType",
 						Description: "Description",

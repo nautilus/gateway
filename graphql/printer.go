@@ -102,7 +102,7 @@ func printerConvertField(selectedField *ast.Field) (*gAst.Field, error) {
 
 	// if the selection has arguments
 	if len(selectedField.Arguments) > 0 {
-		// the list of arugments to add
+		// the list of arguments to add
 		args := []*gAst.Argument{}
 
 		for _, arg := range selectedField.Arguments {
@@ -139,7 +139,7 @@ func printerConvertField(selectedField *ast.Field) (*gAst.Field, error) {
 		directives := []*gAst.Directive{}
 
 		for _, directive := range selectedField.Directives {
-			// the list of arugments to add
+			// the list of arguments to add
 			args := []*gAst.Argument{}
 
 			for _, arg := range directive.Arguments {

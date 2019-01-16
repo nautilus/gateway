@@ -158,7 +158,7 @@ func (m FieldURLMap) Concat(other FieldURLMap) FieldURLMap {
 	for key, value := range other {
 		// if we have seen the location before
 		if prevValue, ok := m[key]; ok {
-			// add the values to the internal registery
+			// add the values to the internal registry
 			m[key] = append(prevValue, value...)
 
 			// we havent' seen the key before

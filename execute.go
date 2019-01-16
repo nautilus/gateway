@@ -521,7 +521,7 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 	var recent interface{} = source
 	log.Debug("Pulling ", path, " from ", source)
 
-	for i, point := range path[:len(path)] {
+	for i, point := range path[:] {
 		// if the point designates an element in the list
 		if strings.Contains(point, ":") {
 			pointData, err := executorGetPointData(point)
