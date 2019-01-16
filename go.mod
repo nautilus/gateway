@@ -18,5 +18,6 @@ require (
 	github.com/stretchr/testify v1.2.2
 	github.com/vektah/gqlparser v1.0.0
 	golang.org/x/arch v0.0.0-20181203225421-5a4828bb7045 // indirect
+	golang.org/x/net v0.0.0-20190110200230-915654e7eabc
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 )
