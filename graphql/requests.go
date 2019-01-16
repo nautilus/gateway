@@ -74,12 +74,9 @@ type NetworkQueryer struct {
 	Client *http.Client
 }
 
-// IntrospectionConfigurator is responsible for passing configuration to the introspection
-type IntrospectionConfigurator func(string) Queryer
-
-// IntrospectRemoteSchema is used to build a RemoteSchema by firing a the introspection query
+// IntrospectRemoteSchema is used to build a RemoteSchema by firing the introspection query
 // at a remote service and reconstructing the schema object from the response
-func IntrospectRemoteSchema(url string, configurator ...IntrospectionConfigurator) (*RemoteSchema, error) {
+func IntrospectRemoteSchema(url string) (*RemoteSchema, error) {
 	// introspect the schema at the designated url
 	schema, err := IntrospectAPI(NewNetworkQueryer(url))
 	if err != nil {
