@@ -312,6 +312,59 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	thirdSubSelectionField := thirdSubSelection[0]
 	assert.Equal(t, "firstName", thirdSubSelectionField.Name)
 }
+
+func TestPlanQuery_preferParentLocation(t *testing.T) {
+
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			id: ID!
+		}
+
+		type Query {
+			allUsers: [User!]!
+		}
+	`)
+
+	// the location of the user service
+	userLocation := "user-location"
+	// the location of the cat service
+	catLocation := "cat-location"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "allUsers", userLocation)
+	// add the
+	locations.RegisterURL("User", "id", catLocation)
+	locations.RegisterURL("User", "id", userLocation)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		{
+			allUsers {
+				id
+			}
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when building schema: %s", err.Error())
+		return
+	}
+
+	// there should only be 1 step to this query
+
+	// the first step should have all users
+	firstStep := plans[0].RootStep.Then[0]
+	// make sure we are grabbing values off of Query since its the root
+	assert.Equal(t, "Query", firstStep.ParentType)
+
+	// make sure there's a selection set
+	if len(firstStep.Then) != 0 {
+		t.Errorf("There shouldn't be any dependent step on this one. Found %v.", len(firstStep.Then))
+		return
+	}
+}
+
 func TestPlanQuery_groupSiblings(t *testing.T) {
 	schema, _ := graphql.LoadSchema(`
 		type User {
