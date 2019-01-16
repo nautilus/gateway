@@ -586,15 +586,12 @@ func executorInsertObject(target map[string]interface{}, path []string, value in
 		if err != nil {
 			return err
 		}
-		fmt.Println("Found container", obj)
 
 		targetObj, ok := obj.(map[string]interface{})
 		if !ok {
-			fmt.Println(obj, path)
 			return errors.New("target object is not an object")
 		}
 
-		fmt.Println("Here!")
 		// if the value we are assigning is an object
 		if newValue, ok := value.(map[string]interface{}); ok {
 			for k, v := range newValue {
