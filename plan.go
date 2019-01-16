@@ -154,13 +154,6 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 					log.Debug("")
 					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery (%v) @ %v \n", step.ParentType, strings.Join(selectionNames, ","), payload.InsertionPoint))
 
-					// we always ignore the latest insertion point since we will add it to the list
-					// in the extracts
-					insertionPoint := []string{}
-					if len(payload.InsertionPoint) != 0 {
-						insertionPoint = payload.InsertionPoint[:len(payload.InsertionPoint)-1]
-					}
-
 					// we are going to start walking down the operations selection set and let
 					// the steps of the walk add any necessary selectedFields
 					newSelection, err := p.extractSelection(&extractSelectionConfig{
@@ -171,7 +164,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 						parentType:     step.ParentType,
 						selection:      step.SelectionSet,
 						step:           step,
-						insertionPoint: insertionPoint,
+						insertionPoint: payload.InsertionPoint,
 					})
 					if err != nil {
 						errCh <- err
@@ -291,6 +284,10 @@ FieldLoop:
 		locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
 	}
 
+	log.Debug("-----")
+	log.Debug("Parent location: ", config.parentLocation)
+	log.Debug("Locations: ", locationFields)
+
 	// we have to make sure we spawn any more goroutines before this one terminates. This means that
 	// we first have to look at any locations that are not the current one
 	for location, fields := range locationFields {
@@ -299,7 +296,7 @@ FieldLoop:
 		}
 
 		// we are dealing with a selection to another location that isn't the current one
-		log.Debug(fmt.Sprintf("Adding the new step to resolve %s @%v\n", config.parentType, location))
+		log.Debug(fmt.Sprintf("Adding the new step to resolve %s @ %v. Insertion point: %v\n", config.parentType, location, config.insertionPoint))
 
 		// since we're adding another step we need to wait for at least one more goroutine to finish processing
 		config.stepWg.Add(1)
@@ -330,13 +327,12 @@ FieldLoop:
 		// if the targetField has a selection, it cannot be added naively to the parent. We first have to
 		// modify its selection set to only include fields that are at the same location as the parent.
 		if len(field.SelectionSet) > 0 {
-			log.Debug("found a thing with a selection")
-
 			// the insertion point for this field is the previous one with the new field name
 			insertionPoint := make([]string, len(config.insertionPoint))
 			copy(insertionPoint, config.insertionPoint)
-			insertionPoint = append(insertionPoint, field.Name)
+			insertionPoint = append(insertionPoint, field.Alias)
 
+			log.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
 			// add any possible selections provided by selections
 			subSelection, err := p.extractSelection(&extractSelectionConfig{
 				stepCh:         config.stepCh,
@@ -344,7 +340,7 @@ FieldLoop:
 				step:           config.step,
 				locations:      config.locations,
 				parentLocation: config.parentLocation,
-				parentType:     config.parentType,
+				parentType:     coreFieldType(field).Name(),
 				selection:      field.SelectionSet,
 				insertionPoint: insertionPoint,
 			})

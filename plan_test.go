@@ -255,7 +255,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 	secondStep := firstStep.Then[0]
 	// make sure we will insert the step in the right place
-	assert.Equal(t, []string{"allUsers", "catPhotos"}, secondStep.InsertionPoint)
+	assert.Equal(t, []string{"allUsers"}, secondStep.InsertionPoint)
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "User", secondStep.ParentType)
@@ -287,13 +287,16 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 	thirdStep := secondStep.Then[0]
 	// make sure we will insert the step in the right place
-	assert.Equal(t, []string{"allUsers", "catPhotos", "owner"}, thirdStep.InsertionPoint)
+	assert.Equal(t, []string{"allUsers", "catPhotos"}, thirdStep.InsertionPoint)
 
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "CatPhoto", thirdStep.ParentType)
 	// we should be going to the catePhoto service
 	queryer = thirdStep.Queryer.(*graphql.NetworkQueryer)
 	assert.Equal(t, userLocation, queryer.URL)
+	// make sure we will insert the step in the right place
+	assert.Equal(t, []string{"allUsers", "catPhotos"}, thirdStep.InsertionPoint)
+
 	// we should only want one field selected
 	if len(thirdStep.SelectionSet) != 1 {
 		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(thirdStep.SelectionSet))

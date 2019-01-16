@@ -98,7 +98,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 					Then: []*QueryPlanStep{
 						{
 							ParentType:     "User",
-							InsertionPoint: []string{"user", "favoriteCatPhoto"},
+							InsertionPoint: []string{"user"},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
 									Name: "favoriteCatPhoto",
@@ -162,12 +162,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 					ParentType:     "Query",
 					InsertionPoint: []string{},
 					// return a known value we can test against
-					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
-						"user": map[string]interface{}{
-							"id":        "1",
-							"firstName": "hello",
-						},
-					}},
+					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{}},
 					// then we have to ask for the users favorite cat photo and its url
 					Then: []*QueryPlanStep{
 						{
@@ -311,7 +306,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 						// a query to satisfy User.photoGallery
 						{
 							ParentType:     "User",
-							InsertionPoint: []string{"users", "friends", "photoGallery"},
+							InsertionPoint: []string{"users", "friends"},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
 									Name: "photoGallery",
