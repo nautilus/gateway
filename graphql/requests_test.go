@@ -94,16 +94,14 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 	for _, row := range []struct {
 		Message    string
 		HasError   bool
-		ErrorShape map[string]interface{}
+		ErrorShape interface{}
 	}{
 		{
 			"Well Structured Error",
 			true,
-			map[string]interface{}{
-				"errors": []map[string]interface{}{
-					{
-						"message": "message",
-					},
+			[]map[string]interface{}{
+				{
+					"message": "message",
 				},
 			},
 		},
@@ -111,16 +109,24 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 			"Errors Not Lists",
 			true,
 			map[string]interface{}{
-				"errors": map[string]interface{}{
-					"message": "message",
-				},
+				"message": "message",
 			},
+		},
+		{
+			"Errors Lists of Not Strings",
+			true,
+			[]string{"hello"},
 		},
 		{
 			"Errors No messages",
 			true,
+			[]map[string]interface{}{},
+		},
+		{
+			"Message not string",
+			true,
 			map[string]interface{}{
-				"errors": []map[string]interface{}{},
+				"message": true,
 			},
 		},
 		{
