@@ -125,8 +125,10 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 		{
 			"Message not string",
 			true,
-			map[string]interface{}{
-				"message": true,
+			[]map[string]interface{}{
+				{
+					"message": true,
+				},
 			},
 		},
 		{
