@@ -103,6 +103,19 @@ func TestGraphQLHandler(t *testing.T) {
 		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
 	})
 
+	t.Run("OperationName", func(t *testing.T) {
+		// the incoming request
+		request := httptest.NewRequest("GET", `/graphql?query={allusers}&operationName=Hello`, strings.NewReader(""))
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+	})
+
 	t.Run("error marhsalling response", func(t *testing.T) {
 		// create gateway schema we can test against
 		innerGateway, err := New([]*graphql.RemoteSchema{
