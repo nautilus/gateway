@@ -230,7 +230,8 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	assert.Equal(t, "allUsers", firstField.Name)
 
 	// all users should have only one selected value since `catPhotos` is from another service
-	if len(firstField.SelectionSet) > 1 {
+	// there will also be an `id` added so that the query can be stitched together
+	if len(firstField.SelectionSet) > 2 {
 		for _, selection := range selectedFields(firstField.SelectionSet) {
 			fmt.Println(selection.Name)
 		}
@@ -274,7 +275,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 
 	// we should have also asked for one field underneath
 	secondSubSelection := selectedFields(selectedSecondField.SelectionSet)
-	if len(secondSubSelection) != 1 {
+	if len(secondSubSelection) != 2 {
 		t.Error("Encountered the incorrect number of fields selected under User.catPhotos")
 	}
 	secondSubSelectionField := secondSubSelection[0]
@@ -489,6 +490,10 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	// make sure it has the right variable dependencies
 	assert.Equal(t, Set{"category": true, "id": true}, nextStep.Variables)
 
+	if nextStep.QueryDocument == nil {
+		t.Error("Could not find query document")
+		return
+	}
 	// we need to have a query with id and category since id is passed to node
 	if len(nextStep.QueryDocument.VariableDefinitions) != 2 {
 		t.Errorf("Did not find the right number of variable definitions in the next step. Expected 2 found %v", len(nextStep.QueryDocument.VariableDefinitions))
@@ -500,6 +505,102 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 			t.Errorf("Encountered a variable with an unknown name: %v", definition.Variable)
 			return
 		}
+	}
+}
+
+func TestPreparePlanQueries(t *testing.T) {
+	// if we have a plan that depends on another, we need to add the id field to the selection set if
+	// its not there
+
+	childStep := &QueryPlanStep{
+		InsertionPoint: []string{"users", "friends"},
+		SelectionSet: ast.SelectionSet{
+			&ast.Field{
+				Name: "firstName",
+				Definition: &ast.FieldDefinition{
+					Type: ast.NamedType("String", &ast.Position{}),
+				},
+			},
+		},
+	}
+
+	parentStep := &QueryPlanStep{
+		SelectionSet: ast.SelectionSet{
+			&ast.Field{
+				Name: "users",
+				Definition: &ast.FieldDefinition{
+					Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+				},
+				SelectionSet: ast.SelectionSet{
+					&ast.Field{
+						Name: "friends",
+						Definition: &ast.FieldDefinition{
+							Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+						},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "lastName",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("String", &ast.Position{}),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Then: []*QueryPlanStep{childStep},
+	}
+
+	plan := &QueryPlan{
+		Operation: &ast.OperationDefinition{
+			VariableDefinitions: ast.VariableDefinitionList{},
+		},
+		RootStep: parentStep,
+	}
+
+	// add the id fields
+	(&MinQueriesPlanner{}).preparePlanQueries(plan, plan.RootStep)
+
+	// we should have added `id` to the
+	usersSelection, ok := parentStep.SelectionSet[0].(*ast.Field)
+	if !ok {
+		t.Error("users field was not a field")
+		return
+	}
+	friendsSelection, ok := usersSelection.SelectionSet[0].(*ast.Field)
+	if !ok {
+		t.Error("friends field was not a field")
+		return
+	}
+
+	// we should have 2 field
+	if len(friendsSelection.SelectionSet) != 2 {
+		t.Errorf("Encountered incorrect number of selections under friends field: Expected 2, found %v", len(friendsSelection.SelectionSet))
+		return
+	}
+
+	// those 2 fields should be lastName and id
+	for _, field := range selectedFields(friendsSelection.SelectionSet) {
+		if field.Name != "lastName" && field.Name != "id" {
+			t.Errorf("Encountered unknown field: %v", field.Name)
+		}
+	}
+
+	// make sure we assigned a query document and string to the parent step
+	if parentStep.QueryDocument == nil {
+		t.Error("Encountered a nil query document on parent")
+	}
+	if parentStep.QueryString == "" {
+		t.Error("Encountered an empty query string on parent")
+	}
+
+	// make sure we assigned a query document and string to the child step
+	if childStep.QueryDocument == nil {
+		t.Error("Encountered a nil query document on parent")
+	}
+	if childStep.QueryString == "" {
+		t.Error("Encountered an empty query string on parent")
 	}
 }
 

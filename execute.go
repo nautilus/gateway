@@ -278,12 +278,6 @@ func executeStep(
 				return
 			}
 
-			// if len(insertPoints) > 0 {
-			// 	log.Info("Spawn ", insertPoints[0])
-			// 	stepWg.Add(1)
-			// 	go executeStep(plan, dependent, insertPoints[0], queryVariables, resultCh, errCh, stepWg)
-			// }
-
 			// this dependent needs to fire for every object that the insertion point references
 			for _, insertionPoint := range insertPoints {
 				log.Info("Spawn ", insertionPoint)
@@ -403,8 +397,9 @@ func executorFindInsertionPoints(targetPoints []string, selectionSet ast.Selecti
 				if len(newBranchSet) > 0 {
 					// add the path to the end of this for the entry we just added
 					for i, newBranch := range newBranchSet {
-						// if we are looking at the second to last thing in the insertion list
+						// if we are looking at the last thing in the insertion list
 						if pointI == len(targetPoints)-1 {
+							fmt.Println(resultEntry)
 							// look for an id
 							id, ok := resultEntry["id"]
 							if !ok {

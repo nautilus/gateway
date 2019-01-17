@@ -22,6 +22,8 @@ type QueryPlanStep struct {
 	QueryString    string
 	Then           []*QueryPlanStep
 	Variables      Set
+	// if this is set to true, we need to remove the id from the object that we are inserting the result into
+	ClearID bool
 }
 
 // QueryPlan is the full plan to resolve a particular query
@@ -56,6 +58,25 @@ type MinQueriesPlanner struct {
 
 // Plan computes the nested selections that will need to be performed
 func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
+	// generating the plans happens in 2 steps.
+	// - create the dependency graph of steps
+	// - make sure that that each query has the required ids so that we can stitch results together
+
+	// create the plans to satisfy the query
+	plans, err := p.generatePlans(query, schema, locations)
+	if err != nil {
+		return nil, err
+	}
+
+	// we have to walk down each plan and make sure that the id field is found where it's needed
+	for _, plan := range plans {
+		p.preparePlanQueries(plan, plan.RootStep)
+	}
+
+	return plans, nil
+}
+
+func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
 	// the first thing to do is to parse the query
 	parsedQuery, err := gqlparser.LoadQuery(schema, query)
 	if err != nil {
@@ -189,18 +210,6 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 						variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
 					}
 
-					// build up the query document and string
-					stepQuery := plannerBuildQuery(step.ParentType, variableDefs, step.SelectionSet)
-					queryStr, err := graphql.PrintQuery(stepQuery)
-					if err != nil {
-						errCh <- err
-						continue SelectLoop
-					}
-
-					// add the query information to the step
-					step.QueryDocument = stepQuery
-					step.QueryString = queryStr
-
 					// we're done processing this step
 					stepWg.Done()
 
@@ -238,11 +247,99 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 			// bubble the error up
 			return nil, err
 		}
-
 	}
 
 	// return the final plan
 	return plans, nil
+}
+
+func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanStep) error {
+	// we need to construct the query information for this step which requires adding ID's
+	// where necessary to stitch results together
+
+	// a step's query can be influenced by each step directly after it. In order for the
+	// insertion point to work, there must be an id field in the object that
+	for _, nextStep := range step.Then {
+
+		// we need to walk down the graph
+		for _, nextStep := range step.Then {
+			err := p.preparePlanQueries(plan, nextStep)
+			if err != nil {
+				return err
+			}
+		}
+
+		// if there is no selection
+		if len(nextStep.InsertionPoint) == 0 {
+			// ignore i
+			continue
+		}
+
+		// the selection set we need to add `id` to
+		accumulator := step.SelectionSet
+		var targetField *ast.Field
+
+		// walk down the list of insertion points
+		for _, point := range nextStep.InsertionPoint {
+			// look for the selection with that name
+			for _, selection := range selectedFields(accumulator) {
+				// if we still have to walk down the selection but we found the right branch
+				if selection.Name == point {
+					accumulator = selection.SelectionSet
+					targetField = selection
+					break
+				}
+			}
+		}
+
+		// if we couldn't find the target
+		if accumulator == nil {
+			return fmt.Errorf("Could not find field to add id to. insertion point: %v", nextStep.InsertionPoint)
+		}
+
+		// if the target does not currently ask for id we need to add it
+		addID := true
+		for _, selection := range selectedFields(accumulator) {
+			if selection.Name == "id" {
+				addID = false
+				break
+			}
+		}
+
+		// add the ID to the selection set if necessary
+		if addID {
+			accumulator = append(accumulator, &ast.Field{
+				Name: "id",
+			})
+
+			// mark the id as artificially added
+			step.ClearID = true
+		}
+
+		// make sure the selection set contains the id
+		targetField.SelectionSet = accumulator
+	}
+
+	// we need to grab the list of variable definitions
+	variableDefs := ast.VariableDefinitionList{}
+	// we need to grab the variable definitions and values for each variable in the step
+	for variable := range step.Variables {
+		// add the definition
+		variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
+	}
+
+	// build up the query document
+	step.QueryDocument = plannerBuildQuery(step.ParentType, variableDefs, step.SelectionSet)
+
+	// we also need to turn the query into a string
+	queryString, err := graphql.PrintQuery(step.QueryDocument)
+	if err != nil {
+		return err
+	}
+	step.QueryString = queryString
+
+	// nothing went wrong here
+	return nil
 }
 
 type extractSelectionConfig struct {
@@ -258,7 +355,7 @@ type extractSelectionConfig struct {
 	insertionPoint []string
 }
 
-func (p *Planner) extractSelection(config *extractSelectionConfig) (ast.SelectionSet, error) {
+func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (ast.SelectionSet, error) {
 	// in order to group together fields in as few queries as possible, we need to group
 	// the selection set by the location
 	locationFields := map[string]ast.SelectionSet{}
@@ -409,6 +506,13 @@ func (set Set) Add(k string) {
 // Remove removes the item from the set
 func (set Set) Remove(k string) {
 	delete(set, k)
+}
+
+// Includes returns wether or not the string is in the set
+func (set Set) Has(k string) bool {
+	_, ok := set[k]
+
+	return ok
 }
 
 // collectedFields are representations of a field with the list of selection sets that
@@ -656,6 +760,13 @@ func plannerBuildQuery(parentType string, variables ast.VariableDefinitionList, 
 					},
 				},
 			},
+		}
+
+		if variables.ForName("id") == nil {
+			operation.VariableDefinitions = append(operation.VariableDefinitions, &ast.VariableDefinition{
+				Variable: "id",
+				Type:     ast.NonNullNamedType("ID", &ast.Position{}),
+			})
 		}
 	}
 	log.Debug("Build Query")
