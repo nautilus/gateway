@@ -512,8 +512,8 @@ func TestPreparePlanQueries(t *testing.T) {
 	// if we have a plan that depends on another, we need to add the id field to the selection set if
 	// its not there
 
-	childStep := &QueryPlanStep{
-		InsertionPoint: []string{"users", "friends"},
+	thirdLevelChild := &QueryPlanStep{
+		InsertionPoint: []string{"followers", "users", "friends", "followers"},
 		SelectionSet: ast.SelectionSet{
 			&ast.Field{
 				Name: "firstName",
@@ -524,7 +524,22 @@ func TestPreparePlanQueries(t *testing.T) {
 		},
 	}
 
+	childStep := &QueryPlanStep{
+		InsertionPoint: []string{"followers", "users", "friends"},
+		SelectionSet: ast.SelectionSet{
+			&ast.Field{
+				Name: "followers",
+				Definition: &ast.FieldDefinition{
+					Type: ast.NonNullListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+				},
+				SelectionSet: ast.SelectionSet{},
+			},
+		},
+		Then: []*QueryPlanStep{thirdLevelChild},
+	}
+
 	parentStep := &QueryPlanStep{
+		InsertionPoint: []string{"followers"},
 		SelectionSet: ast.SelectionSet{
 			&ast.Field{
 				Name: "users",
@@ -560,7 +575,19 @@ func TestPreparePlanQueries(t *testing.T) {
 	}
 
 	// add the id fields
-	(&MinQueriesPlanner{}).preparePlanQueries(plan, plan.RootStep)
+	err := (&MinQueriesPlanner{}).preparePlanQueries(plan, plan.RootStep)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// make sure we assigned a query document and string to the parent step
+	if parentStep.QueryDocument == nil {
+		t.Error("Encountered a nil query document on parent")
+	}
+	if parentStep.QueryString == "" {
+		t.Error("Encountered an empty query string on parent")
+	}
 
 	// we should have added `id` to the
 	usersSelection, ok := parentStep.SelectionSet[0].(*ast.Field)
@@ -587,14 +614,6 @@ func TestPreparePlanQueries(t *testing.T) {
 		}
 	}
 
-	// make sure we assigned a query document and string to the parent step
-	if parentStep.QueryDocument == nil {
-		t.Error("Encountered a nil query document on parent")
-	}
-	if parentStep.QueryString == "" {
-		t.Error("Encountered an empty query string on parent")
-	}
-
 	// make sure we assigned a query document and string to the child step
 	if childStep.QueryDocument == nil {
 		t.Error("Encountered a nil query document on parent")
@@ -602,6 +621,13 @@ func TestPreparePlanQueries(t *testing.T) {
 	if childStep.QueryString == "" {
 		t.Error("Encountered an empty query string on parent")
 	}
+
+	// make sure the followers selection of the child has an id in it
+	if len(selectedFields(childStep.SelectionSet)[0].SelectionSet) != 1 {
+		t.Errorf("Encountered incorrect number of fields under secondStep.followers: %v", len(selectedFields(childStep.SelectionSet)[0].SelectionSet))
+	}
+
+	fmt.Println(selectedFields(selectedFields(childStep.SelectionSet)[0].SelectionSet)[0].Name)
 }
 
 func TestExtractVariables(t *testing.T) {

@@ -280,15 +280,26 @@ func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanS
 		var targetField *ast.Field
 
 		// walk down the list of insertion points
-		for _, point := range nextStep.InsertionPoint {
+		for i := len(step.InsertionPoint); i < len(nextStep.InsertionPoint); i++ {
+			// the point we are looking for in the selection set
+			point := nextStep.InsertionPoint[i]
+
+			// wether we found the corresponding field or not
+			foundSelection := false
+
 			// look for the selection with that name
 			for _, selection := range selectedFields(accumulator) {
 				// if we still have to walk down the selection but we found the right branch
 				if selection.Name == point {
 					accumulator = selection.SelectionSet
 					targetField = selection
+					foundSelection = true
 					break
 				}
+			}
+
+			if !foundSelection {
+				return fmt.Errorf("Could not find selection for point: %s", point)
 			}
 		}
 
