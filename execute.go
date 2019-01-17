@@ -200,7 +200,6 @@ func executeStep(
 		}
 	}
 
-	fmt.Println("insertion point", insertionPoint)
 	// the id of the object we are query is defined by the last step in the realized insertion point
 	if len(insertionPoint) > 0 {
 		head := insertionPoint[max(len(insertionPoint)-1, 0)]
@@ -399,7 +398,6 @@ func executorFindInsertionPoints(targetPoints []string, selectionSet ast.Selecti
 					for i, newBranch := range newBranchSet {
 						// if we are looking at the last thing in the insertion list
 						if pointI == len(targetPoints)-1 {
-							fmt.Println(resultEntry)
 							// look for an id
 							id, ok := resultEntry["id"]
 							if !ok {
