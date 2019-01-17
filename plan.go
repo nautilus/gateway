@@ -253,106 +253,6 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 	return plans, nil
 }
 
-func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanStep) error {
-	// we need to construct the query information for this step which requires adding ID's
-	// where necessary to stitch results together
-
-	// a step's query can be influenced by each step directly after it. In order for the
-	// insertion point to work, there must be an id field in the object that
-	for _, nextStep := range step.Then {
-
-		// we need to walk down the graph
-		for _, nextStep := range step.Then {
-			err := p.preparePlanQueries(plan, nextStep)
-			if err != nil {
-				return err
-			}
-		}
-
-		// if there is no selection
-		if len(nextStep.InsertionPoint) == 0 {
-			// ignore i
-			continue
-		}
-
-		// the selection set we need to add `id` to
-		accumulator := step.SelectionSet
-		var targetField *ast.Field
-
-		// walk down the list of insertion points
-		for i := len(step.InsertionPoint); i < len(nextStep.InsertionPoint); i++ {
-			// the point we are looking for in the selection set
-			point := nextStep.InsertionPoint[i]
-
-			// wether we found the corresponding field or not
-			foundSelection := false
-
-			// look for the selection with that name
-			for _, selection := range selectedFields(accumulator) {
-				// if we still have to walk down the selection but we found the right branch
-				if selection.Alias == point {
-					accumulator = selection.SelectionSet
-					targetField = selection
-					foundSelection = true
-					break
-				}
-			}
-
-			if !foundSelection {
-				return fmt.Errorf("Could not find selection for point: %s", point)
-			}
-		}
-
-		// if we couldn't find the target
-		if accumulator == nil {
-			return fmt.Errorf("Could not find field to add id to. insertion point: %v", nextStep.InsertionPoint)
-		}
-
-		// if the target does not currently ask for id we need to add it
-		addID := true
-		for _, selection := range selectedFields(accumulator) {
-			if selection.Name == "id" {
-				addID = false
-				break
-			}
-		}
-
-		// add the ID to the selection set if necessary
-		if addID {
-			accumulator = append(accumulator, &ast.Field{
-				Name: "id",
-			})
-
-			// mark the id as artificially added
-			step.ClearID = true
-		}
-
-		// make sure the selection set contains the id
-		targetField.SelectionSet = accumulator
-	}
-
-	// we need to grab the list of variable definitions
-	variableDefs := ast.VariableDefinitionList{}
-	// we need to grab the variable definitions and values for each variable in the step
-	for variable := range step.Variables {
-		// add the definition
-		variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
-	}
-
-	// build up the query document
-	step.QueryDocument = plannerBuildQuery(step.ParentType, variableDefs, step.SelectionSet)
-
-	// we also need to turn the query into a string
-	queryString, err := graphql.PrintQuery(step.QueryDocument)
-	if err != nil {
-		return err
-	}
-	step.QueryString = queryString
-
-	// nothing went wrong here
-	return nil
-}
-
 type extractSelectionConfig struct {
 	stepCh chan *newQueryPlanStepPayload
 	errCh  chan error
@@ -454,51 +354,154 @@ FieldLoop:
 	finalSelection := ast.SelectionSet{}
 
 	// we need to repeat this process for each field in the current location selection set
-	for _, field := range selectedFields(currentLocationFields) {
-		// if the targetField has a selection, it cannot be added naively to the parent. We first have to
-		// modify its selection set to only include fields that are at the same location as the parent.
-		if len(field.SelectionSet) > 0 {
-			// the insertion point for this field is the previous one with the new field name
-			insertionPoint := make([]string, len(config.insertionPoint))
-			copy(insertionPoint, config.insertionPoint)
-			insertionPoint = append(insertionPoint, field.Alias)
+	for _, selection := range currentLocationFields {
+		switch selection := selection.(type) {
+		case *ast.Field:
+			// if the targetField has a selection, it cannot be added naively to the parent. We first have to
+			// modify its selection set to only include fields that are at the same location as the parent.
+			if len(selection.SelectionSet) > 0 {
+				// the insertion point for this field is the previous one with the new field name
+				insertionPoint := make([]string, len(config.insertionPoint))
+				copy(insertionPoint, config.insertionPoint)
+				insertionPoint = append(insertionPoint, selection.Alias)
 
-			log.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
-			// add any possible selections provided by selections
-			subSelection, err := p.extractSelection(&extractSelectionConfig{
-				stepCh:         config.stepCh,
-				stepWg:         config.stepWg,
-				step:           config.step,
-				locations:      config.locations,
-				parentLocation: config.parentLocation,
-				parentType:     coreFieldType(field).Name(),
-				selection:      field.SelectionSet,
-				insertionPoint: insertionPoint,
-			})
-			if err != nil {
-				return nil, err
+				log.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
+				// add any possible selections provided by selections
+				subSelection, err := p.extractSelection(&extractSelectionConfig{
+					stepCh:         config.stepCh,
+					stepWg:         config.stepWg,
+					step:           config.step,
+					locations:      config.locations,
+					parentLocation: config.parentLocation,
+					parentType:     coreFieldType(selection).Name(),
+					selection:      selection.SelectionSet,
+					insertionPoint: insertionPoint,
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				log.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, selection.Name, subSelection))
+
+				// overwrite the selection set for this selection
+				selection.SelectionSet = subSelection
+			} else {
+				log.Debug("found a scalar")
+			}
+			// the field is now safe to add to the parents selection set
+
+			// any variables that this field depends on need to be added to the steps list of variables
+			for _, variable := range plannerExtractVariables(selection.Arguments) {
+				config.step.Variables.Add(variable)
 			}
 
-			log.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, field.Name, subSelection))
-
-			// overwrite the selection set for this selection
-			field.SelectionSet = subSelection
-		} else {
-			log.Debug("found a scalar")
+			// add it to the list
+			finalSelection = append(finalSelection, selection)
 		}
-		// the field is now safe to add to the parents selection set
-
-		// any variables that this field depends on need to be added to the steps list of variables
-		for _, variable := range plannerExtractVariables(field.Arguments) {
-			config.step.Variables.Add(variable)
-		}
-
-		// add it to the list
-		finalSelection = append(finalSelection, field)
 	}
 
 	// we should have added every field that needs to be added to this list
 	return finalSelection, nil
+}
+
+func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanStep) error {
+	// we need to construct the query information for this step which requires adding ID's
+	// where necessary to stitch results together
+
+	// a step's query can be influenced by each step directly after it. In order for the
+	// insertion point to work, there must be an id field in the object that
+	for _, nextStep := range step.Then {
+
+		// we need to walk down the graph
+		for _, nextStep := range step.Then {
+			err := p.preparePlanQueries(plan, nextStep)
+			if err != nil {
+				return err
+			}
+		}
+
+		// if there is no selection
+		if len(nextStep.InsertionPoint) == 0 {
+			// ignore i
+			continue
+		}
+
+		// the selection set we need to add `id` to
+		accumulator := step.SelectionSet
+		var targetField *ast.Field
+
+		// walk down the list of insertion points
+		for i := len(step.InsertionPoint); i < len(nextStep.InsertionPoint); i++ {
+			// the point we are looking for in the selection set
+			point := nextStep.InsertionPoint[i]
+
+			// wether we found the corresponding field or not
+			foundSelection := false
+
+			// look for the selection with that name
+			for _, selection := range selectedFields(accumulator) {
+				// if we still have to walk down the selection but we found the right branch
+				if selection.Alias == point {
+					accumulator = selection.SelectionSet
+					targetField = selection
+					foundSelection = true
+					break
+				}
+			}
+
+			if !foundSelection {
+				return fmt.Errorf("Could not find selection for point: %s", point)
+			}
+		}
+
+		// if we couldn't find the target
+		if accumulator == nil {
+			return fmt.Errorf("Could not find field to add id to. insertion point: %v", nextStep.InsertionPoint)
+		}
+
+		// if the target does not currently ask for id we need to add it
+		addID := true
+		for _, selection := range selectedFields(accumulator) {
+			if selection.Name == "id" {
+				addID = false
+				break
+			}
+		}
+
+		// add the ID to the selection set if necessary
+		if addID {
+			accumulator = append(accumulator, &ast.Field{
+				Name: "id",
+			})
+
+			// mark the id as artificially added
+			step.ClearID = true
+		}
+
+		// make sure the selection set contains the id
+		targetField.SelectionSet = accumulator
+	}
+
+	// we need to grab the list of variable definitions
+	variableDefs := ast.VariableDefinitionList{}
+	// we need to grab the variable definitions and values for each variable in the step
+	for variable := range step.Variables {
+		// add the definition
+		variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
+	}
+
+	// build up the query document
+	step.QueryDocument = plannerBuildQuery(step.ParentType, variableDefs, step.SelectionSet)
+
+	// we also need to turn the query into a string
+	queryString, err := graphql.PrintQuery(step.QueryDocument)
+	if err != nil {
+		return err
+	}
+	step.QueryString = queryString
+
+	// nothing went wrong here
+	return nil
 }
 
 func coreFieldType(source *ast.Field) *ast.Type {

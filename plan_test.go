@@ -1058,32 +1058,10 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 	assert.Equal(t, selection, fragment.SelectionSet)
 }
 
-func TestApplyFragments_skipAndIncludeDirectives(t *testing.T) {
-	t.Skip("Not yet implemented")
-}
-
-func TestApplyFragments_leavesUnionsAndInterfaces(t *testing.T) {
-	t.Skip("Not yet implemented")
-}
-
 func TestPlanQuery_multipleRootFields(t *testing.T) {
 	t.Skip("Not implemented")
 }
 
 func TestPlanQuery_mutationsInSeries(t *testing.T) {
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_siblingFields(t *testing.T) {
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_duplicateFieldsOnEither(t *testing.T) {
-	// make sure that if I have the same field defined on both schemas we dont create extraneous calls
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_groupsConflictingFields(t *testing.T) {
-	// if I can find a field in 4 different services, look for the one I"m already going to
 	t.Skip("Not implemented")
 }
