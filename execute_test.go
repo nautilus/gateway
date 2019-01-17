@@ -361,11 +361,18 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 									},
 									// planner will actually leave behind a queryer that hits service B
 									// for testing we can just return a known value
-									Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
-										"node": map[string]interface{}{
-											"firstName": followerName,
-										},
-									}},
+									Queryer: &graphql.QueryerFunc{
+										func(input *graphql.QueryInput) (interface{}, error) {
+											// make sure that we got the right variable inputs
+											assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+
+											// return the payload
+											return map[string]interface{}{
+												"node": map[string]interface{}{
+													"firstName": followerName,
+												},
+											}, nil
+										}},
 								},
 							},
 						},
@@ -464,6 +471,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 		"goodbye": "moon",
 	}
 
+	// the precompiled query document coming in
 	fullVariableDefs := ast.VariableDefinitionList{
 		&ast.VariableDefinition{
 			Variable: "hello",
@@ -477,7 +485,10 @@ func TestExecutor_threadsVariables(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	_, err := (&ParallelExecutor{}).Execute(&QueryPlan{
-		Variables: fullVariableDefs,
+		Operation: &ast.OperationDefinition{
+			Operation:           ast.Query,
+			VariableDefinitions: fullVariableDefs,
+		},
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -492,7 +503,12 @@ func TestExecutor_threadsVariables(t *testing.T) {
 							},
 						},
 					},
-					Variables: Set{"hello": true},
+					QueryDocument: &ast.OperationDefinition{
+						Operation:           "Query",
+						VariableDefinitions: ast.VariableDefinitionList{fullVariableDefs[0]},
+					},
+					QueryString: `hello`,
+					Variables:   Set{"hello": true},
 					// return a known value we can test against
 					Queryer: &graphql.QueryerFunc{
 						func(input *graphql.QueryInput) (interface{}, error) {
@@ -500,6 +516,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 							assert.Equal(t, map[string]interface{}{"hello": "world"}, input.Variables)
 							// and definitions
 							assert.Equal(t, ast.VariableDefinitionList{fullVariableDefs[0]}, input.QueryDocument.VariableDefinitions)
+							assert.Equal(t, "hello", input.Query)
 
 							return map[string]interface{}{"values": []string{"world"}}, nil
 						}},
@@ -510,7 +527,6 @@ func TestExecutor_threadsVariables(t *testing.T) {
 	if err != nil {
 		t.Error(err.Error())
 	}
-
 }
 func TestFindInsertionPoint_rootList(t *testing.T) {
 	// in this example, the step before would have just resolved (need to be inserted at)
@@ -858,136 +874,6 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 
 	// make sure that the value is what we expect
 	assert.Equal(t, inserted, list[5])
-}
-
-func TestExecutorBuildQuery_query(t *testing.T) {
-	// if we pass a query on Query to the builder we should get that same
-	// selection set present in the operation without any nesting
-	selection := ast.SelectionSet{
-		&ast.Field{
-			Name: "allUsers",
-			Definition: &ast.FieldDefinition{
-				Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-			},
-			SelectionSet: ast.SelectionSet{
-				&ast.Field{
-					Name: "firstName",
-				},
-			},
-		},
-	}
-
-	variables := ast.VariableDefinitionList{
-		{
-			Variable: "Foo",
-			Type:     ast.NamedType("String", &ast.Position{}),
-		},
-	}
-
-	// the query we're building goes to the top level Query object
-	operation := executorBuildQuery("Query", "", variables, selection)
-	if operation == nil {
-		t.Error("Did not receive a query.")
-		return
-	}
-
-	// it should be a query
-	assert.Equal(t, ast.Query, operation.Operation)
-	assert.Equal(t, variables, operation.VariableDefinitions)
-
-	// the selection set should be the same as what we passed in
-	assert.Equal(t, selection, operation.SelectionSet)
-}
-
-func TestExecutorBuildQuery_node(t *testing.T) {
-	// if we are querying a specific type/id then we need to perform a query similar to
-	// {
-	// 		node(id: "1234") {
-	// 			... on User {
-	// 				firstName
-	// 			}
-	// 		}
-	// }
-
-	// the type we are querying
-	objType := "User"
-	// the id of the object
-	objID := "1234"
-
-	// we only need the first name for this query
-	selection := ast.SelectionSet{
-		&ast.Field{
-			Name: "firstName",
-			Definition: &ast.FieldDefinition{
-				Type: ast.NamedType("String", &ast.Position{}),
-			},
-		},
-	}
-
-	// the query we're building goes to the User object
-	operation := executorBuildQuery(objType, objID, ast.VariableDefinitionList{}, selection)
-	if operation == nil {
-		t.Error("Did not receive a query.")
-		return
-	}
-
-	// it should be a query
-	assert.Equal(t, ast.Query, operation.Operation)
-
-	// there should be one selection (node) with an argument for the id
-	if len(operation.SelectionSet) != 1 {
-		t.Error("Did not find the right number of fields on the top query")
-		return
-	}
-
-	// grab the node field
-	node, ok := operation.SelectionSet[0].(*ast.Field)
-	if !ok {
-		t.Error("root is not a field")
-		return
-	}
-	if node.Name != "node" {
-		t.Error("Did not ask for node at the top")
-		return
-	}
-	// there should be one argument (id)
-	if len(node.Arguments) != 1 {
-		t.Error("Found the wrong number of arguments for the node field")
-		return
-	}
-	argument := node.Arguments[0]
-	if argument.Name != "id" {
-		t.Error("Did not pass id to the node field")
-		return
-	}
-	if argument.Value.Raw != objID {
-		t.Error("Did not pass the right id value to the node field")
-		return
-	}
-	if argument.Value.Kind != ast.StringValue {
-		t.Error("Argument was incorrect type")
-		return
-	}
-
-	// make sure the field has an inline fragment for the type
-	if len(node.SelectionSet) != 1 {
-		t.Error("Did not have any sub selection of the node field")
-		return
-	}
-	fragment, ok := node.SelectionSet[0].(*ast.InlineFragment)
-	if !ok {
-		t.Error("Could not find inline fragment under node")
-		return
-	}
-
-	// make sure its for the right type
-	if fragment.TypeCondition != objType {
-		t.Error("Inline fragment was for wrong type")
-		return
-	}
-
-	// make sure the selection set is what we expected
-	assert.Equal(t, selection, fragment.SelectionSet)
 }
 
 func TestExecutorGetPointData(t *testing.T) {

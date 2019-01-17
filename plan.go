@@ -18,14 +18,15 @@ type QueryPlanStep struct {
 	ParentID       string
 	SelectionSet   ast.SelectionSet
 	InsertionPoint []string
+	QueryDocument  *ast.OperationDefinition
+	QueryString    string
 	Then           []*QueryPlanStep
 	Variables      Set
 }
 
 // QueryPlan is the full plan to resolve a particular query
 type QueryPlan struct {
-	Operation string
-	Variables ast.VariableDefinitionList
+	Operation *ast.OperationDefinition
 	RootStep  *QueryPlanStep
 }
 
@@ -67,8 +68,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 	for _, operation := range parsedQuery.Operations {
 		// each operation results in a new query
 		plan := &QueryPlan{
-			Operation: operation.Name,
-			Variables: operation.VariableDefinitions,
+			Operation: operation,
 			RootStep:  &QueryPlanStep{},
 		}
 
@@ -177,6 +177,29 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 						// so add it to the query we are sending to the service
 						step.SelectionSet = newSelection
 					}
+
+					// now that we're done processing the step we need to preconstruct the query that we
+					// will be firing for this plan
+
+					// we need to grab the list of variable definitions
+					variableDefs := ast.VariableDefinitionList{}
+					// we need to grab the variable definitions and values for each variable in the step
+					for variable := range step.Variables {
+						// add the definition
+						variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
+					}
+
+					// build up the query document and string
+					stepQuery := plannerBuildQuery(step.ParentType, variableDefs, step.SelectionSet)
+					queryStr, err := graphql.PrintQuery(stepQuery)
+					if err != nil {
+						errCh <- err
+						continue SelectLoop
+					}
+
+					// add the query information to the step
+					step.QueryDocument = stepQuery
+					step.QueryString = queryStr
 
 					// we're done processing this step
 					stepWg.Done()
@@ -588,6 +611,57 @@ func (p *Planner) GetQueryer(url string, schema *ast.Schema) graphql.Queryer {
 
 	// otherwise return a network queryer
 	return graphql.NewNetworkQueryer(url)
+}
+
+func plannerBuildQuery(parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet) *ast.OperationDefinition {
+	log.Debug("Querying ", parentType, " ")
+	// build up an operation for the query
+	operation := &ast.OperationDefinition{
+		Operation:           ast.Query,
+		VariableDefinitions: variables,
+	}
+
+	// if we are querying the top level Query all we need to do is add
+	// the selection set at the root
+	if parentType == "Query" {
+		operation.SelectionSet = selectionSet
+	} else {
+		// if we are not querying the top level then we have to embed the selection set
+		// under the node query with the right id as the argument
+
+		// we want the operation to have the equivalent of
+		// {
+		//	 	node(id: parentID) {
+		//	 		... on parentType {
+		//	 			selection
+		//	 		}
+		//	 	}
+		// }
+		operation.SelectionSet = ast.SelectionSet{
+			&ast.Field{
+				Name: "node",
+				Arguments: ast.ArgumentList{
+					&ast.Argument{
+						Name: "id",
+						Value: &ast.Value{
+							Kind: ast.Variable,
+							Raw:  "id",
+						},
+					},
+				},
+				SelectionSet: ast.SelectionSet{
+					&ast.InlineFragment{
+						TypeCondition: parentType,
+						SelectionSet:  selectionSet,
+					},
+				},
+			},
+		}
+	}
+	log.Debug("Build Query")
+
+	// add the operation to a QueryDocument
+	return operation
 }
 
 // MockErrPlanner always returns the provided error. Useful in testing.
