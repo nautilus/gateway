@@ -899,7 +899,7 @@ func TestApplyFragments_mergesFragments(t *testing.T) {
 	}
 }
 
-func TestplannerBuildQuery_query(t *testing.T) {
+func TestPlannerBuildQuery_query(t *testing.T) {
 	// if we pass a query on Query to the builder we should get that same
 	// selection set present in the operation without any nesting
 	selection := ast.SelectionSet{
@@ -938,7 +938,7 @@ func TestplannerBuildQuery_query(t *testing.T) {
 	assert.Equal(t, selection, operation.SelectionSet)
 }
 
-func TestplannerBuildQuery_node(t *testing.T) {
+func TestPlannerBuildQuery_node(t *testing.T) {
 	// if we are querying a specific type/id then we need to perform a query similar to
 	// {
 	// 		node(id: "1234") {
