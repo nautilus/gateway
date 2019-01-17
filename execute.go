@@ -189,8 +189,19 @@ func executeStep(
 	// log the query
 	log.QueryPlanStep(step)
 
+	// the list of variables and their definitions that pertain to this query
+	variables := map[string]interface{}{}
+
+	// we need to grab the variable definitions and values for each variable in the step
+	for variable := range step.Variables {
+		// and the value if it exists
+		if value, ok := queryVariables[variable]; ok {
+			variables[variable] = value
+		}
+	}
+
+	fmt.Println("insertion point", insertionPoint)
 	// the id of the object we are query is defined by the last step in the realized insertion point
-	id := ""
 	if len(insertionPoint) > 0 {
 		head := insertionPoint[max(len(insertionPoint)-1, 0)]
 
@@ -207,31 +218,10 @@ func executeStep(
 			return
 		}
 
-		// reassign the id
-		id = pointData.ID
-	}
-	// the list of variables and their definitions that pertain to this query
-	variableDefs := ast.VariableDefinitionList{}
-	variables := map[string]interface{}{}
-
-	// we need to grab the variable definitions and values for each variable in the step
-	for variable := range step.Variables {
-		// add the definition
-		variableDefs = append(variableDefs, plan.Variables.ForName(variable))
-		// and the value if it exists
-		if value, ok := queryVariables[variable]; ok {
-			variables[variable] = value
-		}
+		// save the id as a variable to the query
+		variables["id"] = pointData.ID
 	}
 
-	// generate the query that we have to send for this step
-	query := executorBuildQuery(step.ParentType, id, variableDefs, step.SelectionSet)
-	queryStr, err := graphql.PrintQuery(query)
-	if err != nil {
-		errCh <- err
-		return
-	}
-	log.Debug("Sending network query: ", queryStr, "id: ", id)
 	// if there is no queryer
 	if step.Queryer == nil {
 		errCh <- errors.New("could not find queryer for step")
@@ -239,9 +229,9 @@ func executeStep(
 	}
 	// execute the query
 	queryResult := map[string]interface{}{}
-	err = step.Queryer.Query(&graphql.QueryInput{
-		Query:         queryStr,
-		QueryDocument: query,
+	err := step.Queryer.Query(&graphql.QueryInput{
+		Query:         step.QueryString,
+		QueryDocument: step.QueryDocument,
 		Variables:     variables,
 	}, &queryResult)
 	if err != nil {
@@ -649,57 +639,6 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 		Index: index,
 		ID:    id,
 	}, nil
-}
-
-func executorBuildQuery(parentType string, parentID string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet) *ast.OperationDefinition {
-	log.Debug("Querying ", parentType, " ", parentID)
-	// build up an operation for the query
-	operation := &ast.OperationDefinition{
-		Operation:           ast.Query,
-		VariableDefinitions: variables,
-	}
-
-	// if we are querying the top level Query all we need to do is add
-	// the selection set at the root
-	if parentType == "Query" {
-		operation.SelectionSet = selectionSet
-	} else {
-		// if we are not querying the top level then we have to embed the selection set
-		// under the node query with the right id as the argument
-
-		// we want the operation to have the equivalent of
-		// {
-		//	 	node(id: parentID) {
-		//	 		... on parentType {
-		//	 			selection
-		//	 		}
-		//	 	}
-		// }
-		operation.SelectionSet = ast.SelectionSet{
-			&ast.Field{
-				Name: "node",
-				Arguments: ast.ArgumentList{
-					&ast.Argument{
-						Name: "id",
-						Value: &ast.Value{
-							Kind: ast.StringValue,
-							Raw:  parentID,
-						},
-					},
-				},
-				SelectionSet: ast.SelectionSet{
-					&ast.InlineFragment{
-						TypeCondition: parentType,
-						SelectionSet:  selectionSet,
-					},
-				},
-			},
-		}
-	}
-	log.Debug("Build Query")
-
-	// add the operation to a QueryDocument
-	return operation
 }
 
 // ExecutorFn wraps a function to be used as an executor.

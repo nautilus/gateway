@@ -488,6 +488,19 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	nextStep := firstStep.Then[0]
 	// make sure it has the right variable dependencies
 	assert.Equal(t, Set{"category": true, "id": true}, nextStep.Variables)
+
+	// we need to have a query with id and category since id is passed to node
+	if len(nextStep.QueryDocument.VariableDefinitions) != 2 {
+		t.Errorf("Did not find the right number of variable definitions in the next step. Expected 2 found %v", len(nextStep.QueryDocument.VariableDefinitions))
+		return
+	}
+
+	for _, definition := range nextStep.QueryDocument.VariableDefinitions {
+		if definition.Variable != "id" && definition.Variable != "category" {
+			t.Errorf("Encountered a variable with an unknown name: %v", definition.Variable)
+			return
+		}
+	}
 }
 
 func TestExtractVariables(t *testing.T) {
@@ -783,6 +796,134 @@ func TestApplyFragments_mergesFragments(t *testing.T) {
 		}
 		return
 	}
+}
+
+func TestplannerBuildQuery_query(t *testing.T) {
+	// if we pass a query on Query to the builder we should get that same
+	// selection set present in the operation without any nesting
+	selection := ast.SelectionSet{
+		&ast.Field{
+			Name: "allUsers",
+			Definition: &ast.FieldDefinition{
+				Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+			},
+			SelectionSet: ast.SelectionSet{
+				&ast.Field{
+					Name: "firstName",
+				},
+			},
+		},
+	}
+
+	variables := ast.VariableDefinitionList{
+		{
+			Variable: "Foo",
+			Type:     ast.NamedType("String", &ast.Position{}),
+		},
+	}
+
+	// the query we're building goes to the top level Query object
+	operation := plannerBuildQuery("Query", variables, selection)
+	if operation == nil {
+		t.Error("Did not receive a query.")
+		return
+	}
+
+	// it should be a query
+	assert.Equal(t, ast.Query, operation.Operation)
+	assert.Equal(t, variables, operation.VariableDefinitions)
+
+	// the selection set should be the same as what we passed in
+	assert.Equal(t, selection, operation.SelectionSet)
+}
+
+func TestplannerBuildQuery_node(t *testing.T) {
+	// if we are querying a specific type/id then we need to perform a query similar to
+	// {
+	// 		node(id: "1234") {
+	// 			... on User {
+	// 				firstName
+	// 			}
+	// 		}
+	// }
+
+	// the type we are querying
+	objType := "User"
+
+	// we only need the first name for this query
+	selection := ast.SelectionSet{
+		&ast.Field{
+			Name: "firstName",
+			Definition: &ast.FieldDefinition{
+				Type: ast.NamedType("String", &ast.Position{}),
+			},
+		},
+	}
+
+	// the query we're building goes to the User object
+	operation := plannerBuildQuery(objType, ast.VariableDefinitionList{}, selection)
+	if operation == nil {
+		t.Error("Did not receive a query.")
+		return
+	}
+
+	// it should be a query
+	assert.Equal(t, ast.Query, operation.Operation)
+
+	// there should be one selection (node) with an argument for the id
+	if len(operation.SelectionSet) != 1 {
+		t.Error("Did not find the right number of fields on the top query")
+		return
+	}
+
+	// grab the node field
+	node, ok := operation.SelectionSet[0].(*ast.Field)
+	if !ok {
+		t.Error("root is not a field")
+		return
+	}
+	if node.Name != "node" {
+		t.Error("Did not ask for node at the top")
+		return
+	}
+	// there should be one argument (id)
+	if len(node.Arguments) != 1 {
+		t.Error("Found the wrong number of arguments for the node field")
+		return
+	}
+	argument := node.Arguments[0]
+	if argument.Name != "id" {
+		t.Error("Did not pass id to the node field")
+		return
+	}
+	if argument.Value.Raw != "id" {
+		t.Error("Did not pass the right id value to the node field")
+		return
+	}
+	if argument.Value.Kind != ast.Variable {
+		t.Error("Argument was incorrect type")
+		return
+	}
+
+	// make sure the field has an inline fragment for the type
+	if len(node.SelectionSet) != 1 {
+		t.Error("Did not have any sub selection of the node field")
+		return
+	}
+	fragment, ok := node.SelectionSet[0].(*ast.InlineFragment)
+	if !ok {
+		t.Error("Could not find inline fragment under node")
+		return
+	}
+
+	// make sure its for the right type
+	if fragment.TypeCondition != objType {
+		t.Error("Inline fragment was for wrong type")
+		return
+	}
+
+	// make sure the selection set is what we expected
+	assert.Equal(t, selection, fragment.SelectionSet)
 }
 
 func TestApplyFragments_skipAndIncludeDirectives(t *testing.T) {
