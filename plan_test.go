@@ -516,7 +516,8 @@ func TestPreparePlanQueries(t *testing.T) {
 		InsertionPoint: []string{"followers", "users", "friends", "followers"},
 		SelectionSet: ast.SelectionSet{
 			&ast.Field{
-				Name: "firstName",
+				Name:  "firstName",
+				Alias: "firstName",
 				Definition: &ast.FieldDefinition{
 					Type: ast.NamedType("String", &ast.Position{}),
 				},
@@ -528,7 +529,8 @@ func TestPreparePlanQueries(t *testing.T) {
 		InsertionPoint: []string{"followers", "users", "friends"},
 		SelectionSet: ast.SelectionSet{
 			&ast.Field{
-				Name: "followers",
+				Name:  "followers",
+				Alias: "followers",
 				Definition: &ast.FieldDefinition{
 					Type: ast.NonNullListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
 				},
@@ -542,19 +544,22 @@ func TestPreparePlanQueries(t *testing.T) {
 		InsertionPoint: []string{"followers"},
 		SelectionSet: ast.SelectionSet{
 			&ast.Field{
-				Name: "users",
+				Name:  "users",
+				Alias: "users",
 				Definition: &ast.FieldDefinition{
 					Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 				},
 				SelectionSet: ast.SelectionSet{
 					&ast.Field{
-						Name: "friends",
+						Name:  "friends",
+						Alias: "friends",
 						Definition: &ast.FieldDefinition{
 							Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 						},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
-								Name: "lastName",
+								Name:  "lastName",
+								Alias: "lastName",
 								Definition: &ast.FieldDefinition{
 									Type: ast.NamedType("String", &ast.Position{}),
 								},
@@ -627,7 +632,7 @@ func TestPreparePlanQueries(t *testing.T) {
 		t.Errorf("Encountered incorrect number of fields under secondStep.followers: %v", len(selectedFields(childStep.SelectionSet)[0].SelectionSet))
 	}
 
-	fmt.Println(selectedFields(selectedFields(childStep.SelectionSet)[0].SelectionSet)[0].Name)
+	assert.Equal(t, "id", selectedFields(selectedFields(childStep.SelectionSet)[0].SelectionSet)[0].Name)
 }
 
 func TestExtractVariables(t *testing.T) {

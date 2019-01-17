@@ -290,7 +290,7 @@ func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanS
 			// look for the selection with that name
 			for _, selection := range selectedFields(accumulator) {
 				// if we still have to walk down the selection but we found the right branch
-				if selection.Name == point {
+				if selection.Alias == point {
 					accumulator = selection.SelectionSet
 					targetField = selection
 					foundSelection = true
