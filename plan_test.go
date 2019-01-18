@@ -56,6 +56,75 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	assert.Len(t, rootField.SelectionSet, 0)
 }
 
+func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
+	// the location for the schema
+	location := "url1"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", location)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: Boolean
+		}
+	`)
+
+	// compute the plan for a query that just hits one service
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query MyQuery {
+			...Foo
+		}
+
+		fragment Foo on Query {
+			foo
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	if len(plans[0].RootStep.Then) == 0 {
+		t.Error("Could not find the step with fragment spread")
+		return
+	}
+
+	// the first selection is the only one we care about
+	root := plans[0].RootStep.Then[0]
+
+	// there should only be one selection
+	if len(root.SelectionSet) != 1 {
+		t.Errorf("encountered the wrong number of selections under root step: %v", len(root.SelectionSet))
+		return
+	}
+
+	// there should be a single selection that is a spread of the fragment Foo
+	fragment, ok := root.SelectionSet[0].(*ast.FragmentSpread)
+	if !ok {
+		t.Error("Root selection was not a fragment spread")
+		return
+	}
+
+	// make sure that the fragment has the right name
+	assert.Equal(t, "Foo", fragment.Name)
+
+	// we need to make sure that the fragment definition matches expectation
+	fragmentDef := root.FragmentDefinitions.ForName("Foo")
+	if fragmentDef == nil {
+		t.Error("Could not find fragment definition for Foo")
+		return
+	}
+
+	// there should only be one selection in the fragment
+	if len(fragmentDef.SelectionSet) != 1 {
+		t.Errorf("Encountered the incorrect number of fields under fragment definition")
+		return
+	}
+}
+
 func TestPlanQuery_singleRootObject(t *testing.T) {
 	// the location for the schema
 	location := "url1"
@@ -1058,8 +1127,88 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 	assert.Equal(t, selection, fragment.SelectionSet)
 }
 
-func TestPlanQuery_multipleRootFields(t *testing.T) {
-	t.Skip("Not implemented")
+func TestPlannerSplitFragment(t *testing.T) {
+	// we are going to split a fragment that looks like
+	//
+	// fragment Foo on User {
+	// 		firstName
+	// 		lastName
+	// }
+	//
+	// into 2 fragments for the 2 locations that the fragment covers:
+	//
+	// split["location1"] = fragment Foo on {
+	// 		firstName
+	// }
+	// split["location2"] = fragment Foo on {
+	// 		lastName
+	// }
+
+	locations := FieldURLMap{}
+	locations.RegisterURL("User", "firstName", "location-1")
+	locations.RegisterURL("User", "lastName", "location-2")
+
+	// split the fragment
+	split, err := splitFragment(&ast.FragmentDefinition{
+		Name:          "Foo",
+		TypeCondition: "User",
+		SelectionSet: ast.SelectionSet{
+			&ast.Field{
+				Name: "firstName",
+			},
+			&ast.Field{
+				Name: "lastName",
+			},
+		},
+	}, locations)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// we should have 2 splits
+	if len(split) != 2 {
+		t.Errorf("Encountered the wrong number of entries in the fragment split: %v", len(split))
+		return
+	}
+
+	// make sure that the location 1 split matches expectations
+	location1Split, ok := split["location-1"]
+	if !ok {
+		t.Error("Could not find the split for location1")
+		return
+	}
+	assert.Equal(t, "Foo", location1Split.FragmentName)
+	assert.Equal(t, &ast.FragmentDefinition{
+		Name:          "Foo",
+		TypeCondition: "User",
+		SelectionSet: ast.SelectionSet{
+			&ast.Field{
+				Name: "firstName",
+			},
+		},
+	}, location1Split.FragmentDefinitions[0])
+
+	location2Split, ok := split["location-2"]
+	if !ok {
+		t.Error("Could not find the split for location2")
+		return
+	}
+	assert.Equal(t, "Foo", location2Split.FragmentName)
+	assert.Equal(t, &ast.FragmentDefinition{
+		Name:          "Foo",
+		TypeCondition: "User",
+		SelectionSet: ast.SelectionSet{
+			&ast.Field{
+				Name: "lastName",
+			},
+		},
+	}, location2Split.FragmentDefinitions[0])
+
+}
+
+func TestPlannerBuildQuery_addIDsToFragments(t *testing.T) {
+	t.Error()
 }
 
 func TestPlanQuery_mutationsInSeries(t *testing.T) {

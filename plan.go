@@ -13,27 +13,28 @@ import (
 
 // QueryPlanStep represents a step in the plan required to fulfill a query.
 type QueryPlanStep struct {
-	Queryer        graphql.Queryer
-	ParentType     string
-	ParentID       string
-	SelectionSet   ast.SelectionSet
-	InsertionPoint []string
-	QueryDocument  *ast.OperationDefinition
-	QueryString    string
-	Then           []*QueryPlanStep
-	Variables      Set
-	// if this is set to true, we need to remove the id from the object that we are inserting the result into
-	ClearID bool
+	Queryer             graphql.Queryer
+	ParentType          string
+	ParentID            string
+	SelectionSet        ast.SelectionSet
+	InsertionPoint      []string
+	Then                []*QueryPlanStep
+	QueryDocument       *ast.OperationDefinition
+	QueryString         string
+	FragmentDefinitions ast.FragmentDefinitionList
+	Variables           Set
 }
 
 // QueryPlan is the full plan to resolve a particular query
 type QueryPlan struct {
-	Operation *ast.OperationDefinition
-	RootStep  *QueryPlanStep
+	Operation           *ast.OperationDefinition
+	RootStep            *QueryPlanStep
+	FragmentDefinitions ast.FragmentDefinitionList
 }
 
 type newQueryPlanStepPayload struct {
-	ServiceName    string
+	Plan           *QueryPlan
+	Location       string
 	SelectionSet   ast.SelectionSet
 	ParentType     string
 	Parent         *QueryPlanStep
@@ -89,8 +90,8 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 	for _, operation := range parsedQuery.Operations {
 		// each operation results in a new query
 		plan := &QueryPlan{
-			Operation: operation,
-			RootStep:  &QueryPlanStep{},
+			Operation:           operation,
+			FragmentDefinitions: parsedQuery.Fragments,
 		}
 
 		// add the plan to the top level list
@@ -106,9 +107,6 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 		// a wait group to track the progress of goroutines
 		stepWg := &sync.WaitGroup{}
 
-		// the list of fields we care about
-		fields := selectedFields(operation.SelectionSet)
-
 		// get the type for the operation
 		operationType := "Query"
 		switch operation.Operation {
@@ -117,29 +115,16 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 		case ast.Subscription:
 			operationType = "Subscription"
 		}
-		// start with one of the fields
-		possibleLocations, err := locations.URLFor(operationType, fields[0].Name)
-		if err != nil {
-			return nil, err
-		}
-
-		currentLocation := possibleLocations[0]
 
 		// we are garunteed at least one query
 		stepWg.Add(1)
 
-		// make sure that we apply any fragments before we start planning
-		selectionSet, err := plannerApplyFragments(operation.SelectionSet, parsedQuery.Fragments)
-		if err != nil {
-			return nil, err
-		}
-
-		// start a new step
+		// start with an empty root step
 		stepCh <- &newQueryPlanStepPayload{
-			SelectionSet:   selectionSet,
+			Plan:           plan,
+			SelectionSet:   operation.SelectionSet,
 			ParentType:     operationType,
-			ServiceName:    currentLocation,
-			Parent:         plan.RootStep,
+			Location:       "",
 			InsertionPoint: []string{},
 		}
 
@@ -152,9 +137,9 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 				select {
 				case payload := <-newSteps:
 					step := &QueryPlanStep{
-						Queryer:        p.GetQueryer(payload.ServiceName, schema),
+						Queryer:        p.GetQueryer(payload.Location, schema),
 						ParentType:     payload.ParentType,
-						SelectionSet:   payload.SelectionSet,
+						SelectionSet:   ast.SelectionSet{},
 						InsertionPoint: payload.InsertionPoint,
 						Variables:      Set{},
 					}
@@ -164,6 +149,11 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 						log.Debug(fmt.Sprintf("Adding step as dependency"))
 						// add the new step to the Then of the parent
 						payload.Parent.Then = append(payload.Parent.Then, step)
+					}
+					// if we don't yet have a root step
+					if plan.RootStep == nil {
+						// use this one
+						plan.RootStep = step
 					}
 
 					// log some stuffs
@@ -181,11 +171,12 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 						stepCh:         stepCh,
 						stepWg:         stepWg,
 						locations:      locations,
-						parentLocation: payload.ServiceName,
+						parentLocation: payload.Location,
 						parentType:     step.ParentType,
-						selection:      step.SelectionSet,
+						selection:      payload.SelectionSet,
 						step:           step,
 						insertionPoint: payload.InsertionPoint,
+						plan:           payload.Plan,
 					})
 					if err != nil {
 						errCh <- err
@@ -262,31 +253,68 @@ type extractSelectionConfig struct {
 	parentLocation string
 	parentType     string
 	step           *QueryPlanStep
+	plan           *QueryPlan
 	selection      ast.SelectionSet
 	insertionPoint []string
 }
 
 func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (ast.SelectionSet, error) {
 	// in order to group together fields in as few queries as possible, we need to group
-	// the selection set by the location
+	// the selection set by the location.
+
 	locationFields := map[string]ast.SelectionSet{}
+	fragmentDefs := map[string]ast.FragmentDefinitionList{}
+
 	// we have to pass over this list twice so we can place selections that can go in more than one place
 	fieldsLeft := []*ast.Field{}
 
-	for _, field := range selectedFields(config.selection) {
-		// look up the location for this field
-		possibleLocations, err := config.locations.URLFor(config.parentType, field.Name)
-		if err != nil {
-			return nil, err
-		}
+	for _, selection := range config.selection {
+		// each kind of selection contributes differently to the final selection set
+		switch selection := selection.(type) {
+		case *ast.Field:
+			// look up the location for this field
+			possibleLocations, err := config.locations.URLFor(config.parentType, selection.Name)
+			if err != nil {
+				return nil, err
+			}
 
-		// if this field can only be found in one location
-		if len(possibleLocations) == 1 {
-			locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
-			// the field can be found in many locations
-		} else {
-			// add the field to fields for second pass
-			fieldsLeft = append(fieldsLeft, field)
+			// if this field can only be found in one location
+			if len(possibleLocations) == 1 {
+				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], selection)
+				// the field can be found in many locations
+			} else {
+				// add the field to fields for second pass
+				fieldsLeft = append(fieldsLeft, selection)
+			}
+
+		case *ast.FragmentSpread:
+			// a fragments fields can span multiple services so a single fragment can result in many selections being added
+			fragmentLocations := map[string]ast.SelectionSet{}
+
+			// look up the definition of the fragment in the operation
+			defn := config.plan.FragmentDefinitions.ForName(selection.Name)
+			// if we don't have it
+			if defn == nil {
+				return nil, fmt.Errorf("Could not find definition for directive: %s", selection.Name)
+			}
+
+			// each field in the fragment should be bundled with whats around it (still wrapped in fragment)
+			for _, fragmentSelection := range defn.SelectionSet {
+				switch fragmentSelection := fragmentSelection.(type) {
+				case *ast.Field:
+					// look up the location of the field
+					fieldLocations, err := config.locations.URLFor(defn.TypeCondition, fragmentSelection.Name)
+					if err != nil {
+						return nil, err
+					}
+
+					// add the field to the location
+					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], fragmentSelection)
+				}
+			}
+		case *ast.InlineFragment:
+			// we need to split the inline fragment into an inline fragment for each location that this cover
+			// and then add those inline fragments to the final selection
 		}
 	}
 
@@ -334,7 +362,8 @@ FieldLoop:
 
 		// add the new step
 		config.stepCh <- &newQueryPlanStepPayload{
-			ServiceName:    location,
+			Plan:           config.plan,
+			Location:       location,
 			ParentType:     config.parentType,
 			SelectionSet:   fields,
 			Parent:         config.step,
@@ -346,8 +375,7 @@ FieldLoop:
 	currentLocationFields, ok := locationFields[config.parentLocation]
 	if !ok {
 		// there are no fields in the current location so we're done
-		return nil, nil
-
+		return ast.SelectionSet{}, nil
 	}
 
 	// build up a selection set for the parent
@@ -368,14 +396,16 @@ FieldLoop:
 				log.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
 				// add any possible selections provided by selections
 				subSelection, err := p.extractSelection(&extractSelectionConfig{
-					stepCh:         config.stepCh,
-					stepWg:         config.stepWg,
-					step:           config.step,
-					locations:      config.locations,
+					stepCh:    config.stepCh,
+					stepWg:    config.stepWg,
+					step:      config.step,
+					locations: config.locations,
+
 					parentLocation: config.parentLocation,
 					parentType:     coreFieldType(selection).Name(),
 					selection:      selection.SelectionSet,
 					insertionPoint: insertionPoint,
+					plan:           config.plan,
 				})
 				if err != nil {
 					return nil, err
@@ -397,9 +427,13 @@ FieldLoop:
 
 			// add it to the list
 			finalSelection = append(finalSelection, selection)
+
+		case *ast.FragmentSpread:
+			// add it to the list
+			finalSelection = append(finalSelection, selection)
 		}
 	}
-
+	fmt.Println(finalSelection)
 	// we should have added every field that needs to be added to this list
 	return finalSelection, nil
 }
@@ -473,9 +507,6 @@ func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanS
 			accumulator = append(accumulator, &ast.Field{
 				Name: "id",
 			})
-
-			// mark the id as artificially added
-			step.ClearID = true
 		}
 
 		// make sure the selection set contains the id
