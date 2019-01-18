@@ -39,6 +39,7 @@ type newQueryPlanStepPayload struct {
 	ParentType     string
 	Parent         *QueryPlanStep
 	InsertionPoint []string
+	Fragments      ast.FragmentDefinitionList
 }
 
 // QueryPlanner is responsible for taking a string with a graphql query and returns
@@ -126,6 +127,7 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 			ParentType:     operationType,
 			Location:       "",
 			InsertionPoint: []string{},
+			Fragments:      ast.FragmentDefinitionList{},
 		}
 
 		// start waiting for steps to be added
@@ -142,7 +144,7 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 						SelectionSet:        ast.SelectionSet{},
 						InsertionPoint:      payload.InsertionPoint,
 						Variables:           Set{},
-						FragmentDefinitions: plan.FragmentDefinitions,
+						FragmentDefinitions: payload.Fragments,
 					}
 
 					// if there is a parent to this query
@@ -264,11 +266,12 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 	// the selection set by the location.
 
 	locationFields := map[string]ast.SelectionSet{}
-	// fragmentDefs := map[string]ast.FragmentDefinitionList{}
+	locationFragments := map[string]ast.FragmentDefinitionList{}
 
 	// we have to pass over this list twice so we can place selections that can go in more than one place
 	fieldsLeft := []*ast.Field{}
 
+	// split each selection into groups of selection sets to be sent to a single service
 	for _, selection := range config.selection {
 		// each kind of selection contributes differently to the final selection set
 		switch selection := selection.(type) {
@@ -292,11 +295,16 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 			// a fragments fields can span multiple services so a single fragment can result in many selections being added
 			fragmentLocations := map[string]ast.SelectionSet{}
 
-			// look up the definition of the fragment in the operation
-			defn := config.plan.FragmentDefinitions.ForName(selection.Name)
+			// look up if we already have a definition for this fragment in the step
+			defn := config.step.FragmentDefinitions.ForName(selection.Name)
+
 			// if we don't have it
 			if defn == nil {
-				return nil, fmt.Errorf("Could not find definition for directive: %s", selection.Name)
+				// look in the operation
+				defn = config.plan.FragmentDefinitions.ForName(selection.Name)
+				if defn == nil {
+					return nil, fmt.Errorf("Could not find definition for directive: %s", selection.Name)
+				}
 			}
 
 			// each field in the fragment should be bundled with whats around it (still wrapped in fragment)
@@ -315,10 +323,19 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 			}
 
 			// for each bundle under a fragment
-			for location := range fragmentLocations {
+			for location, selectionSet := range fragmentLocations {
+				// add the fragment spread to the selection set for this location
 				locationFields[location] = append(locationFields[location], &ast.FragmentSpread{
 					Name:       selection.Name,
 					Directives: selection.Directives,
+				})
+
+				// since the fragment can only refer to fields in the top level that are at
+				// the same location we need to add a new definition of the
+				locationFragments[location] = append(locationFragments[location], &ast.FragmentDefinition{
+					Name:          selection.Name,
+					TypeCondition: defn.TypeCondition,
+					SelectionSet:  selectionSet,
 				})
 			}
 
@@ -349,7 +366,7 @@ FieldLoop:
 		}
 
 		// if we got here then this field can be found in multiple services that are not the parent
-		// for now, just use the first one
+		// just use the first one for now
 		locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
 	}
 
@@ -359,7 +376,7 @@ FieldLoop:
 
 	// we have to make sure we spawn any more goroutines before this one terminates. This means that
 	// we first have to look at any locations that are not the current one
-	for location, fields := range locationFields {
+	for location, selectionSet := range locationFields {
 		if location == config.parentLocation {
 			continue
 		}
@@ -375,7 +392,8 @@ FieldLoop:
 			Plan:           config.plan,
 			Location:       location,
 			ParentType:     config.parentType,
-			SelectionSet:   fields,
+			SelectionSet:   selectionSet,
+			Fragments:      locationFragments[location],
 			Parent:         config.step,
 			InsertionPoint: config.insertionPoint,
 		}

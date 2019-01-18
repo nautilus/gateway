@@ -123,6 +123,92 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 		t.Errorf("Encountered the incorrect number of fields under fragment definition")
 		return
 	}
+
+	// we should have selected foo
+	assert.Equal(t, "foo", graphql.SelectedFields(fragmentDef.SelectionSet)[0].Name)
+}
+
+func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
+	// the locations for the schema
+	location1 := "url1"
+	location2 := "url2"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", location1)
+	locations.RegisterURL("Query", "bar", location2)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: Boolean
+			bar: Boolean
+		}
+	`)
+
+	// compute the plan for a query that just hits one service
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query MyQuery {
+			...Foo
+		}
+
+		fragment Foo on Query {
+			foo
+			bar
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	if len(plans[0].RootStep.Then) != 2 {
+		t.Errorf("Encountered incorrect number of steps after root step. Expected 2, found %v", len(plans[0].RootStep.Then))
+		return
+	}
+
+	// get the step for location 1
+	location1Step := plans[0].RootStep.Then[0]
+	// make sure that the step has only one selection (the fragment)
+	if len(location1Step.SelectionSet) != 1 {
+		t.Errorf("Encountered incorrect number of selections under location 1 step. Expected 1, found %v", len(location1Step.SelectionSet))
+		return
+	}
+	assert.Equal(t, &ast.FragmentSpread{Name: "Foo"}, location1Step.SelectionSet[0])
+
+	// get the step for location 2
+	location2Step := plans[0].RootStep.Then[1]
+	// make sure that the step has only one selection (the fragment)
+	if len(location2Step.SelectionSet) != 1 {
+		t.Errorf("Encountered incorrect number of selections under location 2 step. Expected 1, found %v", len(location2Step.SelectionSet))
+		return
+	}
+	assert.Equal(t, &ast.FragmentSpread{Name: "Foo"}, location2Step.SelectionSet[0])
+
+	// we also should have a definition for the fragment that only includes the fields to location 1
+	location1Defn := location1Step.FragmentDefinitions[0]
+	location2Defn := location2Step.FragmentDefinitions[0]
+
+	encounteredFields := Set{}
+
+	for _, definition := range (ast.FragmentDefinitionList{location1Defn, location2Defn}) {
+		assert.Equal(t, "Query", definition.TypeCondition)
+		assert.Equal(t, "Foo", definition.Name)
+		if len(definition.SelectionSet) != 1 {
+			t.Errorf("Encountered incorrect number of selections under fragment definition for location 1. Expected 1 found %v", len(location1Defn.SelectionSet))
+			return
+		}
+
+		// add the field we encountered to the set
+		encounteredFields.Add(graphql.SelectedFields(definition.SelectionSet)[0].Name)
+	}
+
+	// make sure we saw both the step for "foo" and the step for "bar"
+	if !encounteredFields.Has("foo") && !encounteredFields.Has("bar") {
+		t.Error("Did not encounter both foo and bar steps")
+		return
+	}
 }
 
 func TestPlanQuery_singleRootObject(t *testing.T) {
@@ -834,14 +920,14 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 
 func TestPlannerSplitFragment(t *testing.T) {
 	// we are going to split a fragment that looks like
-	//
+
 	// fragment Foo on User {
 	// 		firstName
 	// 		lastName
 	// }
-	//
+
 	// into 2 fragments for the 2 locations that the fragment covers:
-	//
+
 	// split["location1"] = fragment Foo on {
 	// 		firstName
 	// }
