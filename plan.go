@@ -342,6 +342,33 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 		case *ast.InlineFragment:
 			// we need to split the inline fragment into an inline fragment for each location that this cover
 			// and then add those inline fragments to the final selection
+
+			fragmentLocations := map[string]ast.SelectionSet{}
+
+			// each field in the fragment should be bundled with whats around it (still wrapped in fragment)
+			for _, fragmentSelection := range selection.SelectionSet {
+				switch fragmentSelection := fragmentSelection.(type) {
+				case *ast.Field:
+					// look up the location of the field
+					fieldLocations, err := config.locations.URLFor(selection.TypeCondition, fragmentSelection.Name)
+					if err != nil {
+						return nil, err
+					}
+
+					// add the field to the location
+					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], fragmentSelection)
+				}
+			}
+
+			// for each bundle under a fragment
+			for location, selectionSet := range fragmentLocations {
+				// add the fragment spread to the selection set for this location
+				locationFields[location] = append(locationFields[location], &ast.InlineFragment{
+					TypeCondition: selection.TypeCondition,
+					Directives:    selection.Directives,
+					SelectionSet:  selectionSet,
+				})
+			}
 		}
 	}
 
@@ -458,6 +485,10 @@ FieldLoop:
 
 		case *ast.FragmentSpread:
 			// add it to the list
+			finalSelection = append(finalSelection, selection)
+
+		case *ast.InlineFragment:
+			// for now, just add it to the list
 			finalSelection = append(finalSelection, selection)
 		}
 	}
