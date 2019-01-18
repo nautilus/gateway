@@ -3,6 +3,8 @@ package gateway
 import (
 	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/ast"
+
+	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
 // Logger handles the logging in the gateway library
@@ -76,7 +78,7 @@ func logPlanStep(level int, selectionSet ast.SelectionSet) {
 		prefix += "    "
 	}
 	prefix += "|- "
-	for _, selection := range selectedFields(selectionSet) {
+	for _, selection := range graphql.SelectedFields(selectionSet) {
 		log.Info(prefix, selection.Name)
 		logPlanStep(level+1, selection.SelectionSet)
 	}

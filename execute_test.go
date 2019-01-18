@@ -503,9 +503,13 @@ func TestExecutor_threadsVariables(t *testing.T) {
 							},
 						},
 					},
-					QueryDocument: &ast.OperationDefinition{
-						Operation:           "Query",
-						VariableDefinitions: ast.VariableDefinitionList{fullVariableDefs[0]},
+					QueryDocument: &ast.QueryDocument{
+						Operations: ast.OperationList{
+							{
+								Operation:           "Query",
+								VariableDefinitions: ast.VariableDefinitionList{fullVariableDefs[0]},
+							},
+						},
 					},
 					QueryString: `hello`,
 					Variables:   Set{"hello": true},
@@ -515,7 +519,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 							// make sure that we got the right variable inputs
 							assert.Equal(t, map[string]interface{}{"hello": "world"}, input.Variables)
 							// and definitions
-							assert.Equal(t, ast.VariableDefinitionList{fullVariableDefs[0]}, input.QueryDocument.VariableDefinitions)
+							assert.Equal(t, ast.VariableDefinitionList{fullVariableDefs[0]}, input.QueryDocument.Operations[0].VariableDefinitions)
 							assert.Equal(t, "hello", input.Query)
 
 							return map[string]interface{}{"values": []string{"world"}}, nil
