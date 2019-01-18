@@ -10,7 +10,7 @@ import (
 func TestPrintQuery(t *testing.T) {
 	table := []struct {
 		expected string
-		query    *ast.OperationDefinition
+		query    *ast.QueryDocument
 	}{
 		// single root field
 		{
@@ -18,11 +18,15 @@ func TestPrintQuery(t *testing.T) {
   hello
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{
+					&ast.OperationDefinition{
+						Operation: ast.Query,
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "hello",
+							},
+						},
 					},
 				},
 			},
@@ -33,17 +37,21 @@ func TestPrintQuery(t *testing.T) {
   hello(foo: $foo)
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							&ast.Argument{
-								Name: "foo",
-								Value: &ast.Value{
-									Kind: ast.Variable,
-									Raw:  "foo",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{
+					&ast.OperationDefinition{
+						Operation: ast.Query,
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "hello",
+								Arguments: ast.ArgumentList{
+									&ast.Argument{
+										Name: "foo",
+										Value: &ast.Value{
+											Kind: ast.Variable,
+											Raw:  "foo",
+										},
+									},
 								},
 							},
 						},
@@ -57,26 +65,29 @@ func TestPrintQuery(t *testing.T) {
   hello @foo(bar: "baz")
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Directives: ast.DirectiveList{
-							&ast.Directive{
-								Name: "foo",
-								Arguments: ast.ArgumentList{
-									&ast.Argument{
-										Name: "bar",
-										Value: &ast.Value{
-											Kind: ast.StringValue,
-											Raw:  "baz",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Directives: ast.DirectiveList{
+								&ast.Directive{
+									Name: "foo",
+									Arguments: ast.ArgumentList{
+										&ast.Argument{
+											Name: "bar",
+											Value: &ast.Value{
+												Kind: ast.StringValue,
+												Raw:  "baz",
+											},
 										},
 									},
 								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -87,14 +98,18 @@ func TestPrintQuery(t *testing.T) {
   goodbye
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-					},
-					&ast.Field{
-						Name: "goodbye",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{
+					&ast.OperationDefinition{
+						Operation: ast.Query,
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "hello",
+							},
+							&ast.Field{
+								Name: "goodbye",
+							},
+						},
 					},
 				},
 			},
@@ -107,17 +122,20 @@ func TestPrintQuery(t *testing.T) {
   }
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						SelectionSet: ast.SelectionSet{
-							&ast.Field{
-								Name: "world",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "world",
+								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -129,17 +147,20 @@ func TestPrintQuery(t *testing.T) {
   }
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.InlineFragment{
-						TypeCondition: "Foo",
-						SelectionSet: ast.SelectionSet{
-							&ast.Field{
-								Name: "hello",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.InlineFragment{
+							TypeCondition: "Foo",
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "hello",
+								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -150,13 +171,16 @@ func TestPrintQuery(t *testing.T) {
   bar: hello
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name:  "hello",
-						Alias: "bar",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name:  "hello",
+							Alias: "bar",
+						},
 					},
+				},
 				},
 			},
 		},
@@ -166,21 +190,24 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: "world")
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.StringValue,
-									Raw:  "world",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.StringValue,
+										Raw:  "world",
+									},
 								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -190,21 +217,24 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: 1)
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.IntValue,
-									Raw:  "1",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.IntValue,
+										Raw:  "1",
+									},
 								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -214,21 +244,24 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: true)
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.BooleanValue,
-									Raw:  "true",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.BooleanValue,
+										Raw:  "true",
+									},
 								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -238,21 +271,24 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: $hello)
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.IntValue,
-									Raw:  "$hello",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.IntValue,
+										Raw:  "$hello",
+									},
 								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -262,20 +298,23 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: null)
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.NullValue,
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.NullValue,
+									},
 								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -285,21 +324,24 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: 1.1)
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.FloatValue,
-									Raw:  "1.1",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.FloatValue,
+										Raw:  "1.1",
+									},
 								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -309,21 +351,24 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: Hello)
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.EnumValue,
-									Raw:  "Hello",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.EnumValue,
+										Raw:  "Hello",
+									},
 								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -333,27 +378,29 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: ["hello", 1])
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.ListValue,
-									Children: ast.ChildValueList{
-										{
-											Value: &ast.Value{
-												Kind: ast.StringValue,
-												Raw:  "hello",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.ListValue,
+										Children: ast.ChildValueList{
+											{
+												Value: &ast.Value{
+													Kind: ast.StringValue,
+													Raw:  "hello",
+												},
 											},
-										},
-										{
-											Value: &ast.Value{
-												Kind: ast.IntValue,
-												Raw:  "1",
+											{
+												Value: &ast.Value{
+													Kind: ast.IntValue,
+													Raw:  "1",
+												},
 											},
 										},
 									},
@@ -361,6 +408,7 @@ func TestPrintQuery(t *testing.T) {
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -370,29 +418,31 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: {hello: "hello", goodbye: 1})
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.ObjectValue,
-									Children: ast.ChildValueList{
-										{
-											Name: "hello",
-											Value: &ast.Value{
-												Kind: ast.StringValue,
-												Raw:  "hello",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.ObjectValue,
+										Children: ast.ChildValueList{
+											{
+												Name: "hello",
+												Value: &ast.Value{
+													Kind: ast.StringValue,
+													Raw:  "hello",
+												},
 											},
-										},
-										{
-											Name: "goodbye",
-											Value: &ast.Value{
-												Kind: ast.IntValue,
-												Raw:  "1",
+											{
+												Name: "goodbye",
+												Value: &ast.Value{
+													Kind: ast.IntValue,
+													Raw:  "1",
+												},
 											},
 										},
 									},
@@ -400,6 +450,7 @@ func TestPrintQuery(t *testing.T) {
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -409,28 +460,31 @@ func TestPrintQuery(t *testing.T) {
   hello(hello: "world", goodbye: "moon")
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-						Arguments: ast.ArgumentList{
-							{
-								Name: "hello",
-								Value: &ast.Value{
-									Kind: ast.StringValue,
-									Raw:  "world",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+							Arguments: ast.ArgumentList{
+								{
+									Name: "hello",
+									Value: &ast.Value{
+										Kind: ast.StringValue,
+										Raw:  "world",
+									},
 								},
-							},
-							{
-								Name: "goodbye",
-								Value: &ast.Value{
-									Kind: ast.StringValue,
-									Raw:  "moon",
+								{
+									Name: "goodbye",
+									Value: &ast.Value{
+										Kind: ast.StringValue,
+										Raw:  "moon",
+									},
 								},
 							},
 						},
 					},
+				},
 				},
 			},
 		},
@@ -440,21 +494,24 @@ func TestPrintQuery(t *testing.T) {
   hello
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-					},
-				},
-				VariableDefinitions: ast.VariableDefinitionList{
-					&ast.VariableDefinition{
-						Variable: "id",
-						Type: &ast.Type{
-							NamedType: "ID",
-							NonNull:   true,
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
 						},
 					},
+					VariableDefinitions: ast.VariableDefinitionList{
+						&ast.VariableDefinition{
+							Variable: "id",
+							Type: &ast.Type{
+								NamedType: "ID",
+								NonNull:   true,
+							},
+						},
+					},
+				},
 				},
 			},
 		},
@@ -464,22 +521,25 @@ func TestPrintQuery(t *testing.T) {
   hello
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Query,
-				Name:      "foo",
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
-					},
-				},
-				VariableDefinitions: ast.VariableDefinitionList{
-					&ast.VariableDefinition{
-						Variable: "id",
-						Type: &ast.Type{
-							NamedType: "ID",
-							NonNull:   true,
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Query,
+					Name:      "foo",
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
 						},
 					},
+					VariableDefinitions: ast.VariableDefinitionList{
+						&ast.VariableDefinition{
+							Variable: "id",
+							Type: &ast.Type{
+								NamedType: "ID",
+								NonNull:   true,
+							},
+						},
+					},
+				},
 				},
 			},
 		},
@@ -489,12 +549,15 @@ func TestPrintQuery(t *testing.T) {
   hello
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Mutation,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{&ast.OperationDefinition{
+					Operation: ast.Mutation,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "hello",
+						},
 					},
+				},
 				},
 			},
 		},
@@ -504,11 +567,15 @@ func TestPrintQuery(t *testing.T) {
   hello
 }
 `,
-			&ast.OperationDefinition{
-				Operation: ast.Subscription,
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "hello",
+			&ast.QueryDocument{
+				Operations: ast.OperationList{
+					&ast.OperationDefinition{
+						Operation: ast.Subscription,
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "hello",
+							},
+						},
 					},
 				},
 			},

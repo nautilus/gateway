@@ -24,7 +24,7 @@ type RemoteSchema struct {
 // QueryInput provides all of the information required to fire a query
 type QueryInput struct {
 	Query         string
-	QueryDocument *ast.OperationDefinition
+	QueryDocument *ast.QueryDocument
 	OperationName string
 	Variables     map[string]interface{}
 }

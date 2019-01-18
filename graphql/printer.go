@@ -11,7 +11,10 @@ import (
 )
 
 // PrintQuery creates a string representation of an operation
-func PrintQuery(operation *ast.OperationDefinition) (string, error) {
+func PrintQuery(document *ast.QueryDocument) (string, error) {
+	// grab the first operation in the document
+	operation := document.Operations[0]
+
 	// in order to print we are going to turn the vektah package Operation into the graphql-go ast node
 	selectionSet, err := printerConvertSelectionSet(operation.SelectionSet)
 	if err != nil {
