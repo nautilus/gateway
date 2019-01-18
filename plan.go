@@ -639,7 +639,6 @@ func plannerBuildQuery(parentType string, variables ast.VariableDefinitionList, 
 			})
 		}
 	}
-	fmt.Println("Build Query with fragments", fragmentDefinitions)
 
 	// add the operation to a QueryDocument
 	return &ast.QueryDocument{

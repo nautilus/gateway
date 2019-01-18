@@ -31,8 +31,6 @@ func (q *SchemaQueryer) Query(input *graphql.QueryInput, receiver interface{}) e
 	// wrap the schema in something capable of introspection
 	introspectionSchema := introspection.WrapSchema(q.Schema)
 
-	fmt.Println("Fragments -> ", input.QueryDocument.Fragments)
-
 	// for local stuff we don't care about fragment directives
 	querySelection, err := graphql.ApplyFragments(input.QueryDocument.Operations[0].SelectionSet, input.QueryDocument.Fragments)
 	if err != nil {
@@ -88,12 +86,10 @@ func (q *SchemaQueryer) introspectSchema(schema *introspection.Schema, selection
 	result := map[string]interface{}{}
 
 	for _, field := range graphql.SelectedFields(selectionSet) {
-		fmt.Println(field.Name, field.Alias)
 		switch field.Alias {
 		case "types":
 			result[field.Alias] = q.introspectTypeSlice(schema.Types(), field.SelectionSet)
 		case "queryType":
-			fmt.Println("Looking for query type")
 			result[field.Alias] = q.introspectType(schema.QueryType(), field.SelectionSet)
 		case "mutationType":
 			result[field.Alias] = q.introspectType(schema.MutationType(), field.SelectionSet)
