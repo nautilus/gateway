@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -39,7 +40,7 @@ type newQueryPlanStepPayload struct {
 	Parent         *QueryPlanStep
 	InsertionPoint []string
 	Fragments      ast.FragmentDefinitionList
-	Wrapper        []*ast.InlineFragment
+	Wrapper        ast.SelectionSet
 }
 
 // QueryPlanner is responsible for taking a string with a graphql query and returns
@@ -128,7 +129,7 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 			Location:       "",
 			InsertionPoint: []string{},
 			Fragments:      ast.FragmentDefinitionList{},
-			Wrapper:        []*ast.InlineFragment{},
+			Wrapper:        ast.SelectionSet{},
 		}
 
 		// start waiting for steps to be added
@@ -259,7 +260,7 @@ type extractSelectionConfig struct {
 	plan           *QueryPlan
 	selection      ast.SelectionSet
 	insertionPoint []string
-	wrapper        []*ast.InlineFragment
+	wrapper        ast.SelectionSet
 }
 
 func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (ast.SelectionSet, error) {
@@ -436,33 +437,62 @@ FieldLoop:
 			log.Debug("wrapping selection", config.wrapper)
 
 			// pointers required to nest the
-			var selection *ast.InlineFragment
-			var innerSelection *ast.InlineFragment
+			var selection ast.Selection
+			var innerSelection ast.Selection
 
 			for _, wrap := range config.wrapper {
-				// create a new inline fragment
-				newSelection := &ast.InlineFragment{
-					TypeCondition: wrap.TypeCondition,
-					Directives:    wrap.Directives,
+				var newSelection ast.Selection
+
+				switch wrap := wrap.(type) {
+				case *ast.InlineFragment:
+					// create a new inline fragment
+					newSelection = &ast.InlineFragment{
+						TypeCondition: wrap.TypeCondition,
+						Directives:    wrap.Directives,
+					}
+				case *ast.FragmentSpread:
+					newSelection = &ast.FragmentSpread{
+						Name:       wrap.Name,
+						Directives: wrap.Directives,
+					}
+
+					defn := config.step.FragmentDefinitions.ForName(wrap.Name)
+					fmt.Println("Wrapping in fragment spread", defn)
+
+					locationFragments[location] = append(locationFragments[location], &ast.FragmentDefinition{
+						Name:          wrap.Name,
+						TypeCondition: config.parentType,
+					})
 				}
+
 				// if this is the first one then use the first object we create as the top level
 				if selection == nil {
 					selection = newSelection
-				} else {
-					innerSelection.SelectionSet = append(innerSelection.SelectionSet, newSelection)
+				} else if sel, ok := innerSelection.(*ast.InlineFragment); ok {
+					sel.SelectionSet = ast.SelectionSet{newSelection}
+				} else if sel, ok := innerSelection.(*ast.FragmentSpread); ok {
+					// look up the definition for the selection in the step
+					defn := locationFragments[location].ForName(sel.Name)
+					defn.SelectionSet = ast.SelectionSet{newSelection}
 				}
 
 				// this is the new inner-most selection
 				innerSelection = newSelection
-
-				// if this is the first one then use the first object we create as the top level
-				if selection == nil {
-					selection = newSelection
-				}
 			}
+			if sel, ok := innerSelection.(*ast.InlineFragment); ok {
+				sel.SelectionSet = selectionSet
+			} else if sel, ok := innerSelection.(*ast.FragmentSpread); ok {
+				// look up the definition for the selection in the step
+				defn := locationFragments[location].ForName(sel.Name)
 
-			// add the original selection set
-			innerSelection.SelectionSet = selectionSet
+				// if we couldn't find the definition
+				if defn == nil {
+					return nil, errors.New("Could not find defn")
+				}
+
+				// update its selection set
+				defn.SelectionSet = selectionSet
+			}
 
 			// use the wrapped version
 			selectionSet = ast.SelectionSet{selection}
@@ -470,7 +500,7 @@ FieldLoop:
 
 		// since we're adding another step we need to wait for at least one more goroutine to finish processing
 		config.stepWg.Add(1)
-
+		fmt.Println("Spawning sibling", log.FormatSelectionSet(selectionSet))
 		// add the new step
 		config.stepCh <- &newQueryPlanStepPayload{
 			Plan:           config.plan,
@@ -512,6 +542,18 @@ FieldLoop:
 				copy(insertionPoint, config.insertionPoint)
 				insertionPoint = append(insertionPoint, selection.Alias)
 
+				// if this field is being wrapped in a fragment then we need to make sure
+				// that any branches we kick off are still wrapped within the fragment.
+				// if the field is being wrapped in any inline fragments (above or below),
+				// we can get rid of them since the parent was responsible for handling
+				wrapper := ast.SelectionSet{}
+				if len(config.wrapper) > 0 {
+					wrapper = config.wrapper[:1]
+					if _, ok := wrapper[0].(*ast.InlineFragment); ok {
+						wrapper = ast.SelectionSet{}
+					}
+				}
+
 				log.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
 				// add any possible selections provided by selections
 				subSelection, err := p.extractSelection(&extractSelectionConfig{
@@ -525,9 +567,7 @@ FieldLoop:
 					selection:      selection.SelectionSet,
 					insertionPoint: insertionPoint,
 					plan:           config.plan,
-					// if this is a field, then its the one being wrapped. The children of this field
-					// should not have the wrapper
-					wrapper: nil,
+					wrapper:        wrapper,
 				})
 				if err != nil {
 					return nil, err
@@ -555,10 +595,12 @@ FieldLoop:
 			// add it to the list
 			finalSelection = append(finalSelection, selection)
 
-			// grab the official definition for the fragment
-			defn := config.plan.FragmentDefinitions.ForName(selection.Name)
+			// grab the official definition for the fragment.
+			// we could have overwritten the definition to fit the local needs of the top level
+			// ie if there is a branch off of one that happens mid-fragment.
+			defn := config.step.FragmentDefinitions.ForName(selection.Name)
 			if defn == nil {
-				return nil, fmt.Errorf("Could not find definition for fragment %v", selection.Name)
+				defn = config.plan.FragmentDefinitions.ForName(selection.Name)
 			}
 
 			// compute the actual selection set for the fragment coming from this location
@@ -573,9 +615,8 @@ FieldLoop:
 
 				parentType: defn.TypeCondition,
 				selection:  defn.SelectionSet,
-				// if this is a field, then its the one being wrapped. The children of this field
-				// should not have the wrapper
-				wrapper: nil,
+				// Children should now be wrapped by this fragment and nothing else
+				wrapper: ast.SelectionSet{selection},
 			})
 			if err != nil {
 				return nil, err
@@ -597,7 +638,7 @@ FieldLoop:
 		case *ast.InlineFragment:
 			log.Debug("found an inline fragment. extracting to ", config.insertionPoint, ". Parent insertion", config.insertionPoint)
 
-			newWrapper := make([]*ast.InlineFragment, len(config.wrapper))
+			newWrapper := make(ast.SelectionSet, len(config.wrapper))
 			copy(newWrapper, config.wrapper)
 			newWrapper = append(newWrapper, selection)
 

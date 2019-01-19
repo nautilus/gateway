@@ -875,7 +875,8 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	}
 }
 
-func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) { // the locations for the schema
+func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
+	// the locations for the schema
 	loc1 := "url1"
 	loc2 := "url2"
 
@@ -883,6 +884,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) { // the locati
 	locations := FieldURLMap{}
 	locations.RegisterURL("Query", "user", loc2)
 	locations.RegisterURL("User", "lastName", loc1)
+	locations.RegisterURL("User", "id", loc1, loc2)
 
 	schema, _ := graphql.LoadSchema(`
 		type User {

@@ -81,28 +81,31 @@ func (l *Logger) indentPrefix(level int) string {
 
 	return acc
 }
+func (l *Logger) selectionSelectionSet(level int, selectionSet ast.SelectionSet) string {
+	acc := " {"
+	// and any sub selection
+	acc += l.selection(level+1, selectionSet)
+	acc += l.indentPrefix(level) + "}"
+
+	return acc
+}
 
 func (l *Logger) selection(level int, selectionSet ast.SelectionSet) string {
 	acc := ""
 
 	for _, selection := range selectionSet {
-		acc += l.indentPrefix(level + 1)
+		acc += l.indentPrefix(level)
 		switch selection := selection.(type) {
 		case *ast.Field:
 			// add the field name
 			acc += selection.Name
 			if len(selection.SelectionSet) > 0 {
-				acc += " {"
-				// and any sub selection
-				acc += l.selection(level+1, selection.SelectionSet)
-				acc += l.indentPrefix(level+1) + "}"
+				acc += l.selectionSelectionSet(level, selection.SelectionSet)
 			}
 		case *ast.InlineFragment:
 			// print the fragment name
-			acc += fmt.Sprintf("... on %v {", selection.TypeCondition)
-			// and any sub selection
-			acc += l.selection(level+1, selection.SelectionSet)
-			acc += l.indentPrefix(level) + "}"
+			acc += fmt.Sprintf("... on %v", selection.TypeCondition) +
+				l.selectionSelectionSet(level, selection.SelectionSet)
 		case *ast.FragmentSpread:
 			// print the fragment name
 			acc += "..." + selection.Name
