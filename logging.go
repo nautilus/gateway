@@ -69,7 +69,7 @@ func (l *Logger) QueryPlanStep(step *QueryPlanStep) {
 		"insertion point": step.InsertionPoint,
 	}).Info(step.ParentType)
 
-	l.SelectionSet(step.SelectionSet)
+	log.Info(l.FormatSelectionSet(step.SelectionSet))
 }
 
 func (l *Logger) indentPrefix(level int) string {
@@ -109,11 +109,11 @@ func (l *Logger) selection(level int, selectionSet ast.SelectionSet) string {
 	return acc
 }
 
-// SelectionSet logs a selection set on a single line
-func (l *Logger) SelectionSet(selection ast.SelectionSet) string {
+// FormatSelectionSet returns a pretty printed version of a selection set
+func (l *Logger) FormatSelectionSet(selection ast.SelectionSet) string {
 	acc := "{"
 
-	insides := l.selection(1, selection)
+	insides := l.selection(0, selection)
 
 	if strings.TrimSpace(insides) != "" {
 		acc += insides + "\n}"
@@ -130,7 +130,7 @@ func newLogEntry() *logrus.Entry {
 	entry := logrus.New()
 
 	// only log the warning severity or above.
-	entry.SetLevel(logrus.DebugLevel)
+	entry.SetLevel(logrus.WarnLevel)
 
 	// configure the formatter
 	entry.SetFormatter(&logrus.TextFormatter{

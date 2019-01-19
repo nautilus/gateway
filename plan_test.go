@@ -315,7 +315,6 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 		}
 	`)
 
-	// compute the plan for a query that just hits one service
 	plans, err := (&MinQueriesPlanner{}).Plan(`
 		query MyQuery {
 			... on Query {
@@ -381,7 +380,7 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 		return
 	}
 	loc1SubSelection, ok := loc1Selection.SelectionSet[0].(*ast.InlineFragment)
-	if !assert.True(t, ok) {
+	if !assert.True(t, ok, "first sub-selection in location 1 selection is not an inline fragment: \n%v", log.FormatSelectionSet(loc1Selection.SelectionSet)) {
 		return
 	}
 
@@ -403,10 +402,6 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 	// 			bar
 	// 		}
 	// }
-	if loc2Step.QueryDocument.Operations[0].Name != "MyQuery" {
-		t.Errorf("Encountered incorrect operation name for query. Expected MyQuery found %v", loc2Step.QueryDocument.Operations[0].Name)
-		return
-	}
 
 	if !assert.Len(t, loc2Step.SelectionSet, 1) {
 		return
