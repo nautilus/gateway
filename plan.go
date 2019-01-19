@@ -528,7 +528,6 @@ FieldLoop:
 			// we have to walk down the fragments definition and keep adding to the selection sets and fragment definitions
 			// add it to the list
 			finalSelection = append(finalSelection, selection)
-			fmt.Println("Encountered fragment spread. Selection so far: ", finalSelection[0])
 
 			// grab the official definition for the fragment
 			defn := config.plan.FragmentDefinitions.ForName(selection.Name)

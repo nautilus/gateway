@@ -31,7 +31,6 @@ func (q *SchemaQueryer) Query(input *graphql.QueryInput, receiver interface{}) e
 	// wrap the schema in something capable of introspection
 	introspectionSchema := introspection.WrapSchema(q.Schema)
 
-	fmt.Println("Query Fragments -> ", input.QueryDocument.Fragments)
 	// for local stuff we don't care about fragment directives
 	querySelection, err := graphql.ApplyFragments(input.QueryDocument.Operations[0].SelectionSet, input.QueryDocument.Fragments)
 	if err != nil {
