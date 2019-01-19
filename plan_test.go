@@ -87,7 +87,7 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 		return
 	}
 
-	if len(plans[0].RootStep.Then) == 0 {
+	if len(plans[0].RootStep.Then) != 1 {
 		t.Error("Could not find the step with fragment spread")
 		return
 	}
@@ -104,7 +104,7 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 	// there should be a single selection that is a spread of the fragment Foo
 	fragment, ok := root.SelectionSet[0].(*ast.FragmentSpread)
 	if !ok {
-		t.Error("Root selection was not a fragment spread")
+		t.Error("Root selection was not a fragment spread", root.SelectionSet[0])
 		return
 	}
 
@@ -112,7 +112,7 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 	assert.Equal(t, "Foo", fragment.Name)
 
 	// we need to make sure that the fragment definition matches expectation
-	fragmentDef := root.FragmentDefinitions.ForName("Foo")
+	fragmentDef := root.QueryDocument.Fragments.ForName("Foo")
 	if fragmentDef == nil {
 		t.Error("Could not find fragment definition for Foo")
 		return
