@@ -251,6 +251,7 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 
 	// get the step for location 1
 	location1Step := plans[0].RootStep.Then[0]
+	assert.Equal(t, []string{}, location1Step.InsertionPoint)
 	// make sure that the step has only one selection (the fragment)
 	if len(location1Step.SelectionSet) != 1 {
 		t.Errorf("Encountered incorrect number of selections under location 1 step. Expected 1, found %v", len(location1Step.SelectionSet))
@@ -259,6 +260,7 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 
 	// get the step for location 2
 	location2Step := plans[0].RootStep.Then[1]
+	assert.Equal(t, []string{}, location2Step.InsertionPoint)
 	// make sure that the step has only one selection (the fragment)
 	if len(location2Step.SelectionSet) != 1 {
 		t.Errorf("Encountered incorrect number of selections under location 2 step. Expected 1, found %v", len(location2Step.SelectionSet))
@@ -281,7 +283,7 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 		assert.Equal(t, "Query", fragment.TypeCondition)
 
 		if len(fragment.SelectionSet) != 1 {
-			t.Errorf("Encountered incorrect number of selections under fragment definition for location 1. Expected 1 found %v", len(fragment.SelectionSet))
+			t.Errorf("Encountered incorrect number of selections under fragment definition. Expected 1 found %v", len(fragment.SelectionSet))
 			return
 		}
 
@@ -294,6 +296,136 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 		t.Error("Did not encounter both foo and bar steps")
 		return
 	}
+}
+
+func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
+	// the locations for the schema
+	loc1 := "url1"
+	loc2 := "url2"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", loc1)
+	locations.RegisterURL("Query", "bar", loc2)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: Boolean
+			bar: Boolean
+		}
+	`)
+
+	// compute the plan for a query that just hits one service
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query MyQuery {
+			... on Query {
+				... on Query {
+					foo
+				}
+				bar
+			}
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	// grab the 2 sibling steps
+	steps := plans[0].RootStep.Then
+	if !assert.Len(t, steps, 2) {
+		return
+	}
+
+	var loc1Step *QueryPlanStep
+	var loc2Step *QueryPlanStep
+
+	// find the steps
+	for _, step := range steps {
+		// look at the queryer to figure out where the request is going
+		if queryer, ok := step.Queryer.(*graphql.NetworkQueryer); ok {
+			if queryer.URL == loc1 {
+				loc1Step = step
+			} else if queryer.URL == loc2 {
+				loc2Step = step
+			}
+		} else {
+			t.Error("Encountered non-network queryer")
+			return
+		}
+	}
+
+	// the step that's going to location 1 should be equivalent to
+	// query MyQuery {
+	// 		... on Query {
+	// 			... on Query {
+	// 				foo
+	// 			}
+	//		}
+	// }
+
+	// that first slection should be an inline fragment
+	assert.NotNil(t, loc1Step)
+	if !assert.Len(t, loc1Step.SelectionSet, 1) {
+		return
+	}
+	loc1Selection, ok := loc1Step.SelectionSet[0].(*ast.InlineFragment)
+	if !assert.True(t, ok) {
+		return
+	}
+
+	// there should be one selection in that inline fragment
+	if !assert.Len(t, loc1Selection.SelectionSet, 1) {
+		return
+	}
+	loc1SubSelection, ok := loc1Selection.SelectionSet[0].(*ast.InlineFragment)
+	if !assert.True(t, ok) {
+		return
+	}
+
+	// there should be one field
+	if !assert.Len(t, loc1SubSelection.SelectionSet, 1) {
+		return
+	}
+	loc1Field, ok := loc1SubSelection.SelectionSet[0].(*ast.Field)
+	if !assert.True(t, ok) {
+		return
+	}
+
+	// it should be for the field "foo"
+	assert.Equal(t, "foo", loc1Field.Name)
+
+	// the step that's going to location 2 should be equivalent to
+	// query MyQuery {
+	// 		... on Query {
+	// 			bar
+	// 		}
+	// }
+	if loc2Step.QueryDocument.Operations[0].Name != "MyQuery" {
+		t.Errorf("Encountered incorrect operation name for query. Expected MyQuery found %v", loc2Step.QueryDocument.Operations[0].Name)
+		return
+	}
+
+	if !assert.Len(t, loc2Step.SelectionSet, 1) {
+		return
+	}
+	loc2Selection, ok := loc2Step.SelectionSet[0].(*ast.InlineFragment)
+	if !assert.True(t, ok) {
+		return
+	}
+
+	// it should have one selection that's a field
+	if !assert.Len(t, loc2Selection.SelectionSet, 1) {
+		return
+	}
+	loc2Field, ok := loc2Selection.SelectionSet[0].(*ast.Field)
+	if !assert.True(t, ok) {
+		return
+	}
+
+	assert.Equal(t, "bar", loc2Field.Name)
 }
 
 func TestPlanQuery_singleRootObject(t *testing.T) {
@@ -1003,87 +1135,8 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 	assert.Equal(t, selection, fragment.SelectionSet)
 }
 
-func TestPlannerSplitFragment(t *testing.T) {
-	// we are going to split a fragment that looks like
-
-	// fragment Foo on User {
-	// 		firstName
-	// 		lastName
-	// }
-
-	// into 2 fragments for the 2 locations that the fragment covers:
-
-	// split["location1"] = fragment Foo on {
-	// 		firstName
-	// }
-	// split["location2"] = fragment Foo on {
-	// 		lastName
-	// // }
-
-	// locations := FieldURLMap{}
-	// locations.RegisterURL("User", "firstName", "location-1")
-	// locations.RegisterURL("User", "lastName", "location-2")
-
-	// // split the fragment
-	// split, err := splitFragment(&ast.FragmentDefinition{
-	// 	Name:          "Foo",
-	// 	TypeCondition: "User",
-	// 	SelectionSet: ast.SelectionSet{
-	// 		&ast.Field{
-	// 			Name: "firstName",
-	// 		},
-	// 		&ast.Field{
-	// 			Name: "lastName",
-	// 		},
-	// 	},
-	// }, locations)
-	// if err != nil {
-	// 	t.Error(err.Error())
-	// 	return
-	// }
-
-	// // we should have 2 splits
-	// if len(split) != 2 {
-	// 	t.Errorf("Encountered the wrong number of entries in the fragment split: %v", len(split))
-	// 	return
-	// }
-
-	// // make sure that the location 1 split matches expectations
-	// location1Split, ok := split["location-1"]
-	// if !ok {
-	// 	t.Error("Could not find the split for location1")
-	// 	return
-	// }
-	// assert.Equal(t, "Foo", location1Split.FragmentName)
-	// assert.Equal(t, &ast.FragmentDefinition{
-	// 	Name:          "Foo",
-	// 	TypeCondition: "User",
-	// 	SelectionSet: ast.SelectionSet{
-	// 		&ast.Field{
-	// 			Name: "firstName",
-	// 		},
-	// 	},
-	// }, location1Split.FragmentDefinitions[0])
-
-	// location2Split, ok := split["location-2"]
-	// if !ok {
-	// 	t.Error("Could not find the split for location2")
-	// 	return
-	// }
-	// assert.Equal(t, "Foo", location2Split.FragmentName)
-	// assert.Equal(t, &ast.FragmentDefinition{
-	// 	Name:          "Foo",
-	// 	TypeCondition: "User",
-	// 	SelectionSet: ast.SelectionSet{
-	// 		&ast.Field{
-	// 			Name: "lastName",
-	// 		},
-	// 	},
-	// }, location2Split.FragmentDefinitions[0])
-}
-
 func TestPlannerBuildQuery_addIDsToFragments(t *testing.T) {
-	t.Error()
+	t.Error("YOU SHALL NOT PASS")
 }
 
 func TestPlanQuery_mutationsInSeries(t *testing.T) {

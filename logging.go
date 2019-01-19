@@ -1,10 +1,11 @@
 package gateway
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/ast"
-
-	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
 // Logger handles the logging in the gateway library
@@ -68,20 +69,59 @@ func (l *Logger) QueryPlanStep(step *QueryPlanStep) {
 		"insertion point": step.InsertionPoint,
 	}).Info(step.ParentType)
 
-	logPlanStep(0, step.SelectionSet)
+	l.SelectionSet(step.SelectionSet)
 }
 
-func logPlanStep(level int, selectionSet ast.SelectionSet) {
+func (l *Logger) indentPrefix(level int) string {
+	acc := "\n"
 	// build up the prefix
-	prefix := ""
-	for i := 0; i < level; i++ {
-		prefix += "    "
+	for i := 0; i <= level; i++ {
+		acc += "    "
 	}
-	prefix += "|- "
-	for _, selection := range graphql.SelectedFields(selectionSet) {
-		log.Info(prefix, selection.Name)
-		logPlanStep(level+1, selection.SelectionSet)
+
+	return acc
+}
+
+func (l *Logger) selection(level int, selectionSet ast.SelectionSet) string {
+	acc := l.indentPrefix(level)
+
+	for _, selection := range selectionSet {
+		switch selection := selection.(type) {
+		case *ast.Field:
+			// add the field name
+			acc += selection.Name
+			if len(selection.SelectionSet) > 0 {
+				// and any sub selection
+				acc += l.selection(level+1, selection.SelectionSet)
+			}
+		case *ast.InlineFragment:
+			// print the fragment name
+			acc += fmt.Sprintf("... on %v {", selection.TypeCondition)
+			// and any sub selection
+			acc += l.selection(level+1, selection.SelectionSet)
+			acc += l.indentPrefix(level) + "}"
+		case *ast.FragmentSpread:
+			// print the fragment name
+			acc += "..." + selection.Name
+		}
 	}
+
+	return acc
+}
+
+// SelectionSet logs a selection set on a single line
+func (l *Logger) SelectionSet(selection ast.SelectionSet) string {
+	acc := "{"
+
+	insides := l.selection(1, selection)
+
+	if strings.TrimSpace(insides) != "" {
+		acc += insides + "\n}"
+	} else {
+		acc += "}"
+	}
+
+	return acc
 }
 
 var log *Logger
@@ -90,7 +130,7 @@ func newLogEntry() *logrus.Entry {
 	entry := logrus.New()
 
 	// only log the warning severity or above.
-	entry.SetLevel(logrus.WarnLevel)
+	entry.SetLevel(logrus.DebugLevel)
 
 	// configure the formatter
 	entry.SetFormatter(&logrus.TextFormatter{

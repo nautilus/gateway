@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/vektah/gqlparser"
@@ -159,14 +158,8 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 						plan.RootStep = step
 					}
 
-					// log some stuffs
-					selectionNames := []string{}
-					for _, selection := range graphql.SelectedFields(step.SelectionSet) {
-						selectionNames = append(selectionNames, selection.Name)
-					}
-
 					log.Debug("")
-					log.Debug(fmt.Sprintf("Encountered new step: %v with subquery (%v) @ %v \n", step.ParentType, strings.Join(selectionNames, ","), payload.InsertionPoint))
+					log.Debug(fmt.Sprintf("Encountered new step: \n\tParentType: %v \n\tInsertion Point: %v \n\tSelectionSet: %s", step.ParentType, payload.InsertionPoint, log.SelectionSet(step.SelectionSet)))
 
 					// we are going to start walking down the operations selection set and let
 					// the steps of the walk add any necessary selectedFields
@@ -207,10 +200,7 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 					// we're done processing this step
 					stepWg.Done()
 
-					log.Debug("Step selection set:")
-					for _, selection := range graphql.SelectedFields(step.SelectionSet) {
-						log.Debug(selection.Name)
-					}
+					log.Debug("Step selection set: \n", log.SelectionSet(step.SelectionSet))
 				}
 			}
 		}(stepCh)
@@ -484,10 +474,37 @@ FieldLoop:
 			finalSelection = append(finalSelection, selection)
 
 		case *ast.FragmentSpread:
+			// we have to walk down the fragments definition and keep adding to the selection sets and fragment definitions
 			// add it to the list
 			finalSelection = append(finalSelection, selection)
 
 		case *ast.InlineFragment:
+			// the insertion point for fields under this fragment is the same as this invocation
+			insertionPoint := config.insertionPoint
+
+			log.Debug("found an inline fragment. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
+
+			// add any possible selections provided by selections
+			subSelection, err := p.extractSelection(&extractSelectionConfig{
+				stepCh:    config.stepCh,
+				stepWg:    config.stepWg,
+				step:      config.step,
+				locations: config.locations,
+
+				parentLocation: config.parentLocation,
+				parentType:     selection.TypeCondition,
+				selection:      selection.SelectionSet,
+				insertionPoint: insertionPoint,
+				plan:           config.plan,
+			})
+
+			if err != nil {
+				return nil, err
+			}
+
+			// overwrite the selection set for this selection
+			selection.SelectionSet = subSelection
+
 			// for now, just add it to the list
 			finalSelection = append(finalSelection, selection)
 		}
