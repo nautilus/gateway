@@ -83,16 +83,19 @@ func (l *Logger) indentPrefix(level int) string {
 }
 
 func (l *Logger) selection(level int, selectionSet ast.SelectionSet) string {
-	acc := l.indentPrefix(level)
+	acc := ""
 
 	for _, selection := range selectionSet {
+		acc += l.indentPrefix(level + 1)
 		switch selection := selection.(type) {
 		case *ast.Field:
 			// add the field name
 			acc += selection.Name
 			if len(selection.SelectionSet) > 0 {
+				acc += " {"
 				// and any sub selection
 				acc += l.selection(level+1, selection.SelectionSet)
+				acc += l.indentPrefix(level+1) + "}"
 			}
 		case *ast.InlineFragment:
 			// print the fragment name
@@ -130,7 +133,7 @@ func newLogEntry() *logrus.Entry {
 	entry := logrus.New()
 
 	// only log the warning severity or above.
-	entry.SetLevel(logrus.WarnLevel)
+	entry.SetLevel(logrus.DebugLevel)
 
 	// configure the formatter
 	entry.SetFormatter(&logrus.TextFormatter{

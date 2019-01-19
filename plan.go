@@ -309,7 +309,7 @@ FieldLoop:
 			}
 
 		case *ast.FragmentSpread:
-			log.Debug("Encountered fragment spread", selection.Name)
+			log.Debug("Encountered fragment spread ", selection.Name)
 
 			// a fragments fields can span multiple services so a single fragment can result in many selections being added
 			fragmentLocations := map[string]ast.SelectionSet{}
@@ -339,11 +339,17 @@ FieldLoop:
 
 					// add the field to the location
 					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], fragmentSelection)
+
+				case *ast.FragmentSpread, *ast.InlineFragment:
+					// non-field selections will be handled in the next tick
+					// add it to the current location so we don't create a new step if its not needed
+					fragmentLocations[config.parentLocation] = append(fragmentLocations[config.parentLocation], fragmentSelection)
 				}
 			}
 
 			// for each bundle under a fragment
 			for location, selectionSet := range fragmentLocations {
+				fmt.Println("Spawning sibling handler for fragment", selection.Name, "@", location, log.FormatSelectionSet(selectionSet))
 				// add the fragment spread to the selection set for this location
 				locationFields[location] = append(locationFields[location], &ast.FragmentSpread{
 					Name:       selection.Name,
@@ -411,6 +417,16 @@ FieldLoop:
 			continue
 		}
 
+		// check if there is a
+
+		// we are dealing with a selection to another location that isn't the current one
+		log.Debug(fmt.Sprintf(
+			"Adding the new step"+
+				"\n\t Parent Type: %s"+
+				"\n\t Location: %v"+
+				"\n\t Insertion point: %v",
+			config.parentType, location, config.insertionPoint))
+
 		// if there are selections in this bundle that are not from the parent location we need to add
 		// id to the selection set
 		checkForID = true
@@ -452,9 +468,6 @@ FieldLoop:
 			selectionSet = ast.SelectionSet{selection}
 		}
 
-		// we are dealing with a selection to another location that isn't the current one
-		log.Debug(fmt.Sprintf("Adding the new step to resolve %s @ %v. Insertion point: %v\n", config.parentType, location, config.insertionPoint))
-
 		// since we're adding another step we need to wait for at least one more goroutine to finish processing
 		config.stepWg.Add(1)
 
@@ -474,7 +487,7 @@ FieldLoop:
 	// if we have to have an id field on this selection set
 	if checkForID {
 		// add the id field since duplicates are ignored
-		locationFields[config.parentLocation] = append(locationFields[config.parentLocation], &ast.Field{Name: "ID"})
+		locationFields[config.parentLocation] = append(locationFields[config.parentLocation], &ast.Field{Name: "id"})
 	}
 
 	// now we have to generate a selection set for fields that are coming from the same location as the parent

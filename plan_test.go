@@ -875,8 +875,126 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	}
 }
 
-func TestPlanQuery_fragmentsWithDeps(t *testing.T) {
-	t.Error("YOU SHALL NOT PASS")
+func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) { // the locations for the schema
+	loc1 := "url1"
+	loc2 := "url2"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "user", loc2)
+	locations.RegisterURL("User", "lastName", loc1)
+
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			lastName: String
+		}
+
+		type Query {
+			user: User
+		}
+	`)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query MyQuery {
+			...QueryFragment
+		}
+
+		fragment QueryFragment on Query {
+			user {
+				lastName
+				...UserInfo
+			}
+		}
+
+		fragment UserInfo on User {
+			lastName
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	// there is only one direct step
+	steps := plans[0].RootStep.Then
+	if !assert.Len(t, steps, 1) {
+		return
+	}
+
+	// there are 2 total steps to this query
+	// - the first should be inserted at []:
+	//
+	// 	query MyQuery {
+	// 		...QueryFragment
+	// 	}
+
+	// 	fragment QueryFragment on Query {
+	// 		user {
+	//			id
+	// 		}
+	// 	}
+	//
+	//
+	// - the second one should be inserted at ["user"]
+	//
+	// 	query {
+	// 		...QueryFragment
+	// 	}
+	//
+	// 	fragment QueryFragment on User {
+	//		lastName
+	// 		...UserInfo
+	// 	}
+	//
+	// 	fragment UserInfo {
+	// 		lastName
+	// 	}
+
+	// check the first step
+	firstStep := steps[0]
+
+	// there should be one selection on the step
+	if !assert.Len(t, firstStep.SelectionSet, 1, "First step had the wrong number of selections") {
+		return
+	}
+	// it should be a fragment spread
+	firstSelection, ok := firstStep.SelectionSet[0].(*ast.FragmentSpread)
+	if !ok {
+		t.Error("First selection step 1 was not a fragment spread")
+		return
+	}
+
+	// it should be a spread for the Fragment fragment
+	assert.Equal(t, "QueryFragment", firstSelection.Name)
+
+	// the definition for QueryFragment should have 1 selections
+	queryFragmentDefn := firstStep.FragmentDefinitions.ForName("QueryFragment")
+	if !assert.NotNil(t, queryFragmentDefn, "Could not find QueryFragment definition") ||
+		!assert.Len(t, queryFragmentDefn.SelectionSet, 1) {
+		return
+	}
+	queryFragmentSelection, ok := queryFragmentDefn.SelectionSet[0].(*ast.Field)
+	if !assert.True(t, ok, "query fragment selection was not a field") {
+		return
+	}
+
+	assert.Equal(t, "user", queryFragmentSelection.Name)
+	assert.Equal(t, ast.SelectionSet{&ast.Field{Name: "id"}}, queryFragmentSelection.SelectionSet)
+
+	// check the second step
+	secondStep := firstStep.Then[0]
+	// sanity check the second step meta data
+	assert.Equal(t, "User", secondStep.ParentType)
+	assert.Equal(t, []string{"user"}, secondStep.InsertionPoint)
+
+	// there should be one selection on the step
+	if !assert.Len(t, secondStep.SelectionSet, 1,
+		"Second step had the wrong number of selections %v", log.FormatSelectionSet(secondStep.SelectionSet),
+	) {
+		return
+	}
 }
 
 func TestPlannerBuildQuery_query(t *testing.T) {
