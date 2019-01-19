@@ -741,7 +741,7 @@ func plannerBuildQuery(parentType string, variables ast.VariableDefinitionList, 
 
 		// we want the operation to have the equivalent of
 		// {
-		//	 	node(id: parentID) {
+		//	 	node(id: $id) {
 		//	 		... on parentType {
 		//	 			selection
 		//	 		}
@@ -768,6 +768,7 @@ func plannerBuildQuery(parentType string, variables ast.VariableDefinitionList, 
 			},
 		}
 
+		// if the original query didn't have an id arg we need to add one
 		if variables.ForName("id") == nil {
 			operation.VariableDefinitions = append(operation.VariableDefinitions, &ast.VariableDefinition{
 				Variable: "id",
