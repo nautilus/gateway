@@ -401,12 +401,19 @@ FieldLoop:
 
 	log.Debug("Fields By Location: ", locationFields)
 
+	// we only need to add an ID field if there are steps coming off of this insertion point
+	checkForID := false
+
 	// we have to make sure we spawn any more goroutines before this one terminates. This means that
 	// we first have to look at any locations that are not the current one
 	for location, selectionSet := range locationFields {
 		if location == config.parentLocation {
 			continue
 		}
+
+		// if there are selections in this bundle that are not from the parent location we need to add
+		// id to the selection set
+		checkForID = true
 
 		// if we have a wrapper to add
 		if config.wrapper != nil && len(config.wrapper) > 0 {
@@ -462,6 +469,12 @@ FieldLoop:
 			InsertionPoint: config.insertionPoint,
 			Wrapper:        config.wrapper,
 		}
+	}
+
+	// if we have to have an id field on this selection set
+	if checkForID {
+		// add the id field since duplicates are ignored
+		locationFields[config.parentLocation] = append(locationFields[config.parentLocation], &ast.Field{Name: "ID"})
 	}
 
 	// now we have to generate a selection set for fields that are coming from the same location as the parent
@@ -606,78 +619,14 @@ FieldLoop:
 }
 
 func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanStep) error {
-	// we need to construct the query information for this step which requires adding ID's
-	// where necessary to stitch results together
+	// we need to construct the query information for this step
 
-	// a step's query can be influenced by each step directly after it. In order for the
-	// insertion point to work, there must be an id field in the object that
+	// walk down the graph
 	for _, nextStep := range step.Then {
-
-		// we need to walk down the graph
-		for _, nextStep := range step.Then {
-			err := p.preparePlanQueries(plan, nextStep)
-			if err != nil {
-				return err
-			}
+		err := p.preparePlanQueries(plan, nextStep)
+		if err != nil {
+			return err
 		}
-
-		// if there is no selection
-		if len(nextStep.InsertionPoint) == 0 {
-			// ignore i
-			continue
-		}
-
-		// the selection set we need to add `id` to
-		accumulator := step.SelectionSet
-		var targetField *ast.Field
-
-		// walk down the list of insertion points
-		for i := len(step.InsertionPoint); i < len(nextStep.InsertionPoint); i++ {
-			// the point we are looking for in the selection set
-			point := nextStep.InsertionPoint[i]
-
-			// wether we found the corresponding field or not
-			foundSelection := false
-
-			// look for the selection with that name
-			for _, selection := range graphql.SelectedFields(accumulator) {
-				// if we still have to walk down the selection but we found the right branch
-				if selection.Alias == point {
-					accumulator = selection.SelectionSet
-					targetField = selection
-					foundSelection = true
-					break
-				}
-			}
-
-			if !foundSelection {
-				return fmt.Errorf("Could not find selection for point: %s", point)
-			}
-		}
-
-		// if we couldn't find the target
-		if accumulator == nil {
-			return fmt.Errorf("Could not find field to add id to. insertion point: %v", nextStep.InsertionPoint)
-		}
-
-		// if the target does not currently ask for id we need to add it
-		addID := true
-		for _, selection := range graphql.SelectedFields(accumulator) {
-			if selection.Name == "id" {
-				addID = false
-				break
-			}
-		}
-
-		// add the ID to the selection set if necessary
-		if addID {
-			accumulator = append(accumulator, &ast.Field{
-				Name: "id",
-			})
-		}
-
-		// make sure the selection set contains the id
-		targetField.SelectionSet = accumulator
 	}
 
 	// we need to grab the list of variable definitions

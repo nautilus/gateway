@@ -596,13 +596,13 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// make sure it is for allUsers
 	assert.Equal(t, "allUsers", firstField.Name)
 
-	// all users should have only one selected value since `catPhotos` is from another service
+	// all users should have one selected value since `catPhotos` is from another service
 	// there will also be an `id` added so that the query can be stitched together
-	if len(firstField.SelectionSet) > 2 {
+	if len(firstField.SelectionSet) != 2 {
 		for _, selection := range graphql.SelectedFields(firstField.SelectionSet) {
 			fmt.Println(selection.Name)
 		}
-		t.Error("Encountered too many fields on allUsers selection set")
+		t.Error("Encountered incorrext number of fields on allUsers selection set")
 		return
 	}
 
@@ -875,131 +875,8 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	}
 }
 
-func TestPreparePlanQueries(t *testing.T) {
-	// if we have a plan that depends on another, we need to add the id field to the selection set if
-	// its not there
-
-	thirdLevelChild := &QueryPlanStep{
-		InsertionPoint: []string{"followers", "users", "friends", "followers"},
-		SelectionSet: ast.SelectionSet{
-			&ast.Field{
-				Name:  "firstName",
-				Alias: "firstName",
-				Definition: &ast.FieldDefinition{
-					Type: ast.NamedType("String", &ast.Position{}),
-				},
-			},
-		},
-	}
-
-	childStep := &QueryPlanStep{
-		InsertionPoint: []string{"followers", "users", "friends"},
-		SelectionSet: ast.SelectionSet{
-			&ast.Field{
-				Name:  "followers",
-				Alias: "followers",
-				Definition: &ast.FieldDefinition{
-					Type: ast.NonNullListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
-				},
-				SelectionSet: ast.SelectionSet{},
-			},
-		},
-		Then: []*QueryPlanStep{thirdLevelChild},
-	}
-
-	parentStep := &QueryPlanStep{
-		InsertionPoint: []string{"followers"},
-		SelectionSet: ast.SelectionSet{
-			&ast.Field{
-				Name:  "users",
-				Alias: "users",
-				Definition: &ast.FieldDefinition{
-					Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-				},
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name:  "friends",
-						Alias: "friends",
-						Definition: &ast.FieldDefinition{
-							Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-						},
-						SelectionSet: ast.SelectionSet{
-							&ast.Field{
-								Name:  "lastName",
-								Alias: "lastName",
-								Definition: &ast.FieldDefinition{
-									Type: ast.NamedType("String", &ast.Position{}),
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		Then: []*QueryPlanStep{childStep},
-	}
-
-	plan := &QueryPlan{
-		Operation: &ast.OperationDefinition{
-			VariableDefinitions: ast.VariableDefinitionList{},
-		},
-		RootStep: parentStep,
-	}
-
-	// add the id fields
-	err := (&MinQueriesPlanner{}).preparePlanQueries(plan, plan.RootStep)
-	if err != nil {
-		t.Error(err.Error())
-		return
-	}
-
-	// make sure we assigned a query document and string to the parent step
-	if parentStep.QueryDocument == nil {
-		t.Error("Encountered a nil query document on parent")
-	}
-	if parentStep.QueryString == "" {
-		t.Error("Encountered an empty query string on parent")
-	}
-
-	// we should have added `id` to the
-	usersSelection, ok := parentStep.SelectionSet[0].(*ast.Field)
-	if !ok {
-		t.Error("users field was not a field")
-		return
-	}
-	friendsSelection, ok := usersSelection.SelectionSet[0].(*ast.Field)
-	if !ok {
-		t.Error("friends field was not a field")
-		return
-	}
-
-	// we should have 2 field
-	if len(friendsSelection.SelectionSet) != 2 {
-		t.Errorf("Encountered incorrect number of selections under friends field: Expected 2, found %v", len(friendsSelection.SelectionSet))
-		return
-	}
-
-	// those 2 fields should be lastName and id
-	for _, field := range graphql.SelectedFields(friendsSelection.SelectionSet) {
-		if field.Name != "lastName" && field.Name != "id" {
-			t.Errorf("Encountered unknown field: %v", field.Name)
-		}
-	}
-
-	// make sure we assigned a query document and string to the child step
-	if childStep.QueryDocument == nil {
-		t.Error("Encountered a nil query document on parent")
-	}
-	if childStep.QueryString == "" {
-		t.Error("Encountered an empty query string on parent")
-	}
-
-	// make sure the followers selection of the child has an id in it
-	if len(graphql.SelectedFields(childStep.SelectionSet)[0].SelectionSet) != 1 {
-		t.Errorf("Encountered incorrect number of fields under secondStep.followers: %v", len(graphql.SelectedFields(childStep.SelectionSet)[0].SelectionSet))
-	}
-
-	assert.Equal(t, "id", graphql.SelectedFields(graphql.SelectedFields(childStep.SelectionSet)[0].SelectionSet)[0].Name)
+func TestPlanQuery_fragmentsWithDeps(t *testing.T) {
+	t.Error("YOU SHALL NOT PASS")
 }
 
 func TestPlannerBuildQuery_query(t *testing.T) {
@@ -1044,7 +921,7 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 func TestPlannerBuildQuery_node(t *testing.T) {
 	// if we are querying a specific type/id then we need to perform a query similar to
 	// {
-	// 		node(id: "1234") {
+	// 		node(id: $id) {
 	// 			... on User {
 	// 				firstName
 	// 			}
@@ -1128,10 +1005,6 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 
 	// make sure the selection set is what we expected
 	assert.Equal(t, selection, fragment.SelectionSet)
-}
-
-func TestPlannerBuildQuery_addIDsToFragments(t *testing.T) {
-	t.Error("YOU SHALL NOT PASS")
 }
 
 func TestPlanQuery_mutationsInSeries(t *testing.T) {
