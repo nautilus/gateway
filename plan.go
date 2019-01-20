@@ -270,139 +270,9 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 
 	// in order to group together fields in as few queries as possible, we need to group
 	// the selection set by the location.
-
-	locationFields := map[string]ast.SelectionSet{}
-	locationFragments := map[string]ast.FragmentDefinitionList{}
-
-	// split each selection into groups of selection sets to be sent to a single service
-FieldLoop:
-	for _, selection := range config.selection {
-		// each kind of selection contributes differently to the final selection set
-		switch selection := selection.(type) {
-		case *ast.Field:
-			log.Debug("Encountered field ", selection.Name)
-
-			// look up the location for this field
-			possibleLocations, err := config.locations.URLFor(config.parentType, selection.Name)
-			if err != nil {
-				return nil, err
-			}
-
-			// if this field can only be found in one location
-			if len(possibleLocations) == 1 {
-				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], selection)
-				// the field can be found in many locations
-			} else {
-				// look to see if the current location is one of the possible locations
-				for _, location := range possibleLocations {
-					// if the location is the same as the parent
-					if location == config.parentLocation {
-						// assign this field to the parents entry
-						locationFields[location] = append(locationFields[location], selection)
-						// we're done with this field
-						continue FieldLoop
-					}
-				}
-
-				// if we got here then this field can be found in multiple services that are not the parent
-				// just use the first one for now
-				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], selection)
-			}
-
-		case *ast.FragmentSpread:
-			log.Debug("Encountered fragment spread ", selection.Name)
-
-			// a fragments fields can span multiple services so a single fragment can result in many selections being added
-			fragmentLocations := map[string]ast.SelectionSet{}
-
-			// look up if we already have a definition for this fragment in the step
-			defn := config.step.FragmentDefinitions.ForName(selection.Name)
-
-			// if we don't have it
-			if defn == nil {
-				// look in the operation
-				defn = config.plan.FragmentDefinitions.ForName(selection.Name)
-				if defn == nil {
-					return nil, fmt.Errorf("Could not find definition for directive: %s", selection.Name)
-				}
-			}
-
-			// each field in the fragment should be bundled with whats around it (still wrapped in fragment)
-			for _, fragmentSelection := range defn.SelectionSet {
-				switch fragmentSelection := fragmentSelection.(type) {
-
-				case *ast.Field:
-					// look up the location of the field
-					fieldLocations, err := config.locations.URLFor(defn.TypeCondition, fragmentSelection.Name)
-					if err != nil {
-						return nil, err
-					}
-
-					// add the field to the location
-					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], fragmentSelection)
-
-				case *ast.FragmentSpread, *ast.InlineFragment:
-					// non-field selections will be handled in the next tick
-					// add it to the current location so we don't create a new step if its not needed
-					fragmentLocations[config.parentLocation] = append(fragmentLocations[config.parentLocation], fragmentSelection)
-				}
-			}
-
-			// for each bundle under a fragment
-			for location, selectionSet := range fragmentLocations {
-				// add the fragment spread to the selection set for this location
-				locationFields[location] = append(locationFields[location], &ast.FragmentSpread{
-					Name:       selection.Name,
-					Directives: selection.Directives,
-				})
-
-				// since the fragment can only refer to fields in the top level that are at
-				// the same location we need to add a new definition of the
-				locationFragments[location] = append(locationFragments[location], &ast.FragmentDefinition{
-					Name:          selection.Name,
-					TypeCondition: defn.TypeCondition,
-					SelectionSet:  selectionSet,
-				})
-			}
-
-		case *ast.InlineFragment:
-			log.Debug("Encountered inline fragment on ", selection.TypeCondition)
-
-			// we need to split the inline fragment into an inline fragment for each location that this cover
-			// and then add those inline fragments to the final selection
-
-			fragmentLocations := map[string]ast.SelectionSet{}
-
-			// each field in the fragment should be bundled with whats around it (still wrapped in fragment)
-			for _, fragmentSelection := range selection.SelectionSet {
-				switch fragmentSelection := fragmentSelection.(type) {
-				case *ast.Field:
-					// look up the location of the field
-					fieldLocations, err := config.locations.URLFor(selection.TypeCondition, fragmentSelection.Name)
-					if err != nil {
-						return nil, err
-					}
-
-					// add the field to the location
-					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], fragmentSelection)
-
-				case *ast.FragmentSpread, *ast.InlineFragment:
-					// non-field selections will be handled in the next tick
-					// add it to the current location so we don't create a new step if its not needed
-					fragmentLocations[config.parentLocation] = append(fragmentLocations[config.parentLocation], fragmentSelection)
-				}
-			}
-
-			// for each bundle under a fragment
-			for location, selectionSet := range fragmentLocations {
-				// add the fragment spread to the selection set for this location
-				locationFields[location] = append(locationFields[location], &ast.InlineFragment{
-					TypeCondition: selection.TypeCondition,
-					Directives:    selection.Directives,
-					SelectionSet:  selectionSet,
-				})
-			}
-		}
+	locationFields, locationFragments, err := p.groupSelectionSet(config)
+	if err != nil {
+		return nil, err
 	}
 
 	log.Debug("Fields By Location: ", locationFields)
@@ -416,8 +286,6 @@ FieldLoop:
 		if location == config.parentLocation {
 			continue
 		}
-
-		// check if there is a
 
 		// we are dealing with a selection to another location that isn't the current one
 		log.Debug(fmt.Sprintf(
@@ -435,78 +303,26 @@ FieldLoop:
 		if config.wrapper != nil && len(config.wrapper) > 0 {
 			log.Debug("wrapping selection", config.wrapper)
 
-			// pointers required to nest the
-			var selection ast.Selection
-			var innerSelection ast.Selection
-
-			for _, wrap := range config.wrapper {
-				var newSelection ast.Selection
-
-				switch wrap := wrap.(type) {
-				case *ast.InlineFragment:
-					// create a new inline fragment
-					newSelection = &ast.InlineFragment{
-						TypeCondition: wrap.TypeCondition,
-						Directives:    wrap.Directives,
-					}
-				case *ast.FragmentSpread:
-					newSelection = &ast.FragmentSpread{
-						Name:       wrap.Name,
-						Directives: wrap.Directives,
-					}
-
-					locationFragments[location] = append(locationFragments[location], &ast.FragmentDefinition{
-						Name:          wrap.Name,
-						TypeCondition: config.parentType,
-					})
-				}
-
-				// if this is the first one then use the first object we create as the top level
-				if selection == nil {
-					selection = newSelection
-				} else if sel, ok := innerSelection.(*ast.InlineFragment); ok {
-					sel.SelectionSet = ast.SelectionSet{newSelection}
-				} else if sel, ok := innerSelection.(*ast.FragmentSpread); ok {
-					// look up the definition for the selection in the step
-					defn := locationFragments[location].ForName(sel.Name)
-					defn.SelectionSet = ast.SelectionSet{newSelection}
-				}
-
-				// this is the new inner-most selection
-				innerSelection = newSelection
-			}
-			if sel, ok := innerSelection.(*ast.InlineFragment); ok {
-				sel.SelectionSet = selectionSet
-			} else if sel, ok := innerSelection.(*ast.FragmentSpread); ok {
-				// look up the definition for the selection in the step
-				defn := locationFragments[location].ForName(sel.Name)
-
-				// if we couldn't find the definition
-				if defn == nil {
-					return nil, errors.New("Could not find defn")
-				}
-
-				// update its selection set
-				defn.SelectionSet = selectionSet
-			}
-
 			// use the wrapped version
-			selectionSet = ast.SelectionSet{selection}
+			selectionSet, err = p.wrapSelectionSet(config, locationFragments, location, selectionSet)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// since we're adding another step we need to wait for at least one more goroutine to finish processing
 		config.stepWg.Add(1)
-
 		// add the new step
 		config.stepCh <- &newQueryPlanStepPayload{
 			Plan:           config.plan,
-			Location:       location,
-			ParentType:     config.parentType,
-			SelectionSet:   selectionSet,
-			Fragments:      locationFragments[location],
 			Parent:         config.step,
 			InsertionPoint: config.insertionPoint,
 			Wrapper:        config.wrapper,
+			ParentType:     config.parentType,
+
+			Location:     location,
+			SelectionSet: selectionSet,
+			Fragments:    locationFragments[location],
 		}
 	}
 
@@ -553,16 +369,16 @@ FieldLoop:
 				log.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
 				// add any possible selections provided by selections
 				subSelection, err := p.extractSelection(&extractSelectionConfig{
-					stepCh:    config.stepCh,
-					stepWg:    config.stepWg,
-					step:      config.step,
-					locations: config.locations,
-
+					stepCh:         config.stepCh,
+					stepWg:         config.stepWg,
+					step:           config.step,
+					locations:      config.locations,
 					parentLocation: config.parentLocation,
+					plan:           config.plan,
+
 					parentType:     coreFieldType(selection).Name(),
 					selection:      selection.SelectionSet,
 					insertionPoint: insertionPoint,
-					plan:           config.plan,
 					wrapper:        wrapper,
 				})
 				if err != nil {
@@ -666,6 +482,208 @@ FieldLoop:
 	}
 	// we should have added every field that needs to be added to this list
 	return finalSelection, nil
+}
+
+func (p *MinQueriesPlanner) wrapSelectionSet(config *extractSelectionConfig, locationFragments map[string]ast.FragmentDefinitionList, location string, selectionSet ast.SelectionSet) (ast.SelectionSet, error) {
+
+	log.Debug("wrapping selection", config.wrapper)
+
+	// pointers required to nest the
+	var selection ast.Selection
+	var innerSelection ast.Selection
+
+	for _, wrap := range config.wrapper {
+		var newSelection ast.Selection
+
+		switch wrap := wrap.(type) {
+		case *ast.InlineFragment:
+			// create a new inline fragment
+			newSelection = &ast.InlineFragment{
+				TypeCondition: wrap.TypeCondition,
+				Directives:    wrap.Directives,
+			}
+		case *ast.FragmentSpread:
+			newSelection = &ast.FragmentSpread{
+				Name:       wrap.Name,
+				Directives: wrap.Directives,
+			}
+
+			locationFragments[location] = append(locationFragments[location], &ast.FragmentDefinition{
+				Name:          wrap.Name,
+				TypeCondition: config.parentType,
+			})
+		}
+
+		// if this is the first one then use the first object we create as the top level
+		if selection == nil {
+			selection = newSelection
+		} else if sel, ok := innerSelection.(*ast.InlineFragment); ok {
+			sel.SelectionSet = ast.SelectionSet{newSelection}
+		} else if sel, ok := innerSelection.(*ast.FragmentSpread); ok {
+			// look up the definition for the selection in the step
+			defn := locationFragments[location].ForName(sel.Name)
+			defn.SelectionSet = ast.SelectionSet{newSelection}
+		}
+
+		// this is the new inner-most selection
+		innerSelection = newSelection
+	}
+
+	if sel, ok := innerSelection.(*ast.InlineFragment); ok {
+		sel.SelectionSet = selectionSet
+	} else if sel, ok := innerSelection.(*ast.FragmentSpread); ok {
+		// look up the definition for the selection in the step
+		defn := locationFragments[location].ForName(sel.Name)
+
+		// if we couldn't find the definition
+		if defn == nil {
+			return nil, errors.New("Could not find defn")
+		}
+
+		// update its selection set
+		defn.SelectionSet = selectionSet
+	}
+
+	return ast.SelectionSet{selection}, nil
+}
+
+func (p *MinQueriesPlanner) groupSelectionSet(config *extractSelectionConfig) (map[string]ast.SelectionSet, map[string]ast.FragmentDefinitionList, error) {
+
+	locationFields := map[string]ast.SelectionSet{}
+	locationFragments := map[string]ast.FragmentDefinitionList{}
+
+	// split each selection into groups of selection sets to be sent to a single service
+FieldLoop:
+	for _, selection := range config.selection {
+		// each kind of selection contributes differently to the final selection set
+		switch selection := selection.(type) {
+		case *ast.Field:
+			log.Debug("Encountered field ", selection.Name)
+
+			// look up the location for this field
+			possibleLocations, err := config.locations.URLFor(config.parentType, selection.Name)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			// if this field can only be found in one location
+			if len(possibleLocations) == 1 {
+				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], selection)
+				// the field can be found in many locations
+			} else {
+				// look to see if the current location is one of the possible locations
+				for _, location := range possibleLocations {
+					// if the location is the same as the parent
+					if location == config.parentLocation {
+						// assign this field to the parents entry
+						locationFields[location] = append(locationFields[location], selection)
+						// we're done with this field
+						continue FieldLoop
+					}
+				}
+
+				// if we got here then this field can be found in multiple services that are not the parent
+				// just use the first one for now
+				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], selection)
+			}
+
+		case *ast.FragmentSpread:
+			log.Debug("Encountered fragment spread ", selection.Name)
+
+			// a fragments fields can span multiple services so a single fragment can result in many selections being added
+			fragmentLocations := map[string]ast.SelectionSet{}
+
+			// look up if we already have a definition for this fragment in the step
+			defn := config.step.FragmentDefinitions.ForName(selection.Name)
+
+			// if we don't have it
+			if defn == nil {
+				// look in the operation
+				defn = config.plan.FragmentDefinitions.ForName(selection.Name)
+				if defn == nil {
+					return nil, nil, fmt.Errorf("Could not find definition for directive: %s", selection.Name)
+				}
+			}
+
+			// each field in the fragment should be bundled with whats around it (still wrapped in fragment)
+			for _, fragmentSelection := range defn.SelectionSet {
+				switch fragmentSelection := fragmentSelection.(type) {
+
+				case *ast.Field:
+					// look up the location of the field
+					fieldLocations, err := config.locations.URLFor(defn.TypeCondition, fragmentSelection.Name)
+					if err != nil {
+						return nil, nil, err
+					}
+
+					// add the field to the location
+					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], fragmentSelection)
+
+				case *ast.FragmentSpread, *ast.InlineFragment:
+					// non-field selections will be handled in the next tick
+					// add it to the current location so we don't create a new step if its not needed
+					fragmentLocations[config.parentLocation] = append(fragmentLocations[config.parentLocation], fragmentSelection)
+				}
+			}
+
+			// for each bundle under a fragment
+			for location, selectionSet := range fragmentLocations {
+				// add the fragment spread to the selection set for this location
+				locationFields[location] = append(locationFields[location], &ast.FragmentSpread{
+					Name:       selection.Name,
+					Directives: selection.Directives,
+				})
+
+				// since the fragment can only refer to fields in the top level that are at
+				// the same location we need to add a new definition of the
+				locationFragments[location] = append(locationFragments[location], &ast.FragmentDefinition{
+					Name:          selection.Name,
+					TypeCondition: defn.TypeCondition,
+					SelectionSet:  selectionSet,
+				})
+			}
+
+		case *ast.InlineFragment:
+			log.Debug("Encountered inline fragment on ", selection.TypeCondition)
+
+			// we need to split the inline fragment into an inline fragment for each location that this cover
+			// and then add those inline fragments to the final selection
+
+			fragmentLocations := map[string]ast.SelectionSet{}
+
+			// each field in the fragment should be bundled with whats around it (still wrapped in fragment)
+			for _, fragmentSelection := range selection.SelectionSet {
+				switch fragmentSelection := fragmentSelection.(type) {
+				case *ast.Field:
+					// look up the location of the field
+					fieldLocations, err := config.locations.URLFor(selection.TypeCondition, fragmentSelection.Name)
+					if err != nil {
+						return nil, nil, err
+					}
+
+					// add the field to the location
+					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], fragmentSelection)
+
+				case *ast.FragmentSpread, *ast.InlineFragment:
+					// non-field selections will be handled in the next tick
+					// add it to the current location so we don't create a new step if its not needed
+					fragmentLocations[config.parentLocation] = append(fragmentLocations[config.parentLocation], fragmentSelection)
+				}
+			}
+
+			// for each bundle under a fragment
+			for location, selectionSet := range fragmentLocations {
+				// add the fragment spread to the selection set for this location
+				locationFields[location] = append(locationFields[location], &ast.InlineFragment{
+					TypeCondition: selection.TypeCondition,
+					Directives:    selection.Directives,
+					SelectionSet:  selectionSet,
+				})
+			}
+		}
+	}
+
+	return locationFields, locationFragments, nil
 }
 
 func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanStep) error {
