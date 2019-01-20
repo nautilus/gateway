@@ -990,6 +990,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	// sanity check the second step meta data
 	assert.Equal(t, "User", secondStep.ParentType)
 	assert.Equal(t, []string{"user"}, secondStep.InsertionPoint)
+	assert.Len(t, secondStep.Then, 0)
 
 	// there should be one selection on the step
 	if !assert.Len(t, secondStep.SelectionSet, 1,
@@ -997,6 +998,61 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	) {
 		return
 	}
+
+	// it should be a fragment spread
+	secondSelection, ok := secondStep.SelectionSet[0].(*ast.FragmentSpread)
+	if !assert.True(t, ok, "Second selection is not a fragment spread") {
+		return
+	}
+	assert.Equal(t, "QueryFragment", secondSelection.Name)
+	// look up the definition for the step
+	defn := secondStep.FragmentDefinitions.ForName("QueryFragment")
+	if !assert.NotNil(t, defn, "Could not find definition for query fragment") {
+		return
+	}
+	// make sure that the definition has 2 selections: a field and a fragment spread
+	if !assert.Len(t, defn.SelectionSet, 2, "QueryFragment in the second step had the wrong definition") {
+		return
+	}
+
+	var secondQFField *ast.Field
+	var secondQFUserInfo *ast.FragmentSpread
+
+	for _, selection := range defn.SelectionSet {
+		if field, ok := selection.(*ast.Field); ok && field.Name == "lastName" {
+			secondQFField = field
+		} else if fragment, ok := selection.(*ast.FragmentSpread); ok && fragment.Name == "UserInfo" {
+			secondQFUserInfo = fragment
+		}
+	}
+
+	// make sure the field exists
+	if !assert.NotNil(t, secondQFField,
+		"could not find field under QueryFragment") {
+		return
+	}
+
+	// make sure that the fragment exists
+	if !assert.NotNil(t, secondQFUserInfo,
+		"could not find fragment spread under QueryFragment") {
+		return
+	}
+
+	userInfoDefn := secondStep.FragmentDefinitions.ForName("UserInfo")
+	if !assert.NotNil(t, userInfoDefn, "Could not find definition for user info in second step.") {
+		return
+	}
+	// there should be 1 selection under it (lastName)
+	if !assert.Len(t, userInfoDefn.SelectionSet, 1, "UserInfo fragment had the wrong number of selections. Expected 1 encountered %v", len(userInfoDefn.SelectionSet)) {
+		return
+	}
+	userInfoSelection, ok := userInfoDefn.SelectionSet[0].(*ast.Field)
+	if !assert.True(t, ok, "user info selection was not a field") {
+		return
+	}
+
+	assert.Equal(t, "lastName", userInfoSelection.Name)
+
 }
 
 func TestPlannerBuildQuery_query(t *testing.T) {
