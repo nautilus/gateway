@@ -148,24 +148,61 @@ func TestPrintQuery(t *testing.T) {
 }
 `,
 			&ast.QueryDocument{
-				Operations: ast.OperationList{&ast.OperationDefinition{
-					Operation: ast.Query,
-					SelectionSet: ast.SelectionSet{
-						&ast.InlineFragment{
-							TypeCondition: "Foo",
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "hello",
+				Operations: ast.OperationList{
+					&ast.OperationDefinition{
+						Operation: ast.Query,
+						SelectionSet: ast.SelectionSet{
+							&ast.InlineFragment{
+								TypeCondition: "Foo",
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "hello",
+									},
 								},
 							},
 						},
 					},
 				},
+			},
+		},
+		// fragments
+		{
+			`{
+  ...Foo
+}
+
+fragment Foo on User {
+  firstName
+}
+`,
+			&ast.QueryDocument{
+				Operations: ast.OperationList{
+					&ast.OperationDefinition{
+						Operation: ast.Query,
+						SelectionSet: ast.SelectionSet{
+							&ast.FragmentSpread{
+								Name: "Foo",
+							},
+						},
+					},
+				},
+				Fragments: ast.FragmentDefinitionList{
+					&ast.FragmentDefinition{
+						Name: "Foo",
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "firstName",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("String", &ast.Position{}),
+								},
+							},
+						},
+						TypeCondition: "User",
+					},
 				},
 			},
 		},
 		// alias
-
 		{
 			`{
   bar: hello

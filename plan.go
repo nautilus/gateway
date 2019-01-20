@@ -350,7 +350,6 @@ FieldLoop:
 
 			// for each bundle under a fragment
 			for location, selectionSet := range fragmentLocations {
-				fmt.Println("Spawning sibling handler for fragment", selection.Name, "@", location, log.FormatSelectionSet(selectionSet))
 				// add the fragment spread to the selection set for this location
 				locationFields[location] = append(locationFields[location], &ast.FragmentSpread{
 					Name:       selection.Name,
@@ -457,7 +456,6 @@ FieldLoop:
 					}
 
 					defn := config.step.FragmentDefinitions.ForName(wrap.Name)
-					fmt.Println("Wrapping in fragment spread", defn)
 
 					locationFragments[location] = append(locationFragments[location], &ast.FragmentDefinition{
 						Name:          wrap.Name,
@@ -500,7 +498,7 @@ FieldLoop:
 
 		// since we're adding another step we need to wait for at least one more goroutine to finish processing
 		config.stepWg.Add(1)
-		fmt.Println("Spawning sibling", log.FormatSelectionSet(selectionSet))
+
 		// add the new step
 		config.stepCh <- &newQueryPlanStepPayload{
 			Plan:           config.plan,

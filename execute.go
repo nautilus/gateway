@@ -234,6 +234,7 @@ func executeStep(
 		Variables:     variables,
 	}, &queryResult)
 	if err != nil {
+		log.Warn("Network Error: ", err)
 		errCh <- err
 		return
 	}

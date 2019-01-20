@@ -42,6 +42,47 @@ func PrintQuery(document *ast.QueryDocument) (string, error) {
 		SelectionSet: selectionSet,
 	}
 
+	gDocument := &gAst.Document{
+		Kind:        "Document",
+		Definitions: []gAst.Node{gOperation},
+	}
+
+	// if we have fragment definitions to add
+	if len(document.Fragments) > 0 {
+		// type FragmentDefinition struct {
+		// 	Kind                string
+		// 	Loc                 *Location
+		// 	Operation           string
+		// 	Name                *Name
+		// 	VariableDefinitions []*VariableDefinition
+		// 	TypeCondition       *Named
+		// 	Directives          []*Directive
+		// 	SelectionSet        *SelectionSet
+		// }
+		for _, defn := range document.Fragments {
+			selectionSet, err := printerConvertSelectionSet(defn.SelectionSet)
+			if err != nil {
+				return "", err
+			}
+
+			gDocument.Definitions = append(gDocument.Definitions, &gAst.FragmentDefinition{
+				Kind: "FragmentDefinition",
+				Name: &gAst.Name{
+					Kind:  "Name",
+					Value: defn.Name,
+				},
+				TypeCondition: &gAst.Named{
+					Kind: "Named",
+					Name: &gAst.Name{
+						Kind:  "Name",
+						Value: defn.TypeCondition,
+					},
+				},
+				SelectionSet: selectionSet,
+			})
+		}
+	}
+
 	// if we have variables to define
 	if len(operation.VariableDefinitions) > 0 {
 		// build up a list of variable definitions
@@ -74,10 +115,7 @@ func PrintQuery(document *ast.QueryDocument) (string, error) {
 		gOperation.VariableDefinitions = gVarDefs
 	}
 
-	result, ok := printer.Print(&gAst.Document{
-		Kind:        "Document",
-		Definitions: []gAst.Node{gOperation},
-	}).(string)
+	result, ok := printer.Print(gDocument).(string)
 	if !ok {
 		return "", errors.New("Did not return a string")
 	}
@@ -182,7 +220,7 @@ func printerConvertInlineFragment(inlineFragment *ast.InlineFragment) (gAst.Sele
 		return nil, err
 	}
 
-	fragment := &gAst.InlineFragment{
+	return &gAst.InlineFragment{
 		Kind: "InlineFragment",
 		TypeCondition: &gAst.Named{
 			Kind: "Named",
@@ -192,9 +230,17 @@ func printerConvertInlineFragment(inlineFragment *ast.InlineFragment) (gAst.Sele
 			},
 		},
 		SelectionSet: selection,
-	}
+	}, nil
+}
 
-	return fragment, nil
+func printerConvertFragmentSpread(fragmentSpread *ast.FragmentSpread) (*gAst.FragmentSpread, error) {
+	return &gAst.FragmentSpread{
+		Kind: "FragmentSpread",
+		Name: &gAst.Name{
+			Kind:  "Name",
+			Value: fragmentSpread.Name,
+		},
+	}, nil
 }
 
 // take a selection set from vektah to gAst
@@ -203,18 +249,25 @@ func printerConvertSelectionSet(selectionSet ast.SelectionSet) (*gAst.SelectionS
 	selections := []gAst.Selection{}
 
 	for _, selection := range selectionSet {
-		// if the selection is a field
-		if selectedField, ok := selection.(*ast.Field); ok {
+		switch selection := selection.(type) {
+		case *ast.Field:
 			// convert the field
-			field, err := printerConvertField(selectedField)
+			field, err := printerConvertField(selection)
 			if err != nil {
 				return nil, err
 			}
 
 			// add the field to the selection
 			selections = append(selections, field)
-		} else if selectedInlineFragment, ok := selection.(*ast.InlineFragment); ok {
-			fragment, err := printerConvertInlineFragment(selectedInlineFragment)
+		case *ast.InlineFragment:
+			fragment, err := printerConvertInlineFragment(selection)
+			if err != nil {
+				return nil, err
+			}
+			// add the field to the selection
+			selections = append(selections, fragment)
+		case *ast.FragmentSpread:
+			fragment, err := printerConvertFragmentSpread(selection)
 			if err != nil {
 				return nil, err
 			}
