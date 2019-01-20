@@ -49,16 +49,6 @@ func PrintQuery(document *ast.QueryDocument) (string, error) {
 
 	// if we have fragment definitions to add
 	if len(document.Fragments) > 0 {
-		// type FragmentDefinition struct {
-		// 	Kind                string
-		// 	Loc                 *Location
-		// 	Operation           string
-		// 	Name                *Name
-		// 	VariableDefinitions []*VariableDefinition
-		// 	TypeCondition       *Named
-		// 	Directives          []*Directive
-		// 	SelectionSet        *SelectionSet
-		// }
 		for _, defn := range document.Fragments {
 			selectionSet, err := printerConvertSelectionSet(defn.SelectionSet)
 			if err != nil {
