@@ -91,6 +91,36 @@ func TestPrintQuery(t *testing.T) {
 				},
 			},
 		},
+		{
+			`{
+  ... on User @foo {
+    hello
+  }
+}
+`,
+			&ast.QueryDocument{
+				Operations: ast.OperationList{
+					&ast.OperationDefinition{
+						Operation: ast.Query,
+						SelectionSet: ast.SelectionSet{
+							&ast.InlineFragment{
+								TypeCondition: "User",
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "hello",
+									},
+								},
+								Directives: ast.DirectiveList{
+									&ast.Directive{
+										Name: "foo",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		// multiple root fields
 		{
 			`{
