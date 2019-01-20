@@ -43,7 +43,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 		t.Error("encountered the wrong number of selections under root step")
 		return
 	}
-	rootField := selectedFields(root.SelectionSet)[0]
+	rootField := graphql.SelectedFields(root.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
 	queryer := root.Queryer.(*graphql.NetworkQueryer)
@@ -54,6 +54,373 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 
 	// there should be anything selected underneath it
 	assert.Len(t, rootField.SelectionSet, 0)
+}
+
+func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
+	// the location for the schema
+	location := "url1"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", location)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: Boolean
+		}
+	`)
+
+	// compute the plan for a query that just hits one service
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query MyQuery {
+			...Foo
+		}
+
+		fragment Foo on Query {
+			foo
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	if len(plans[0].RootStep.Then) != 1 {
+		t.Error("Could not find the step with fragment spread")
+		return
+	}
+
+	// the first selection is the only one we care about
+	root := plans[0].RootStep.Then[0]
+
+	// there should only be one selection
+	if len(root.SelectionSet) != 1 {
+		t.Errorf("encountered the wrong number of selections under root step: %v", len(root.SelectionSet))
+		return
+	}
+
+	// there should be a single selection that is a spread of the fragment Foo
+	fragment, ok := root.SelectionSet[0].(*ast.FragmentSpread)
+	if !ok {
+		t.Error("Root selection was not a fragment spread", root.SelectionSet[0])
+		return
+	}
+
+	// make sure that the fragment has the right name
+	assert.Equal(t, "Foo", fragment.Name)
+
+	// we need to make sure that the fragment definition matches expectation
+	fragmentDef := root.QueryDocument.Fragments.ForName("Foo")
+	if fragmentDef == nil {
+		t.Error("Could not find fragment definition for Foo")
+		return
+	}
+
+	// there should only be one selection in the fragment
+	if len(fragmentDef.SelectionSet) != 1 {
+		t.Errorf("Encountered the incorrect number of fields under fragment definition")
+		return
+	}
+
+	// we should have selected foo
+	assert.Equal(t, "foo", graphql.SelectedFields(fragmentDef.SelectionSet)[0].Name)
+}
+
+func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
+	// the locations for the schema
+	location1 := "url1"
+	location2 := "url2"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", location1)
+	locations.RegisterURL("Query", "bar", location2)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: Boolean
+			bar: Boolean
+		}
+	`)
+
+	// compute the plan for a query that just hits one service
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query MyQuery {
+			...Foo
+		}
+
+		fragment Foo on Query {
+			foo
+			bar
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	if len(plans[0].RootStep.Then) != 2 {
+		t.Errorf("Encountered incorrect number of steps after root step. Expected 2, found %v", len(plans[0].RootStep.Then))
+		return
+	}
+
+	// get the step for location 1
+	location1Step := plans[0].RootStep.Then[0]
+	// make sure that the step has only one selection (the fragment)
+	if len(location1Step.SelectionSet) != 1 {
+		t.Errorf("Encountered incorrect number of selections under location 1 step. Expected 1, found %v", len(location1Step.SelectionSet))
+		return
+	}
+	assert.Equal(t, &ast.FragmentSpread{Name: "Foo"}, location1Step.SelectionSet[0])
+
+	// get the step for location 2
+	location2Step := plans[0].RootStep.Then[1]
+	// make sure that the step has only one selection (the fragment)
+	if len(location2Step.SelectionSet) != 1 {
+		t.Errorf("Encountered incorrect number of selections under location 2 step. Expected 1, found %v", len(location2Step.SelectionSet))
+		return
+	}
+	assert.Equal(t, &ast.FragmentSpread{Name: "Foo"}, location2Step.SelectionSet[0])
+
+	// we also should have a definition for the fragment that only includes the fields to location 1
+	location1Defn := location1Step.FragmentDefinitions[0]
+	location2Defn := location2Step.FragmentDefinitions[0]
+
+	encounteredFields := Set{}
+
+	for _, definition := range (ast.FragmentDefinitionList{location1Defn, location2Defn}) {
+		assert.Equal(t, "Query", definition.TypeCondition)
+		assert.Equal(t, "Foo", definition.Name)
+		if len(definition.SelectionSet) != 1 {
+			t.Errorf("Encountered incorrect number of selections under fragment definition for location 1. Expected 1 found %v", len(location1Defn.SelectionSet))
+			return
+		}
+
+		// add the field we encountered to the set
+		encounteredFields.Add(graphql.SelectedFields(definition.SelectionSet)[0].Name)
+	}
+
+	// make sure we saw both the step for "foo" and the step for "bar"
+	if !encounteredFields.Has("foo") && !encounteredFields.Has("bar") {
+		t.Error("Did not encounter both foo and bar steps")
+		return
+	}
+}
+
+func TestPlanQuery_includeInlineFragments(t *testing.T) {
+	// the locations for the schema
+	location1 := "url1"
+	location2 := "url2"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", location1)
+	locations.RegisterURL("Query", "bar", location2)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: Boolean
+			bar: Boolean
+		}
+	`)
+
+	// compute the plan for a query that just hits one service
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query MyQuery {
+			... on Query {
+				foo
+				bar
+			}
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	if len(plans[0].RootStep.Then) != 2 {
+		t.Errorf("Encountered incorrect number of steps after root step. Expected 2, found %v", len(plans[0].RootStep.Then))
+		return
+	}
+
+	// get the step for location 1
+	location1Step := plans[0].RootStep.Then[0]
+	assert.Equal(t, []string{}, location1Step.InsertionPoint)
+	// make sure that the step has only one selection (the fragment)
+	if len(location1Step.SelectionSet) != 1 {
+		t.Errorf("Encountered incorrect number of selections under location 1 step. Expected 1, found %v", len(location1Step.SelectionSet))
+		return
+	}
+
+	// get the step for location 2
+	location2Step := plans[0].RootStep.Then[1]
+	assert.Equal(t, []string{}, location2Step.InsertionPoint)
+	// make sure that the step has only one selection (the fragment)
+	if len(location2Step.SelectionSet) != 1 {
+		t.Errorf("Encountered incorrect number of selections under location 2 step. Expected 1, found %v", len(location2Step.SelectionSet))
+		return
+	}
+
+	// we also should have a definition for the fragment that only includes the fields to location 1
+	location1Defn := location1Step.SelectionSet[0]
+	location2Defn := location2Step.SelectionSet[0]
+
+	encounteredFields := Set{}
+
+	for _, definition := range (ast.SelectionSet{location1Defn, location2Defn}) {
+		fragment, ok := definition.(*ast.InlineFragment)
+		if !ok {
+			t.Error("Did not encounter an inline fragment")
+			return
+		}
+
+		assert.Equal(t, "Query", fragment.TypeCondition)
+
+		if len(fragment.SelectionSet) != 1 {
+			t.Errorf("Encountered incorrect number of selections under fragment definition. Expected 1 found %v", len(fragment.SelectionSet))
+			return
+		}
+
+		// add the field we encountered to the set
+		encounteredFields.Add(graphql.SelectedFields(fragment.SelectionSet)[0].Name)
+	}
+
+	// make sure we saw both the step for "foo" and the step for "bar"
+	if !encounteredFields.Has("foo") && !encounteredFields.Has("bar") {
+		t.Error("Did not encounter both foo and bar steps")
+		return
+	}
+}
+
+func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
+	// the locations for the schema
+	loc1 := "url1"
+	loc2 := "url2"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", loc1)
+	locations.RegisterURL("Query", "bar", loc2)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: Boolean
+			bar: Boolean
+		}
+	`)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query MyQuery {
+			... on Query {
+				... on Query {
+					foo
+				}
+				bar
+			}
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	// grab the 2 sibling steps
+	steps := plans[0].RootStep.Then
+	if !assert.Len(t, steps, 2) {
+		return
+	}
+
+	var loc1Step *QueryPlanStep
+	var loc2Step *QueryPlanStep
+
+	// find the steps
+	for _, step := range steps {
+		// look at the queryer to figure out where the request is going
+		if queryer, ok := step.Queryer.(*graphql.NetworkQueryer); ok {
+			if queryer.URL == loc1 {
+				loc1Step = step
+			} else if queryer.URL == loc2 {
+				loc2Step = step
+			}
+		} else {
+			t.Error("Encountered non-network queryer")
+			return
+		}
+	}
+
+	// the step that's going to location 1 should be equivalent to
+	// query MyQuery {
+	// 		... on Query {
+	// 			... on Query {
+	// 				foo
+	// 			}
+	//		}
+	// }
+
+	// that first slection should be an inline fragment
+	assert.NotNil(t, loc1Step)
+	if !assert.Len(t, loc1Step.SelectionSet, 1) {
+		return
+	}
+	loc1Selection, ok := loc1Step.SelectionSet[0].(*ast.InlineFragment)
+	if !assert.True(t, ok) {
+		return
+	}
+
+	// there should be one selection in that inline fragment
+	if !assert.Len(t, loc1Selection.SelectionSet, 1) {
+		return
+	}
+	loc1SubSelection, ok := loc1Selection.SelectionSet[0].(*ast.InlineFragment)
+	if !assert.True(t, ok, "first sub-selection in location 1 selection is not an inline fragment: \n%v", log.FormatSelectionSet(loc1Selection.SelectionSet)) {
+		return
+	}
+
+	// there should be one field
+	if !assert.Len(t, loc1SubSelection.SelectionSet, 1) {
+		return
+	}
+	loc1Field, ok := loc1SubSelection.SelectionSet[0].(*ast.Field)
+	if !assert.True(t, ok) {
+		return
+	}
+
+	// it should be for the field "foo"
+	assert.Equal(t, "foo", loc1Field.Name)
+
+	// the step that's going to location 2 should be equivalent to
+	// query MyQuery {
+	// 		... on Query {
+	// 			bar
+	// 		}
+	// }
+
+	if !assert.Len(t, loc2Step.SelectionSet, 1) {
+		return
+	}
+	loc2Selection, ok := loc2Step.SelectionSet[0].(*ast.InlineFragment)
+	if !assert.True(t, ok) {
+		return
+	}
+
+	// it should have one selection that's a field
+	if !assert.Len(t, loc2Selection.SelectionSet, 1) {
+		return
+	}
+	loc2Field, ok := loc2Selection.SelectionSet[0].(*ast.Field)
+	if !assert.True(t, ok) {
+		return
+	}
+
+	assert.Equal(t, "bar", loc2Field.Name)
 }
 
 func TestPlanQuery_singleRootObject(t *testing.T) {
@@ -107,7 +474,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 		return
 	}
 
-	rootField := selectedFields(rootStep.SelectionSet)[0]
+	rootField := graphql.SelectedFields(rootStep.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
 	queryer := rootStep.Queryer.(*graphql.NetworkQueryer)
@@ -221,7 +588,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 		t.Error("first step did not have a selection set")
 		return
 	}
-	firstField := selectedFields(firstStep.SelectionSet)[0]
+	firstField := graphql.SelectedFields(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
 	queryer := firstStep.Queryer.(*graphql.NetworkQueryer)
 	assert.Equal(t, userLocation, queryer.URL)
@@ -229,13 +596,13 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// make sure it is for allUsers
 	assert.Equal(t, "allUsers", firstField.Name)
 
-	// all users should have only one selected value since `catPhotos` is from another service
+	// all users should have one selected value since `catPhotos` is from another service
 	// there will also be an `id` added so that the query can be stitched together
-	if len(firstField.SelectionSet) > 2 {
-		for _, selection := range selectedFields(firstField.SelectionSet) {
+	if len(firstField.SelectionSet) != 2 {
+		for _, selection := range graphql.SelectedFields(firstField.SelectionSet) {
 			fmt.Println(selection.Name)
 		}
-		t.Error("Encountered too many fields on allUsers selection set")
+		t.Error("Encountered incorrext number of fields on allUsers selection set")
 		return
 	}
 
@@ -270,11 +637,11 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 
 	// make sure we selected the catPhotos field
-	selectedSecondField := selectedFields(secondStep.SelectionSet)[0]
+	selectedSecondField := graphql.SelectedFields(secondStep.SelectionSet)[0]
 	assert.Equal(t, "catPhotos", selectedSecondField.Name)
 
 	// we should have also asked for one field underneath
-	secondSubSelection := selectedFields(selectedSecondField.SelectionSet)
+	secondSubSelection := graphql.SelectedFields(selectedSecondField.SelectionSet)
 	if len(secondSubSelection) != 2 {
 		t.Error("Encountered the incorrect number of fields selected under User.catPhotos")
 	}
@@ -305,11 +672,11 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 
 	// make sure we selected the catPhotos field
-	selectedThirdField := selectedFields(thirdStep.SelectionSet)[0]
+	selectedThirdField := graphql.SelectedFields(thirdStep.SelectionSet)[0]
 	assert.Equal(t, "owner", selectedThirdField.Name)
 
 	// we should have also asked for one field underneath
-	thirdSubSelection := selectedFields(selectedThirdField.SelectionSet)
+	thirdSubSelection := graphql.SelectedFields(selectedThirdField.SelectionSet)
 	if len(thirdSubSelection) != 1 {
 		t.Error("Encountered the incorrect number of fields selected under User.catPhotos")
 	}
@@ -490,17 +857,17 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	// make sure it has the right variable dependencies
 	assert.Equal(t, Set{"category": true, "id": true}, nextStep.Variables)
 
-	if nextStep.QueryDocument == nil {
+	if len(nextStep.QueryDocument.Operations) == 0 {
 		t.Error("Could not find query document")
 		return
 	}
 	// we need to have a query with id and category since id is passed to node
-	if len(nextStep.QueryDocument.VariableDefinitions) != 2 {
-		t.Errorf("Did not find the right number of variable definitions in the next step. Expected 2 found %v", len(nextStep.QueryDocument.VariableDefinitions))
+	if len(nextStep.QueryDocument.Operations[0].VariableDefinitions) != 2 {
+		t.Errorf("Did not find the right number of variable definitions in the next step. Expected 2 found %v", len(nextStep.QueryDocument.Operations[0].VariableDefinitions))
 		return
 	}
 
-	for _, definition := range nextStep.QueryDocument.VariableDefinitions {
+	for _, definition := range nextStep.QueryDocument.Operations[0].VariableDefinitions {
 		if definition.Variable != "id" && definition.Variable != "category" {
 			t.Errorf("Encountered a variable with an unknown name: %v", definition.Variable)
 			return
@@ -508,395 +875,184 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	}
 }
 
-func TestPreparePlanQueries(t *testing.T) {
-	// if we have a plan that depends on another, we need to add the id field to the selection set if
-	// its not there
+func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
+	// the locations for the schema
+	loc1 := "url1"
+	loc2 := "url2"
 
-	childStep := &QueryPlanStep{
-		InsertionPoint: []string{"users", "friends"},
-		SelectionSet: ast.SelectionSet{
-			&ast.Field{
-				Name: "firstName",
-				Definition: &ast.FieldDefinition{
-					Type: ast.NamedType("String", &ast.Position{}),
-				},
-			},
-		},
-	}
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "user", loc2)
+	locations.RegisterURL("User", "lastName", loc1)
+	locations.RegisterURL("User", "id", loc1, loc2)
 
-	parentStep := &QueryPlanStep{
-		SelectionSet: ast.SelectionSet{
-			&ast.Field{
-				Name: "users",
-				Definition: &ast.FieldDefinition{
-					Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-				},
-				SelectionSet: ast.SelectionSet{
-					&ast.Field{
-						Name: "friends",
-						Definition: &ast.FieldDefinition{
-							Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-						},
-						SelectionSet: ast.SelectionSet{
-							&ast.Field{
-								Name: "lastName",
-								Definition: &ast.FieldDefinition{
-									Type: ast.NamedType("String", &ast.Position{}),
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		Then: []*QueryPlanStep{childStep},
-	}
-
-	plan := &QueryPlan{
-		Operation: &ast.OperationDefinition{
-			VariableDefinitions: ast.VariableDefinitionList{},
-		},
-		RootStep: parentStep,
-	}
-
-	// add the id fields
-	(&MinQueriesPlanner{}).preparePlanQueries(plan, plan.RootStep)
-
-	// we should have added `id` to the
-	usersSelection, ok := parentStep.SelectionSet[0].(*ast.Field)
-	if !ok {
-		t.Error("users field was not a field")
-		return
-	}
-	friendsSelection, ok := usersSelection.SelectionSet[0].(*ast.Field)
-	if !ok {
-		t.Error("friends field was not a field")
-		return
-	}
-
-	// we should have 2 field
-	if len(friendsSelection.SelectionSet) != 2 {
-		t.Errorf("Encountered incorrect number of selections under friends field: Expected 2, found %v", len(friendsSelection.SelectionSet))
-		return
-	}
-
-	// those 2 fields should be lastName and id
-	for _, field := range selectedFields(friendsSelection.SelectionSet) {
-		if field.Name != "lastName" && field.Name != "id" {
-			t.Errorf("Encountered unknown field: %v", field.Name)
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			lastName: String
 		}
-	}
 
-	// make sure we assigned a query document and string to the parent step
-	if parentStep.QueryDocument == nil {
-		t.Error("Encountered a nil query document on parent")
-	}
-	if parentStep.QueryString == "" {
-		t.Error("Encountered an empty query string on parent")
-	}
+		type Query {
+			user: User
+		}
+	`)
 
-	// make sure we assigned a query document and string to the child step
-	if childStep.QueryDocument == nil {
-		t.Error("Encountered a nil query document on parent")
-	}
-	if childStep.QueryString == "" {
-		t.Error("Encountered an empty query string on parent")
-	}
-}
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query MyQuery {
+			...QueryFragment
+		}
 
-func TestExtractVariables(t *testing.T) {
-	table := []struct {
-		Name      string
-		Arguments ast.ArgumentList
-		Variables []string
-	}{
-		//  user(id: $id, name:$name) should extract ["id", "name"]
-		{
-			Name:      "Top Level arguments",
-			Variables: []string{"id", "name"},
-			Arguments: ast.ArgumentList{
-				&ast.Argument{
-					Name: "id",
-					Value: &ast.Value{
-						Kind: ast.Variable,
-						Raw:  "id",
-					},
-				},
-				&ast.Argument{
-					Name: "name",
-					Value: &ast.Value{
-						Kind: ast.Variable,
-						Raw:  "name",
-					},
-				},
-			},
-		},
-		//  catPhotos(categories: [$a, "foo", $b]) should extract ["a", "b"]
-		{
-			Name:      "List nested arguments",
-			Variables: []string{"a", "b"},
-			Arguments: ast.ArgumentList{
-				&ast.Argument{
-					Name: "category",
-					Value: &ast.Value{
-						Kind: ast.ListValue,
-						Children: ast.ChildValueList{
-							&ast.ChildValue{
-								Value: &ast.Value{
-									Kind: ast.Variable,
-									Raw:  "a",
-								},
-							},
-							&ast.ChildValue{
-								Value: &ast.Value{
-									Kind: ast.StringValue,
-									Raw:  "foo",
-								},
-							},
-							&ast.ChildValue{
-								Value: &ast.Value{
-									Kind: ast.Variable,
-									Raw:  "b",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		//  users(favoriteMovieFilter: {category: $targetCategory, rating: $targetRating}) should extract ["targetCategory", "targetRating"]
-		{
-			Name:      "Object nested arguments",
-			Variables: []string{"targetCategory", "targetRating"},
-			Arguments: ast.ArgumentList{
-				&ast.Argument{
-					Name: "favoriteMovieFilter",
-					Value: &ast.Value{
-						Kind: ast.ObjectValue,
-						Children: ast.ChildValueList{
-							&ast.ChildValue{
-								Name: "category",
-								Value: &ast.Value{
-									Kind: ast.Variable,
-									Raw:  "targetCategory",
-								},
-							},
-							&ast.ChildValue{
-								Name: "rating",
-								Value: &ast.Value{
-									Kind: ast.Variable,
-									Raw:  "targetRating",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
+		fragment QueryFragment on Query {
+			user {
+				lastName
+				...UserInfo
+			}
+		}
 
-	for _, row := range table {
-		t.Run(row.Name, func(t *testing.T) {
-			assert.Equal(t, row.Variables, plannerExtractVariables(row.Arguments))
-		})
-	}
-}
-
-func TestApplyFragments_mergesFragments(t *testing.T) {
-	// a selection set representing
-	// {
-	//      birthday
-	// 		... on User {
-	// 			firstName
-	//			lastName
-	// 			friends {
-	// 				firstName
-	// 			}
-	// 		}
-	//      ...SecondFragment
-	// 	}
-	//
-	// 	fragment SecondFragment on User {
-	// 		lastName
-	// 		friends {
-	// 			lastName
-	//			friends {
-	//				lastName
-	//			}
-	// 		}
-	// 	}
-	//
-	//
-	// should be flattened into
-	// {
-	//		birthday
-	// 		firstName
-	// 		lastName
-	// 		friends {
-	// 			firstName
-	// 			lastName
-	//			friends {
-	//				lastName
-	//			}
-	// 		}
-	// }
-	selectionSet := ast.SelectionSet{
-		&ast.Field{
-			Name:  "birthday",
-			Alias: "birthday",
-			Definition: &ast.FieldDefinition{
-				Type: ast.NamedType("DateTime", &ast.Position{}),
-			},
-		},
-		&ast.FragmentSpread{
-			Name: "SecondFragment",
-		},
-		&ast.InlineFragment{
-			TypeCondition: "User",
-			SelectionSet: ast.SelectionSet{
-				&ast.Field{
-					Name:  "lastName",
-					Alias: "lastName",
-					Definition: &ast.FieldDefinition{
-						Type: ast.NamedType("String", &ast.Position{}),
-					},
-				},
-				&ast.Field{
-					Name:  "firstName",
-					Alias: "firstName",
-					Definition: &ast.FieldDefinition{
-						Type: ast.NamedType("String", &ast.Position{}),
-					},
-				},
-				&ast.Field{
-					Name:  "friends",
-					Alias: "friends",
-					Definition: &ast.FieldDefinition{
-						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-					},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name:  "firstName",
-							Alias: "firstName",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("String", &ast.Position{}),
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	fragmentDefinition := ast.FragmentDefinitionList{
-		&ast.FragmentDefinition{
-			Name: "SecondFragment",
-			SelectionSet: ast.SelectionSet{
-				&ast.Field{
-					Name:  "lastName",
-					Alias: "lastName",
-					Definition: &ast.FieldDefinition{
-						Type: ast.NamedType("String", &ast.Position{}),
-					},
-				},
-				&ast.Field{
-					Name:  "friends",
-					Alias: "friends",
-					Definition: &ast.FieldDefinition{
-						Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-					},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name:  "lastName",
-							Alias: "lastName",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("String", &ast.Position{}),
-							},
-						},
-						&ast.Field{
-							Name:  "friends",
-							Alias: "friends",
-							Definition: &ast.FieldDefinition{
-								Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-							},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name:  "lastName",
-									Alias: "lastName",
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("String", &ast.Position{}),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// should be flattened into
-	// {
-	//		birthday
-	// 		firstName
-	// 		lastName
-	// 		friends {
-	// 			firstName
-	// 			lastName
-	//			friends {
-	//				lastName
-	//			}
-	// 		}
-	// }
-
-	// flatten the selection
-	finalSelection, err := plannerApplyFragments(selectionSet, fragmentDefinition)
+		fragment UserInfo on User {
+			lastName
+		}
+	`, schema, locations)
+	// if something went wrong planning the query
 	if err != nil {
-		t.Error(err.Error())
-		return
-	}
-	fields := selectedFields(finalSelection)
-
-	// make sure there are 4 fields at the root of the selection
-	if len(fields) != 4 {
-		t.Errorf("Encountered the incorrect number of selections: %v", len(fields))
+		// the test is over
+		t.Errorf("encountered error when planning query: %s", err.Error())
 		return
 	}
 
-	// get the selection set for birthday
-	var birthdaySelection *ast.Field
-	var firstNameSelection *ast.Field
-	var lastNameSelection *ast.Field
-	var friendsSelection *ast.Field
+	// there is only one direct step
+	steps := plans[0].RootStep.Then
+	if !assert.Len(t, steps, 1) {
+		return
+	}
 
-	for _, selection := range fields {
-		switch selection.Alias {
-		case "birthday":
-			birthdaySelection = selection
-		case "firstName":
-			firstNameSelection = selection
-		case "lastName":
-			lastNameSelection = selection
-		case "friends":
-			friendsSelection = selection
+	// there are 2 total steps to this query
+	// - the first should be inserted at []:
+	//
+	// 	query MyQuery {
+	// 		...QueryFragment
+	// 	}
+
+	// 	fragment QueryFragment on Query {
+	// 		user {
+	//			id
+	// 		}
+	// 	}
+	//
+	//
+	// - the second one should be inserted at ["user"]
+	//
+	// 	query {
+	// 		...QueryFragment
+	// 	}
+	//
+	// 	fragment QueryFragment on User {
+	//		lastName
+	// 		...UserInfo
+	// 	}
+	//
+	// 	fragment UserInfo {
+	// 		lastName
+	// 	}
+
+	// check the first step
+	firstStep := steps[0]
+
+	// there should be one selection on the step
+	if !assert.Len(t, firstStep.SelectionSet, 1, "First step had the wrong number of selections") {
+		return
+	}
+	// it should be a fragment spread
+	firstSelection, ok := firstStep.SelectionSet[0].(*ast.FragmentSpread)
+	if !ok {
+		t.Error("First selection step 1 was not a fragment spread")
+		return
+	}
+
+	// it should be a spread for the Fragment fragment
+	assert.Equal(t, "QueryFragment", firstSelection.Name)
+
+	// the definition for QueryFragment should have 1 selections
+	queryFragmentDefn := firstStep.FragmentDefinitions.ForName("QueryFragment")
+	if !assert.NotNil(t, queryFragmentDefn, "Could not find QueryFragment definition") ||
+		!assert.Len(t, queryFragmentDefn.SelectionSet, 1) {
+		return
+	}
+	queryFragmentSelection, ok := queryFragmentDefn.SelectionSet[0].(*ast.Field)
+	if !assert.True(t, ok, "query fragment selection was not a field") {
+		return
+	}
+
+	assert.Equal(t, "user", queryFragmentSelection.Name)
+	assert.Equal(t, ast.SelectionSet{&ast.Field{Name: "id"}}, queryFragmentSelection.SelectionSet)
+
+	// check the second step
+	secondStep := firstStep.Then[0]
+	// sanity check the second step meta data
+	assert.Equal(t, "User", secondStep.ParentType)
+	assert.Equal(t, []string{"user"}, secondStep.InsertionPoint)
+	assert.Len(t, secondStep.Then, 0)
+
+	// there should be one selection on the step
+	if !assert.Len(t, secondStep.SelectionSet, 1,
+		"Second step had the wrong number of selections %v", log.FormatSelectionSet(secondStep.SelectionSet),
+	) {
+		return
+	}
+
+	// it should be a fragment spread
+	secondSelection, ok := secondStep.SelectionSet[0].(*ast.FragmentSpread)
+	if !assert.True(t, ok, "Second selection is not a fragment spread") {
+		return
+	}
+	assert.Equal(t, "QueryFragment", secondSelection.Name)
+	// look up the definition for the step
+	defn := secondStep.FragmentDefinitions.ForName("QueryFragment")
+	if !assert.NotNil(t, defn, "Could not find definition for query fragment") {
+		return
+	}
+	// make sure that the definition has 2 selections: a field and a fragment spread
+	if !assert.Len(t, defn.SelectionSet, 2, "QueryFragment in the second step had the wrong definition") {
+		return
+	}
+
+	var secondQFField *ast.Field
+	var secondQFUserInfo *ast.FragmentSpread
+
+	for _, selection := range defn.SelectionSet {
+		if field, ok := selection.(*ast.Field); ok && field.Name == "lastName" {
+			secondQFField = field
+		} else if fragment, ok := selection.(*ast.FragmentSpread); ok && fragment.Name == "UserInfo" {
+			secondQFUserInfo = fragment
 		}
 	}
 
-	// make sure we got each definition
-	assert.NotNil(t, birthdaySelection)
-	assert.NotNil(t, firstNameSelection)
-	assert.NotNil(t, lastNameSelection)
-	assert.NotNil(t, friendsSelection)
-
-	// make sure there are 3 selections under friends (firstName, lastName, and friends)
-	if len(friendsSelection.SelectionSet) != 3 {
-		t.Errorf("Encountered the wrong number of selections under .friends: len = %v)", len(friendsSelection.SelectionSet))
-		for _, selection := range friendsSelection.SelectionSet {
-			field, _ := selection.(*collectedField)
-			t.Errorf("    %s", field.Name)
-		}
+	// make sure the field exists
+	if !assert.NotNil(t, secondQFField,
+		"could not find field under QueryFragment") {
 		return
 	}
+
+	// make sure that the fragment exists
+	if !assert.NotNil(t, secondQFUserInfo,
+		"could not find fragment spread under QueryFragment") {
+		return
+	}
+
+	userInfoDefn := secondStep.FragmentDefinitions.ForName("UserInfo")
+	if !assert.NotNil(t, userInfoDefn, "Could not find definition for user info in second step.") {
+		return
+	}
+	// there should be 1 selection under it (lastName)
+	if !assert.Len(t, userInfoDefn.SelectionSet, 1, "UserInfo fragment had the wrong number of selections. Expected 1 encountered %v", len(userInfoDefn.SelectionSet)) {
+		return
+	}
+	userInfoSelection, ok := userInfoDefn.SelectionSet[0].(*ast.Field)
+	if !assert.True(t, ok, "user info selection was not a field") {
+		return
+	}
+
+	assert.Equal(t, "lastName", userInfoSelection.Name)
+
 }
 
 func TestPlannerBuildQuery_query(t *testing.T) {
@@ -924,24 +1080,24 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 	}
 
 	// the query we're building goes to the top level Query object
-	operation := plannerBuildQuery("Query", variables, selection)
+	operation := plannerBuildQuery("Query", variables, selection, ast.FragmentDefinitionList{})
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
 	}
 
 	// it should be a query
-	assert.Equal(t, ast.Query, operation.Operation)
-	assert.Equal(t, variables, operation.VariableDefinitions)
+	assert.Equal(t, ast.Query, operation.Operations[0].Operation)
+	assert.Equal(t, variables, operation.Operations[0].VariableDefinitions)
 
 	// the selection set should be the same as what we passed in
-	assert.Equal(t, selection, operation.SelectionSet)
+	assert.Equal(t, selection, operation.Operations[0].SelectionSet)
 }
 
 func TestPlannerBuildQuery_node(t *testing.T) {
 	// if we are querying a specific type/id then we need to perform a query similar to
 	// {
-	// 		node(id: "1234") {
+	// 		node(id: $id) {
 	// 			... on User {
 	// 				firstName
 	// 			}
@@ -962,23 +1118,23 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 	}
 
 	// the query we're building goes to the User object
-	operation := plannerBuildQuery(objType, ast.VariableDefinitionList{}, selection)
+	operation := plannerBuildQuery(objType, ast.VariableDefinitionList{}, selection, ast.FragmentDefinitionList{})
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
 	}
 
 	// it should be a query
-	assert.Equal(t, ast.Query, operation.Operation)
+	assert.Equal(t, ast.Query, operation.Operations[0].Operation)
 
 	// there should be one selection (node) with an argument for the id
-	if len(operation.SelectionSet) != 1 {
+	if len(operation.Operations[0].SelectionSet) != 1 {
 		t.Error("Did not find the right number of fields on the top query")
 		return
 	}
 
 	// grab the node field
-	node, ok := operation.SelectionSet[0].(*ast.Field)
+	node, ok := operation.Operations[0].SelectionSet[0].(*ast.Field)
 	if !ok {
 		t.Error("root is not a field")
 		return
@@ -1027,32 +1183,6 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 	assert.Equal(t, selection, fragment.SelectionSet)
 }
 
-func TestApplyFragments_skipAndIncludeDirectives(t *testing.T) {
-	t.Skip("Not yet implemented")
-}
-
-func TestApplyFragments_leavesUnionsAndInterfaces(t *testing.T) {
-	t.Skip("Not yet implemented")
-}
-
-func TestPlanQuery_multipleRootFields(t *testing.T) {
-	t.Skip("Not implemented")
-}
-
 func TestPlanQuery_mutationsInSeries(t *testing.T) {
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_siblingFields(t *testing.T) {
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_duplicateFieldsOnEither(t *testing.T) {
-	// make sure that if I have the same field defined on both schemas we dont create extraneous calls
-	t.Skip("Not implemented")
-}
-
-func TestPlanQuery_groupsConflictingFields(t *testing.T) {
-	// if I can find a field in 4 different services, look for the one I"m already going to
 	t.Skip("Not implemented")
 }

@@ -172,20 +172,22 @@ func (m FieldURLMap) Concat(other FieldURLMap) FieldURLMap {
 }
 
 // RegisterURL adds a new location to the list of possible places to find the value for parent.field
-func (m FieldURLMap) RegisterURL(parent string, field string, location string) {
-	// compute the key for the field
-	key := m.keyFor(parent, field)
+func (m FieldURLMap) RegisterURL(parent string, field string, locations ...string) {
+	for _, location := range locations {
+		// compute the key for the field
+		key := m.keyFor(parent, field)
 
-	// look up the value in the map
-	_, exists := m[key]
+		// look up the value in the map
+		_, exists := m[key]
 
-	// if we haven't seen this key before
-	if !exists {
-		// create a new list
-		m[key] = []string{location}
-	} else {
-		// we've seen this key before
-		m[key] = append(m[key], location)
+		// if we haven't seen this key before
+		if !exists {
+			// create a new list
+			m[key] = []string{location}
+		} else {
+			// we've seen this key before
+			m[key] = append(m[key], location)
+		}
 	}
 }
 

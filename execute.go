@@ -149,7 +149,7 @@ func executeStep(
 
 			for _, point := range path {
 				// look for the selection with that name
-				for _, selection := range selectedFields(target) {
+				for _, selection := range graphql.SelectedFields(target) {
 					// if we still have to walk down the selection but we found the right branch
 					if selection.Name == point {
 						target = selection.SelectionSet
@@ -167,7 +167,7 @@ func executeStep(
 
 			// if the target does not currently ask for id we need to add it
 			addID := true
-			for _, selection := range selectedFields(target) {
+			for _, selection := range graphql.SelectedFields(target) {
 				if selection.Name == "id" {
 					addID = false
 					break
@@ -234,6 +234,7 @@ func executeStep(
 		Variables:     variables,
 	}, &queryResult)
 	if err != nil {
+		log.Warn("Network Error: ", err)
 		errCh <- err
 		return
 	}
@@ -337,7 +338,7 @@ func executorFindInsertionPoints(targetPoints []string, selectionSet ast.Selecti
 		var foundSelection *ast.Field
 
 		// there should be a field in the root selection set that has the target point
-		for _, selection := range selectedFields(selectionSetRoot) {
+		for _, selection := range graphql.SelectedFields(selectionSetRoot) {
 			// if the selection has the right name we need to add it to the list
 			if selection.Alias == point || selection.Name == point {
 				foundSelection = selection
