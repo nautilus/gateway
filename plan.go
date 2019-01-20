@@ -455,8 +455,6 @@ FieldLoop:
 						Directives: wrap.Directives,
 					}
 
-					defn := config.step.FragmentDefinitions.ForName(wrap.Name)
-
 					locationFragments[location] = append(locationFragments[location], &ast.FragmentDefinition{
 						Name:          wrap.Name,
 						TypeCondition: config.parentType,
