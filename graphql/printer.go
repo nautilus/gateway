@@ -113,6 +113,42 @@ func PrintQuery(document *ast.QueryDocument) (string, error) {
 	return strings.Replace(result, `"__NULL_VALUE__"`, "null", -1), nil
 }
 
+func printerConvertDirectiveList(dList ast.DirectiveList) ([]*gAst.Directive, error) {
+	// the list of directives to apply
+	directives := []*gAst.Directive{}
+
+	for _, directive := range dList {
+		// the list of arguments to add
+		args := []*gAst.Argument{}
+
+		for _, arg := range directive.Arguments {
+			newArg, err := printerBuildValue(arg.Value)
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, &gAst.Argument{
+				Kind: "Argument",
+				Name: &gAst.Name{
+					Kind:  "Name",
+					Value: arg.Name,
+				},
+				Value: newArg,
+			})
+		}
+
+		directives = append(directives, &gAst.Directive{
+			Kind: "Directive",
+			Name: &gAst.Name{
+				Kind:  "Name",
+				Value: directive.Name,
+			},
+			Arguments: args,
+		})
+	}
+
+	return directives, nil
+}
+
 func printerConvertField(selectedField *ast.Field) (*gAst.Field, error) {
 	// the field to result
 	field := &gAst.Field{
@@ -166,38 +202,10 @@ func printerConvertField(selectedField *ast.Field) (*gAst.Field, error) {
 
 	// if there are directives applied
 	if len(selectedField.Directives) > 0 {
-		// the list of directives to apply
-		directives := []*gAst.Directive{}
-
-		for _, directive := range selectedField.Directives {
-			// the list of arguments to add
-			args := []*gAst.Argument{}
-
-			for _, arg := range directive.Arguments {
-				newArg, err := printerBuildValue(arg.Value)
-				if err != nil {
-					return nil, err
-				}
-				args = append(args, &gAst.Argument{
-					Kind: "Argument",
-					Name: &gAst.Name{
-						Kind:  "Name",
-						Value: arg.Name,
-					},
-					Value: newArg,
-				})
-			}
-
-			directives = append(directives, &gAst.Directive{
-				Kind: "Directive",
-				Name: &gAst.Name{
-					Kind:  "Name",
-					Value: directive.Name,
-				},
-				Arguments: args,
-			})
+		directives, err := printerConvertDirectiveList(selectedField.Directives)
+		if err != nil {
+			return nil, err
 		}
-
 		field.Directives = directives
 	}
 
@@ -206,6 +214,10 @@ func printerConvertField(selectedField *ast.Field) (*gAst.Field, error) {
 
 func printerConvertInlineFragment(inlineFragment *ast.InlineFragment) (gAst.Selection, error) {
 	selection, err := printerConvertSelectionSet(inlineFragment.SelectionSet)
+	if err != nil {
+		return nil, err
+	}
+	directives, err := printerConvertDirectiveList(inlineFragment.Directives)
 	if err != nil {
 		return nil, err
 	}
@@ -220,16 +232,23 @@ func printerConvertInlineFragment(inlineFragment *ast.InlineFragment) (gAst.Sele
 			},
 		},
 		SelectionSet: selection,
+		Directives:   directives,
 	}, nil
 }
 
 func printerConvertFragmentSpread(fragmentSpread *ast.FragmentSpread) (*gAst.FragmentSpread, error) {
+	directives, err := printerConvertDirectiveList(fragmentSpread.Directives)
+	if err != nil {
+		return nil, err
+	}
+
 	return &gAst.FragmentSpread{
 		Kind: "FragmentSpread",
 		Name: &gAst.Name{
 			Kind:  "Name",
 			Value: fragmentSpread.Name,
 		},
+		Directives: directives,
 	}, nil
 }
 
