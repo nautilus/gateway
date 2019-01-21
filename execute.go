@@ -33,19 +33,20 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 	result := map[string]interface{}{}
 
 	// a channel to receive query results
-	resultCh := make(chan queryExecutionResult, 10)
-	// defer close(resultCh)
+	resultCh := make(chan *queryExecutionResult, 10)
+	defer close(resultCh)
 
 	// a wait group so we know when we're done with all of the steps
 	stepWg := &sync.WaitGroup{}
 
 	// and a channel for errors
+	errMutex := &sync.Mutex{}
 	errCh := make(chan error, 10)
-	// defer close(errCh)
+	defer close(errCh)
 
 	// a channel to close the goroutine
 	closeCh := make(chan bool)
-	// defer close(closeCh)
+	defer close(closeCh)
 
 	// a lock for reading and writing to the result
 	resultLock := &sync.Mutex{}
@@ -61,13 +62,18 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 		go executeStep(plan, step, []string{}, resultLock, variables, resultCh, errCh, stepWg)
 	}
 
+	// the list of errors we have encountered while executing the plan
+	errs := graphql.ErrorList{}
+
 	// start a goroutine to add results to the list
 	go func() {
-	ConsumptionLoop:
 		for {
 			select {
 			// we have a new result
 			case payload := <-resultCh:
+				if payload == nil {
+					continue
+				}
 				log.Debug("Inserting result into ", payload.InsertionPoint)
 				log.Debug("Result: ", payload.Result)
 
@@ -76,13 +82,26 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 				err := executorInsertObject(result, resultLock, payload.InsertionPoint, payload.Result)
 				if err != nil {
 					errCh <- err
-					continue ConsumptionLoop
+					continue
 				}
 
 				log.Debug("Done. ", result)
 				// one of the queries is done
 				stepWg.Done()
 
+			case err := <-errCh:
+				if err != nil {
+					fmt.Println("Error! ", err)
+					errMutex.Lock()
+					// if the error was a list
+					if errList, ok := err.(graphql.ErrorList); ok {
+						errs = append(errs, errList...)
+					} else {
+						errs = append(errs, err)
+					}
+					errMutex.Unlock()
+					stepWg.Done()
+				}
 			// we're done
 			case <-closeCh:
 				return
@@ -90,36 +109,20 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 		}
 	}()
 
-	// there are 2 possible options:
-	// - either the wait group finishes
-	// - we get a messsage over the error chan
+	// when the wait group is finished
+	stepWg.Wait()
 
-	// in order to wait for either, let's spawn a go routine
-	// that waits until all of the steps are built and notifies us when its done
-	doneCh := make(chan bool)
-	// defer close(doneCh)
+	// if we encountered any errors
+	errMutex.Lock()
+	nErrs := len(errs)
+	defer errMutex.Unlock()
 
-	go func() {
-		// when the wait group is finished
-		stepWg.Wait()
-		// push a value over the channel
-		doneCh <- true
-	}()
-
-	// wait for either the error channel or done channel
-	select {
-	// there was an error
-	case err := <-errCh:
-		log.Warn(fmt.Sprintf("Ran into execution error: %s", err.Error()))
-		closeCh <- true
-		// bubble the error up
-		return nil, err
-	// we are done
-	case <-doneCh:
-		closeCh <- true
-		// we're done here
-		return result, nil
+	if nErrs > 0 {
+		return result, errs
 	}
+
+	// we didn't encounter any errors
+	return result, nil
 }
 
 // TODO: ugh... so... many... variables...
@@ -129,7 +132,7 @@ func executeStep(
 	insertionPoint []string,
 	resultLock *sync.Mutex,
 	queryVariables map[string]interface{},
-	resultCh chan queryExecutionResult,
+	resultCh chan *queryExecutionResult,
 	errCh chan error,
 	stepWg *sync.WaitGroup,
 ) {
@@ -175,7 +178,7 @@ func executeStep(
 
 	// if there is no queryer
 	if step.Queryer == nil {
-		errCh <- errors.New("could not find queryer for step")
+		errCh <- errors.New(" could not find queryer for step")
 		return
 	}
 	// execute the query
@@ -185,7 +188,9 @@ func executeStep(
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,
 	}, &queryResult)
+	fmt.Println("RESULT ->", queryResult, err)
 	if err != nil {
+		fmt.Println("ERROR", err.Error())
 		log.Warn("Network Error: ", err)
 		errCh <- err
 		return
@@ -241,7 +246,7 @@ func executeStep(
 
 	log.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	// send the result to be stitched in with our accumulator
-	resultCh <- queryExecutionResult{
+	resultCh <- &queryExecutionResult{
 		InsertionPoint: insertionPoint,
 		Result:         queryResult,
 	}
@@ -613,4 +618,14 @@ type ExecutorFn struct {
 // Execute invokes and returns the internal function
 func (e *ExecutorFn) Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
 	return e.Fn(plan, variables)
+}
+
+// ErrExecutor always returnes the internal error.
+type ErrExecutor struct {
+	Error error
+}
+
+// Execute returns the internet error
+func (e *ErrExecutor) Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+	return nil, e.Error
 }

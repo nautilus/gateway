@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -122,6 +121,9 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 
 	// if there is an error
 	if _, ok := result["errors"]; ok {
+		// a list of errors from the response
+		errList := ErrorList{}
+
 		// build up a list of errors
 		errs, ok := result["errors"].([]interface{})
 		if !ok {
@@ -129,7 +131,6 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 		}
 
 		// a list of error messages
-		messages := []string{}
 		for _, err := range errs {
 			obj, ok := err.(map[string]interface{})
 			if !ok {
@@ -141,10 +142,10 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 				return errors.New("error message was not a string")
 			}
 
-			messages = append(messages, message)
+			errList = append(errList, NewError("", message))
 		}
 
-		return fmt.Errorf(strings.Join(messages, " "))
+		return errList
 	}
 
 	// assign the result under the data key to the receiver
@@ -171,4 +172,43 @@ func NewNetworkQueryer(url string) *NetworkQueryer {
 		URL:    url,
 		Client: &http.Client{},
 	}
+}
+
+// ErrorExtensions define fields that extend the standard graphql error shape
+type ErrorExtensions struct {
+	Code string `json:"code"`
+}
+
+// Error represents a graphql error
+type Error struct {
+	Extensions ErrorExtensions `json:"extensions"`
+	Message    string          `json:"message"`
+}
+
+func (e *Error) Error() string {
+	return e.Message
+}
+
+// NewError returns a graphql error with the given code and message
+func NewError(code string, message string) *Error {
+	return &Error{
+		Message: message,
+		Extensions: ErrorExtensions{
+			Code: code,
+		},
+	}
+}
+
+// ErrorList represents a list of errors
+type ErrorList []error
+
+// Error returns a string representation of each error
+func (list ErrorList) Error() string {
+	acc := []string{}
+
+	for _, error := range list {
+		acc = append(acc, error.Error())
+	}
+
+	return strings.Join(acc, ". ")
 }

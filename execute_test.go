@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"errors"
 	"sync"
 	"testing"
 
@@ -463,6 +464,71 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 			},
 		},
 	}, result)
+}
+
+func TestExecutor_multipleErrors(t *testing.T) {
+	// an executor should return a list of every error that it encounters while executing the plan
+
+	// build a query plan that the executor will follow
+	_, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+		RootStep: &QueryPlanStep{
+			Then: []*QueryPlanStep{
+				{
+					// this is equivalent to
+					// query { values }
+					ParentType: "Query",
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "values",
+							Definition: &ast.FieldDefinition{
+								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+							},
+						},
+					},
+					// return a known value we can test against
+					Queryer: &graphql.QueryerFunc{
+						func(input *graphql.QueryInput) (interface{}, error) {
+							return map[string]interface{}{"data": map[string]interface{}{}}, errors.New("message")
+						},
+					},
+				},
+				{
+					// this is equivalent to
+					// query { values }
+					ParentType: "Query",
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "values",
+							Definition: &ast.FieldDefinition{
+								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+							},
+						},
+					},
+					// return a known value we can test against
+					Queryer: &graphql.QueryerFunc{
+						func(input *graphql.QueryInput) (interface{}, error) {
+							return map[string]interface{}{"data": map[string]interface{}{}}, graphql.ErrorList{errors.New("message"), errors.New("message")}
+						},
+					},
+				},
+			},
+		},
+	}, map[string]interface{}{})
+	if err == nil {
+		t.Errorf("Did not encounter error executing plan")
+		return
+	}
+
+	// since 3 errors were thrown we need to make sure we actually recieved an error list
+	list, ok := err.(graphql.ErrorList)
+	if !ok {
+		t.Error("Error was not an error list")
+		return
+	}
+
+	if !assert.Len(t, list, 3, "Error list did not have 3 items") {
+		return
+	}
 }
 
 func TestExecutor_threadsVariables(t *testing.T) {
@@ -981,7 +1047,6 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	}
 
 	assert.Equal(t, finalInsertionPoint, generatedPoint)
-
 }
 
 func TestFindInsertionPoint_handlesNullObjects(t *testing.T) {
