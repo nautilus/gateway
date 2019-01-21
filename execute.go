@@ -82,7 +82,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 				err := executorInsertObject(result, resultLock, payload.InsertionPoint, payload.Result)
 				if err != nil {
 					errCh <- err
-					return
+					continue
 				}
 
 				log.Debug("Done. ", result)
