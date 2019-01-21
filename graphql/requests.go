@@ -64,7 +64,7 @@ func (q *QueryerFunc) Query(input *QueryInput, receiver interface{}) error {
 	reflect.ValueOf(receiver).Elem().Set(reflect.ValueOf(response))
 
 	// no errors
-	return err
+	return nil
 }
 
 // NetworkQueryer sends the query to a url and returns the response
