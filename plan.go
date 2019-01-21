@@ -61,25 +61,6 @@ type MinQueriesPlanner struct {
 
 // Plan computes the nested selections that will need to be performed
 func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
-	// generating the plans happens in 2 steps.
-	// - create the dependency graph of steps
-	// - make sure that that each query has the required ids so that we can stitch results together
-
-	// create the plans to satisfy the query
-	plans, err := p.generatePlans(query, schema, locations)
-	if err != nil {
-		return nil, err
-	}
-
-	// we have to walk down each plan and make sure that the id field is found where it's needed
-	for _, plan := range plans {
-		p.preparePlanQueries(plan, plan.RootStep)
-	}
-
-	return plans, nil
-}
-
-func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
 	// the first thing to do is to parse the query
 	parsedQuery, err := gqlparser.LoadQuery(schema, query)
 	if err != nil {
@@ -207,6 +188,18 @@ func (p *MinQueriesPlanner) generatePlans(query string, schema *ast.Schema, loca
 						// add the definition
 						variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
 					}
+
+					// build up the query document
+					step.QueryDocument = plannerBuildQuery(step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions)
+
+					// we also need to turn the query into a string
+					queryString, err := graphql.PrintQuery(step.QueryDocument)
+					if err != nil {
+						errCh <- err
+						continue SelectLoop
+					}
+
+					step.QueryString = queryString
 
 					// we're done processing this step
 					stepWg.Done()
@@ -696,24 +689,6 @@ func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanS
 			return err
 		}
 	}
-
-	// we need to grab the list of variable definitions
-	variableDefs := ast.VariableDefinitionList{}
-	// we need to grab the variable definitions and values for each variable in the step
-	for variable := range step.Variables {
-		// add the definition
-		variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
-	}
-
-	// build up the query document
-	step.QueryDocument = plannerBuildQuery(step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions)
-
-	// we also need to turn the query into a string
-	queryString, err := graphql.PrintQuery(step.QueryDocument)
-	if err != nil {
-		return err
-	}
-	step.QueryString = queryString
 
 	// nothing went wrong here
 	return nil
