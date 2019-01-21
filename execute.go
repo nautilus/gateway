@@ -33,7 +33,8 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 	result := map[string]interface{}{}
 
 	// a channel to receive query results
-	resultCh := make(chan queryExecutionResult, 10)
+	resultCh := make(chan *queryExecutionResult, 10)
+	defer close(resultCh)
 
 	// a wait group so we know when we're done with all of the steps
 	stepWg := &sync.WaitGroup{}
@@ -70,6 +71,9 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 			select {
 			// we have a new result
 			case payload := <-resultCh:
+				if payload == nil {
+					continue
+				}
 				log.Debug("Inserting result into ", payload.InsertionPoint)
 				log.Debug("Result: ", payload.Result)
 
@@ -128,7 +132,7 @@ func executeStep(
 	insertionPoint []string,
 	resultLock *sync.Mutex,
 	queryVariables map[string]interface{},
-	resultCh chan queryExecutionResult,
+	resultCh chan *queryExecutionResult,
 	errCh chan error,
 	stepWg *sync.WaitGroup,
 ) {
@@ -242,7 +246,7 @@ func executeStep(
 
 	log.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	// send the result to be stitched in with our accumulator
-	resultCh <- queryExecutionResult{
+	resultCh <- &queryExecutionResult{
 		InsertionPoint: insertionPoint,
 		Result:         queryResult,
 	}
