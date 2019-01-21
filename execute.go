@@ -41,11 +41,11 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 
 	// and a channel for errors
 	errCh := make(chan error, 10)
-	// defer close(errCh)
+	defer close(errCh)
 
 	// a channel to close the goroutine
 	closeCh := make(chan bool)
-	// defer close(closeCh)
+	defer close(closeCh)
 
 	// a lock for reading and writing to the result
 	resultLock := &sync.Mutex{}
@@ -61,9 +61,11 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 		go executeStep(plan, step, []string{}, resultLock, variables, resultCh, errCh, stepWg)
 	}
 
+	// the list of errors we have encountered while executing the plan
+	errs := graphql.ErrorList{}
+
 	// start a goroutine to add results to the list
 	go func() {
-	ConsumptionLoop:
 		for {
 			select {
 			// we have a new result
@@ -76,7 +78,6 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 				err := executorInsertObject(result, resultLock, payload.InsertionPoint, payload.Result)
 				if err != nil {
 					errCh <- err
-					continue ConsumptionLoop
 				}
 
 				log.Debug("Done. ", result)
@@ -90,36 +91,16 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 		}
 	}()
 
-	// there are 2 possible options:
-	// - either the wait group finishes
-	// - we get a messsage over the error chan
+	// when the wait group is finished
+	stepWg.Wait()
 
-	// in order to wait for either, let's spawn a go routine
-	// that waits until all of the steps are built and notifies us when its done
-	doneCh := make(chan bool)
-	// defer close(doneCh)
-
-	go func() {
-		// when the wait group is finished
-		stepWg.Wait()
-		// push a value over the channel
-		doneCh <- true
-	}()
-
-	// wait for either the error channel or done channel
-	select {
-	// there was an error
-	case err := <-errCh:
-		log.Warn(fmt.Sprintf("Ran into execution error: %s", err.Error()))
-		closeCh <- true
-		// bubble the error up
-		return nil, err
-	// we are done
-	case <-doneCh:
-		closeCh <- true
-		// we're done here
-		return result, nil
+	// if we encountered any errors
+	if len(errs) > 0 {
+		return result, errs
 	}
+
+	// we didn't encounter any errors
+	return result, nil
 }
 
 // TODO: ugh... so... many... variables...
@@ -160,12 +141,14 @@ func executeStep(
 		pointData, err := executorGetPointData(head)
 		if err != nil {
 			errCh <- err
+			stepWg.Done()
 			return
 		}
 
 		// if we dont have an id
 		if pointData.ID == "" {
 			errCh <- fmt.Errorf("Could not find id in path")
+			stepWg.Done()
 			return
 		}
 
@@ -176,6 +159,7 @@ func executeStep(
 	// if there is no queryer
 	if step.Queryer == nil {
 		errCh <- errors.New("could not find queryer for step")
+		stepWg.Done()
 		return
 	}
 	// execute the query
@@ -188,6 +172,7 @@ func executeStep(
 	if err != nil {
 		log.Warn("Network Error: ", err)
 		errCh <- err
+		stepWg.Done()
 		return
 	}
 
@@ -204,12 +189,14 @@ func executeStep(
 		extractedResult, err := executorExtractValue(queryResult, resultLock, []string{"node"})
 		if err != nil {
 			errCh <- err
+			stepWg.Done()
 			return
 		}
 
 		resultObj, ok := extractedResult.(map[string]interface{})
 		if !ok {
 			errCh <- fmt.Errorf("Query result of node query was not an object: %v", queryResult)
+			stepWg.Done()
 			return
 		}
 
@@ -227,6 +214,7 @@ func executeStep(
 			insertPoints, err := executorFindInsertionPoints(resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint})
 			if err != nil {
 				errCh <- err
+				stepWg.Done()
 				return
 			}
 

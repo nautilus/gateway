@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
 // QueryPOSTBody is the incoming payload when sending POST requests to the gateway
@@ -15,22 +17,27 @@ type QueryPOSTBody struct {
 	OperationName string                 `json:"operationName"`
 }
 
-func writeErrors(errs []error, w http.ResponseWriter) {
+func writeErrors(err error, w http.ResponseWriter) {
 	// the final list of formatted errors
-	finalList := []map[string]interface{}{}
+	var errList graphql.ErrorList
 
-	for _, err := range errs {
-		finalList = append(finalList, map[string]interface{}{
-			"message": err.Error(),
-		})
+	// if the err is itself an error list
+	if list, ok := err.(graphql.ErrorList); ok {
+		errList = list
+	} else {
+		errList = graphql.ErrorList{
+			&graphql.Error{
+				Message: err.Error(),
+			},
+		}
 	}
 
 	response, err := json.Marshal(map[string]interface{}{
-		"errors": finalList,
+		"errors": errList,
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		writeErrors([]error{err}, w)
+		writeErrors(err, w)
 		return
 	}
 
@@ -92,21 +99,21 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// if there was an error retrieving the payload
 	if payloadErr != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		writeErrors([]error{payloadErr}, w)
+		writeErrors(payloadErr, w)
 		return
 	}
 
 	// if we dont have a query
 	if payload.Query == "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		writeErrors([]error{errors.New("could not find a query in request payload")}, w)
+		writeErrors(errors.New("could not find a query in request payload"), w)
 		return
 	}
 
 	// fire the query
 	result, err := g.Execute(payload.Query, payload.Variables)
 	if err != nil {
-		writeErrors([]error{err}, w)
+		writeErrors(err, w)
 		return
 	}
 
@@ -115,7 +122,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		writeErrors([]error{err}, w)
+		writeErrors(err, w)
 		return
 	}
 

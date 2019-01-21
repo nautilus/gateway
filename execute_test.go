@@ -470,7 +470,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 	// an executor should return a list of every error that it encounters while executing the plan
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	_, err := (&ParallelExecutor{}).Execute(&QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -514,18 +514,21 @@ func TestExecutor_multipleErrors(t *testing.T) {
 			},
 		},
 	}, map[string]interface{}{})
-	if err != nil {
-		t.Errorf("Encountered error executing plan: %v", err.Error())
+	if err == nil {
+		t.Errorf("Did not encounter error executing plan")
+		return
 	}
 
-	// get the result back
-	values, ok := result["values"]
+	// since 3 errors were thrown we need to make sure we actually recieved an error list
+	list, ok := err.(graphql.ErrorList)
 	if !ok {
-		t.Errorf("Did not get any values back from the execution")
+		t.Error("Error was not an error list")
+		return
 	}
 
-	// make sure we got the right values back
-	assert.Equal(t, []string{"hello", "world"}, values)
+	if !assert.Len(t, list, 3, "Error list did not have 3 items") {
+		return
+	}
 }
 
 func TestExecutor_threadsVariables(t *testing.T) {
