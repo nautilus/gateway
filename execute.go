@@ -614,3 +614,13 @@ type ExecutorFn struct {
 func (e *ExecutorFn) Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
 	return e.Fn(plan, variables)
 }
+
+// ErrExecutor always returnes the internal error.
+type ErrExecutor struct {
+	Error error
+}
+
+// Execute returns the internet error
+func (e *ErrExecutor) Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+	return nil, e.Error
+}

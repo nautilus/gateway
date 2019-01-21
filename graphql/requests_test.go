@@ -232,6 +232,62 @@ func TestNewNetworkQueryer(t *testing.T) {
 	assert.Equal(t, "foo", NewNetworkQueryer("foo").URL)
 }
 
+func TestSerializeError(t *testing.T) {
+	// marshal the 2 kinds of errors
+	errWithCode, _ := json.Marshal(NewError("ERROR_CODE", "foo"))
+	expected, _ := json.Marshal(map[string]interface{}{
+		"extensions": map[string]interface{}{
+			"code": "ERROR_CODE",
+		},
+		"message": "foo",
+	})
+
+	assert.Equal(t, string(expected), string(errWithCode))
+}
+
+func TestNetworkQueryer_errorList(t *testing.T) {
+	// create a http client that responds with a known body and verifies the incoming query
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) *http.Response {
+			return &http.Response{
+				StatusCode: 200,
+				// Send response to be tested
+				Body: ioutil.NopCloser(bytes.NewBuffer([]byte(`{
+					"data": null,
+					"errors": [
+						{"message":"hello"}
+					]
+				}`))),
+				// Must be set to non-nil value or it panics
+				Header: make(http.Header),
+			}
+		}),
+	}
+
+	// the corresponding query document
+	query := `
+		{
+			hello(world: "hello") {
+				world
+			}
+		}
+	`
+
+	queryer := &NetworkQueryer{
+		URL:    "hello",
+		Client: client,
+	}
+
+	// get the error of the query
+	err := queryer.Query(&QueryInput{Query: query}, &map[string]interface{}{})
+
+	_, ok := err.(ErrorList)
+	if !ok {
+		t.Errorf("response of queryer was not an error list: %v", err.Error())
+		return
+	}
+}
+
 func TestQueryerFunc_success(t *testing.T) {
 	expected := map[string]interface{}{"hello": "world"}
 

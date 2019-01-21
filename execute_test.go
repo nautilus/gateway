@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"errors"
 	"sync"
 	"testing"
 
@@ -463,6 +464,68 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 			},
 		},
 	}, result)
+}
+
+func TestExecutor_multipleErrors(t *testing.T) {
+	// an executor should return a list of every error that it encounters while executing the plan
+
+	// build a query plan that the executor will follow
+	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+		RootStep: &QueryPlanStep{
+			Then: []*QueryPlanStep{
+				{
+					// this is equivalent to
+					// query { values }
+					ParentType: "Query",
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "values",
+							Definition: &ast.FieldDefinition{
+								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+							},
+						},
+					},
+					// return a known value we can test against
+					Queryer: &graphql.QueryerFunc{
+						func(input *graphql.QueryInput) (interface{}, error) {
+							return map[string]interface{}{"data": map[string]interface{}{}}, errors.New("message")
+						},
+					},
+				},
+				{
+					// this is equivalent to
+					// query { values }
+					ParentType: "Query",
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "values",
+							Definition: &ast.FieldDefinition{
+								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+							},
+						},
+					},
+					// return a known value we can test against
+					Queryer: &graphql.QueryerFunc{
+						func(input *graphql.QueryInput) (interface{}, error) {
+							return map[string]interface{}{"data": map[string]interface{}{}}, graphql.ErrorList{errors.New("message"), errors.New("message")}
+						},
+					},
+				},
+			},
+		},
+	}, map[string]interface{}{})
+	if err != nil {
+		t.Errorf("Encountered error executing plan: %v", err.Error())
+	}
+
+	// get the result back
+	values, ok := result["values"]
+	if !ok {
+		t.Errorf("Did not get any values back from the execution")
+	}
+
+	// make sure we got the right values back
+	assert.Equal(t, []string{"hello", "world"}, values)
 }
 
 func TestExecutor_threadsVariables(t *testing.T) {
@@ -981,7 +1044,6 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	}
 
 	assert.Equal(t, finalInsertionPoint, generatedPoint)
-
 }
 
 func TestFindInsertionPoint_handlesNullObjects(t *testing.T) {
