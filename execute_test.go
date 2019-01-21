@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/alecaivazis/graphql-gateway/graphql"
@@ -645,7 +646,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint)
+	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -703,7 +704,7 @@ func TestFindObject(t *testing.T) {
 		},
 	}
 
-	value, err := executorExtractValue(source, []string{"hello:0", "friends:1", "friends:0"})
+	value, err := executorExtractValue(source, &sync.Mutex{}, []string{"hello:0", "friends:1", "friends:0"})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -743,7 +744,7 @@ func TestFindString(t *testing.T) {
 		},
 	}
 
-	value, err := executorExtractValue(source, []string{"hello:0", "friends:1", "firstName"})
+	value, err := executorExtractValue(source, &sync.Mutex{}, []string{"hello:0", "friends:1", "firstName"})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -760,7 +761,7 @@ func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
 	inserted := map[string]interface{}{"hello": "world"}
 
 	// insert the string deeeeep down
-	err := executorInsertObject(source, []string{"hello:5#1", "message", "body:2"}, inserted)
+	err := executorInsertObject(source, &sync.Mutex{}, []string{"hello:5#1", "message", "body:2"}, inserted)
 	if err != nil {
 		t.Error(err)
 		return
@@ -839,7 +840,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 	}
 
 	// insert the object deeeeep down
-	err := executorInsertObject(source, []string{"hello", "objects:5"}, inserted)
+	err := executorInsertObject(source, &sync.Mutex{}, []string{"hello", "objects:5"}, inserted)
 	if err != nil {
 		t.Error(err)
 		return
@@ -973,7 +974,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(planInsertionPoint, stepSelectionSet, result, startingPoint)
+	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint)
 	if err != nil {
 		t.Error(t, err)
 		return

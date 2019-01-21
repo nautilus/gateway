@@ -283,9 +283,9 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 		// we are dealing with a selection to another location that isn't the current one
 		log.Debug(fmt.Sprintf(
 			"Adding the new step"+
-				"\n\t Parent Type: %s"+
-				"\n\t Location: %v"+
-				"\n\t Insertion point: %v",
+				"\n\tParent Type: %s"+
+				"\n\tLocation: %v"+
+				"\n\tInsertion point: %v",
 			config.parentType, location, config.insertionPoint))
 
 		// if there are selections in this bundle that are not from the parent location we need to add

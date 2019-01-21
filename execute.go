@@ -47,6 +47,9 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 	closeCh := make(chan bool)
 	// defer close(closeCh)
 
+	// a lock for reading and writing to the result
+	resultLock := &sync.Mutex{}
+
 	// if there are no steps after the root step, there is a problem
 	if len(plan.RootStep.Then) == 0 {
 		return nil, errors.New("was given empty plan")
@@ -55,7 +58,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 	// the root step could have multiple steps that have to happen
 	for _, step := range plan.RootStep.Then {
 		stepWg.Add(1)
-		go executeStep(plan, step, []string{}, variables, resultCh, errCh, stepWg)
+		go executeStep(plan, step, []string{}, resultLock, variables, resultCh, errCh, stepWg)
 	}
 
 	// start a goroutine to add results to the list
@@ -70,7 +73,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 
 				// we have to grab the value in the result and write it to the appropriate spot in the
 				// acumulator.
-				err := executorInsertObject(result, payload.InsertionPoint, payload.Result)
+				err := executorInsertObject(result, resultLock, payload.InsertionPoint, payload.Result)
 				if err != nil {
 					errCh <- err
 					continue ConsumptionLoop
@@ -124,6 +127,7 @@ func executeStep(
 	plan *QueryPlan,
 	step *QueryPlanStep,
 	insertionPoint []string,
+	resultLock *sync.Mutex,
 	queryVariables map[string]interface{},
 	resultCh chan queryExecutionResult,
 	errCh chan error,
@@ -133,58 +137,6 @@ func executeStep(
 	log.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
 
 	log.Debug(step.SelectionSet)
-
-	// if this step has a selection, the resulting steps will end up being inserted at a particular object
-	// we need to make sure that we ask for the id of the object
-	if len(step.SelectionSet) > 0 {
-		// each selection set that is the parent of another query must ask for the id
-		for _, nextStep := range step.Then {
-			// the next query will go
-			path := nextStep.InsertionPoint[:]
-			log.Debug("Step has children. Need to add ids ")
-
-			// the selection set we need to add `id` to
-			target := step.SelectionSet
-			var targetField *ast.Field
-
-			for _, point := range path {
-				// look for the selection with that name
-				for _, selection := range graphql.SelectedFields(target) {
-					// if we still have to walk down the selection but we found the right branch
-					if selection.Name == point {
-						target = selection.SelectionSet
-						targetField = selection
-						break
-					}
-				}
-			}
-
-			// if we couldn't find the target
-			if target == nil {
-				errCh <- fmt.Errorf("Could not find field to add id to. insertion point: %v", path)
-				return
-			}
-
-			// if the target does not currently ask for id we need to add it
-			addID := true
-			for _, selection := range graphql.SelectedFields(target) {
-				if selection.Name == "id" {
-					addID = false
-					break
-				}
-			}
-
-			// add the ID to the selection set if necessary
-			if addID {
-				target = append(target, &ast.Field{
-					Name: "id",
-				})
-			}
-
-			// make sure the selection set contains the id
-			targetField.SelectionSet = target
-		}
-	}
 
 	// log the query
 	log.QueryPlanStep(step)
@@ -249,7 +201,7 @@ func executeStep(
 	if stripNode {
 		log.Debug("Should strip node")
 		// get the result from the response that we have to stitch there
-		extractedResult, err := executorExtractValue(queryResult, []string{"node"})
+		extractedResult, err := executorExtractValue(queryResult, resultLock, []string{"node"})
 		if err != nil {
 			errCh <- err
 			return
@@ -272,7 +224,7 @@ func executeStep(
 		for _, dependent := range step.Then {
 			log.Debug("Looking for insertion points for ", dependent.InsertionPoint, "\n\n")
 
-			insertPoints, err := executorFindInsertionPoints(dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint})
+			insertPoints, err := executorFindInsertionPoints(resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint})
 			if err != nil {
 				errCh <- err
 				return
@@ -282,7 +234,7 @@ func executeStep(
 			for _, insertionPoint := range insertPoints {
 				log.Info("Spawn ", insertionPoint)
 				stepWg.Add(1)
-				go executeStep(plan, dependent, insertionPoint, queryVariables, resultCh, errCh, stepWg)
+				go executeStep(plan, dependent, insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
 			}
 		}
 	}
@@ -303,7 +255,7 @@ func max(a, b int) int {
 }
 
 // executorFindInsertionPoints returns the list of insertion points where this step should be executed.
-func executorFindInsertionPoints(targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string) ([][]string, error) {
+func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string) ([][]string, error) {
 	log.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
 	oldBranch := startingPoints
 
@@ -418,7 +370,7 @@ func executorFindInsertionPoints(targetPoints []string, selectionSet ast.Selecti
 				}
 
 				// compute the insertion points for that entry
-				entryInsertionPoints, err := executorFindInsertionPoints(targetPoints, selectionSetRoot, resultEntry, newBranchSet)
+				entryInsertionPoints, err := executorFindInsertionPoints(resultLock, targetPoints, selectionSetRoot, resultEntry, newBranchSet)
 				if err != nil {
 					return nil, err
 				}
@@ -452,7 +404,9 @@ func executorFindInsertionPoints(targetPoints []string, selectionSet ast.Selecti
 					}
 
 					// look up the id of the object
+					resultLock.Lock()
 					id, ok := entry["id"]
+					resultLock.Unlock()
 					if !ok {
 						return nil, errors.New("Could not find the id for the object")
 					}
@@ -486,7 +440,7 @@ func executorFindInsertionPoints(targetPoints []string, selectionSet ast.Selecti
 	return oldBranch, nil
 }
 
-func executorExtractValue(source map[string]interface{}, path []string) (interface{}, error) {
+func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex, path []string) (interface{}, error) {
 	// a pointer to the objects we are modifying
 	var recent interface{} = source
 	log.Debug("Pulling ", path, " from ", source)
@@ -506,11 +460,15 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 
 			// if the field does not exist
 			if _, ok := recentObj[pointData.Field]; !ok {
+				resultLock.Lock()
 				recentObj[pointData.Field] = []interface{}{}
+				resultLock.Unlock()
 			}
 
 			// it should be a list
+			resultLock.Lock()
 			field := recentObj[pointData.Field]
+			resultLock.Unlock()
 
 			targetList, ok := field.([]interface{})
 			if !ok {
@@ -524,11 +482,15 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 				}
 
 				// update the list with what we just made
+				resultLock.Lock()
 				recentObj[pointData.Field] = targetList
+				resultLock.Unlock()
 			}
 
 			// focus on the right element
+			resultLock.Lock()
 			recent = targetList[pointData.Index]
+			resultLock.Unlock()
 		} else {
 			// it's possible that there's an id
 			pointData, err := executorGetPointData(point)
@@ -544,10 +506,14 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 			}
 
 			// we are add an object value
+			resultLock.Lock()
 			targetObject := recentObj[pointField]
+			resultLock.Unlock()
 
 			if i != len(path)-1 && targetObject == nil {
+				resultLock.Lock()
 				recentObj[pointField] = map[string]interface{}{}
+				resultLock.Unlock()
 			}
 			// if we haven't created an object there with that field
 			if targetObject == nil {
@@ -562,11 +528,11 @@ func executorExtractValue(source map[string]interface{}, path []string) (interfa
 	return recent, nil
 }
 
-func executorInsertObject(target map[string]interface{}, path []string, value interface{}) error {
+func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}) error {
 	// log.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
 	if len(path) > 0 {
 		// a pointer to the objects we are modifying
-		obj, err := executorExtractValue(target, path)
+		obj, err := executorExtractValue(target, resultLock, path)
 		if err != nil {
 			return err
 		}
@@ -579,7 +545,9 @@ func executorInsertObject(target map[string]interface{}, path []string, value in
 		// if the value we are assigning is an object
 		if newValue, ok := value.(map[string]interface{}); ok {
 			for k, v := range newValue {
+				resultLock.Lock()
 				targetObj[k] = v
+				resultLock.Unlock()
 			}
 		}
 	} else {
@@ -589,7 +557,9 @@ func executorInsertObject(target map[string]interface{}, path []string, value in
 		}
 
 		for key, value := range targetObj {
+			resultLock.Lock()
 			target[key] = value
+			resultLock.Unlock()
 		}
 	}
 	return nil
