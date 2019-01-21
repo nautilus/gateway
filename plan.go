@@ -679,21 +679,6 @@ FieldLoop:
 	return locationFields, locationFragments, nil
 }
 
-func (p *MinQueriesPlanner) preparePlanQueries(plan *QueryPlan, step *QueryPlanStep) error {
-	// we need to construct the query information for this step
-
-	// walk down the graph
-	for _, nextStep := range step.Then {
-		err := p.preparePlanQueries(plan, nextStep)
-		if err != nil {
-			return err
-		}
-	}
-
-	// nothing went wrong here
-	return nil
-}
-
 func coreFieldType(source *ast.Field) *ast.Type {
 	// if we are looking at a
 	return source.Definition.Type
