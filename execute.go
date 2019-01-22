@@ -304,7 +304,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 		// if we didn't find a selection
 		if foundSelection == nil {
-			return nil, fmt.Errorf("Could not find selection for %v", point)
+			return [][]string{}, nil
 		}
 
 		log.Debug("")
