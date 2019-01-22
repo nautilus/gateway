@@ -259,7 +259,7 @@ func TestMergeSchema_union(t *testing.T) {
 
 	t.Run("Matching", func(t *testing.T) {
 		// merge the schema with one that should work
-		_, err := testMergeSchemas(originalSchema, `
+		schema, err := testMergeSchemas(originalSchema, `
 			type CatPhoto {
 				species: String
 			}
@@ -273,6 +273,16 @@ func TestMergeSchema_union(t *testing.T) {
 		if err != nil {
 			t.Error(err.Error())
 		}
+
+		schemaUnion := schema.Types["Photo"]
+
+		previousTypes := Set{}
+		for _, subType := range schemaUnion.Types {
+			previousTypes.Add(subType)
+		}
+
+		assert.True(t, previousTypes["CatPhoto"])
+		assert.True(t, previousTypes["DogPhoto"])
 	})
 
 	// the table we are testing

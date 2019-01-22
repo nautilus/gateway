@@ -75,7 +75,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				continue
 			}
 
-			if err := mergeInterfaces(previousDefinition, definition); err != nil {
+			if err := mergeInterfaces(result, previousDefinition, definition); err != nil {
 				return nil, err
 			}
 		}
@@ -104,15 +104,15 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 
 			if len(definition.Fields) > 0 {
 				// if the definition is an object or input object we have to merge it
-				err = mergeObjectTypes(previousDefinition, definition)
+				err = mergeObjectTypes(result, previousDefinition, definition)
 
 			} else if len(definition.EnumValues) > 0 {
 				// the definition is an enum value
-				err = mergeEnums(previousDefinition, definition)
+				err = mergeEnums(result, previousDefinition, definition)
 
 			} else if len(definition.Types) > 0 {
 				// the definition is a union
-				err = mergeUnions(previousDefinition, definition)
+				err = mergeUnions(result, previousDefinition, definition)
 			}
 
 			if err != nil {
@@ -157,7 +157,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	return result, nil
 }
 
-func mergeInterfaces(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
 	// descriptions
 	if previousDefinition.Description != newDefinition.Description {
 		return fmt.Errorf("conflict in interface descriptions: \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
@@ -179,7 +179,7 @@ func mergeInterfaces(previousDefinition *ast.Definition, newDefinition *ast.Defi
 	return nil
 }
 
-func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
 	// the fields in the aggregate
 	previousFields := previousDefinition.Fields
 
@@ -202,7 +202,7 @@ func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Def
 	return nil
 }
 
-func mergeEnums(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
 	// if we are merging an internal enums
 	if strings.HasPrefix(previousDefinition.Name, "__") {
 		// let it through without changing
@@ -212,7 +212,7 @@ func mergeEnums(previousDefinition *ast.Definition, newDefinition *ast.Definitio
 	return fmt.Errorf("enum %s cannot be split across services", newDefinition.Name)
 }
 
-func mergeUnions(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
 	// unions are defined by a list of strings that name the sub types
 
 	// if the length of the 2 lists is not the same

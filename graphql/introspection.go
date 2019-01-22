@@ -65,6 +65,9 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 			return nil, err
 		}
 
+		// make sure we record that a type implements itself
+		schema.AddImplements(remoteType.Name, storedType)
+
 		// if we are looking at an enum
 		if len(remoteType.PossibleTypes) > 0 {
 			// build up an empty list of types
