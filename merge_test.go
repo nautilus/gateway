@@ -8,67 +8,6 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
-func TestMergeSchema_objectTypeFields(t *testing.T) {
-	// create the first schema
-	schema1, err := graphql.LoadSchema(`
-			type User {
-				firstName: String!
-			}
-	`)
-
-	// make sure nothing went wrong
-	assert.Nil(t, err)
-
-	// and the second schema we are going to make
-	schema2, err := graphql.LoadSchema(`
-			type User {
-				lastName: String!
-			}
-	`)
-	// make sure nothing went wrong
-	assert.Nil(t, err)
-
-	// merge the schemas together
-	schema, err := New([]*graphql.RemoteSchema{
-		{Schema: schema1, URL: "url1"},
-		{Schema: schema2, URL: "url2"},
-	})
-	// make sure nothing went wrong
-	assert.Nil(t, err)
-
-	// look up the definition for the User type
-	definition, exists := schema.schema.Types["User"]
-	// make sure the definition exists
-	assert.True(t, exists)
-
-	// it should have 2 fields: firstName and lastName
-	var firstNameDefinition *ast.FieldDefinition
-	var lastNameDefinition *ast.FieldDefinition
-
-	// look for the definitions
-	for _, field := range definition.Fields {
-		if field.Name == "firstName" {
-			firstNameDefinition = field
-		} else if field.Name == "lastName" {
-			lastNameDefinition = field
-		}
-	}
-
-	// make sure the firstName definition exists
-	if firstNameDefinition == nil {
-		t.Error("could not find definition for first name")
-		return
-	}
-	assert.Equal(t, "String!", firstNameDefinition.Type.String())
-
-	// make sure the lastName definition exists
-	if lastNameDefinition == nil {
-		t.Error("could not find definition for last name")
-		return
-	}
-	assert.Equal(t, "String!", lastNameDefinition.Type.String())
-}
-
 func TestMergeSchema_assignQueryType(t *testing.T) {
 	// create the first schema
 	schema1, err := graphql.LoadSchema(`
@@ -141,17 +80,60 @@ func TestMergeSchema_assignMutationType(t *testing.T) {
 
 func TestMergeSchema_objectTypes(t *testing.T) {
 	// create the first schema
-	schema1, err := graphql.LoadSchema(`
-			type User {
-				firstName: String!
-			}
+	originalSchema, err := graphql.LoadSchema(`
+		type User {
+			firstName: String!
+		}
 	`)
-
-	// make sure nothing went wrong
 	assert.Nil(t, err)
 
+	t.Run("Merge fields", func(t *testing.T) {
+		// merge the schema with one that should work
+		schema, err := testMergeSchemas(originalSchema, `
+			type User {
+				lastName: String!
+			}
+		`)
+		if err != nil {
+			t.Error(err.Error())
+		}
+
+		// look up the definition for the User type
+		definition, exists := schema.Types["User"]
+		// make sure the definition exists
+		assert.True(t, exists)
+
+		// it should have 2 fields: firstName and lastName
+		var firstNameDefinition *ast.FieldDefinition
+		var lastNameDefinition *ast.FieldDefinition
+
+		// look for the definitions
+		for _, field := range definition.Fields {
+			if field.Name == "firstName" {
+				firstNameDefinition = field
+			} else if field.Name == "lastName" {
+				lastNameDefinition = field
+			}
+		}
+
+		// make sure the firstName definition exists
+		if firstNameDefinition == nil {
+			t.Error("could not find definition for first name")
+			return
+		}
+		assert.Equal(t, "String!", firstNameDefinition.Type.String())
+
+		// make sure the lastName definition exists
+		if lastNameDefinition == nil {
+			t.Error("could not find definition for last name")
+			return
+		}
+		assert.Equal(t, "String!", lastNameDefinition.Type.String())
+
+	})
+
 	// the table we are testing
-	testMergeRunNegativeTable(t, schema1, []testMergeTableRow{
+	testMergeRunNegativeTable(t, originalSchema, []testMergeTableRow{
 		{
 			"Conflicting Field Type",
 			`
@@ -204,7 +186,6 @@ func TestMergeSchema_directives(t *testing.T) {
 		_, err := testMergeSchemas(originalSchema, `
 			"description"
 			directive @foo(url: String = "url") on FIELD_DEFINITION
-
 		`)
 		if err != nil {
 			t.Error(err.Error())
