@@ -35,20 +35,44 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 		Directives:    map[string]*ast.DirectiveDefinition{},
 	}
 
+	// merging the schemas has to happen in 2 passes per definnition. The first groups definitions into different
+	// categories. Interfaces need to be validated before we can add the types that implement them
+	types := map[string][]*ast.Definition{}
+	directives := map[string][]*ast.DirectiveDefinition{}
+	interfaces := map[string][]*ast.Definition{}
+
 	// we have to visit each source schema
 	for _, schema := range sources {
 		// add each type declared by the source schema to the one we are building up
-		for name, newDefinition := range schema.Types {
+		for name, definition := range schema.Types {
+			// if the definition is not an interface
+			if definition.Kind != ast.Interface {
+				types[name] = append(types[name], definition)
+			} else {
+				interfaces[name] = append(interfaces[name], definition)
+			}
+		}
+
+		// add each directive to the list
+		for name, definition := range schema.Directives {
+			directives[name] = append(directives[name], definition)
+		}
+	}
+
+	// merge each definition of each type into one
+	for name, definitions := range types {
+		// merge each definition together
+		for _, definition := range definitions {
 			// look up if the type is already registered in the aggregate
 			previousDefinition, exists := result.Types[name]
 
 			// if we haven't seen it before
 			if !exists {
 				// use the declaration that we got from the new schema
-				result.Types[name] = newDefinition
+				result.Types[name] = definition
 
 				// register the type as an implementer of itself
-				result.AddPossibleType(name, newDefinition)
+				result.AddPossibleType(name, definition)
 
 				// we're done with this type
 				continue
@@ -57,36 +81,39 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			// unify handling of errors for merging
 			var err error
 
-			if len(newDefinition.Fields) > 0 {
+			if len(definition.Fields) > 0 {
 				// if the definition is an object or input object we have to merge it
-				err = mergeObjectTypes(previousDefinition, newDefinition)
+				err = mergeObjectTypes(previousDefinition, definition)
 
-			} else if len(newDefinition.EnumValues) > 0 {
+			} else if len(definition.EnumValues) > 0 {
 				// the definition is an enum value
-				err = mergeEnums(previousDefinition, newDefinition)
+				err = mergeEnums(previousDefinition, definition)
 			}
 
 			if err != nil {
 				return nil, err
 			}
 		}
+	}
 
-		// for each directive
-		for name, newDefinition := range schema.Directives {
+	// for each directive
+	for name, definitions := range directives {
+		// merge each definition together
+		for _, definition := range definitions {
 			// look up if the type is already registered in the aggregate
 			previousDefinition, exists := result.Directives[name]
 
 			// if we haven't seen it before
 			if !exists {
 				// use the declaration that we got from the new schema
-				result.Directives[name] = newDefinition
+				result.Directives[name] = definition
 
 				// we're done with this type
 				continue
 			}
 
 			// we have to merge the 2 directives
-			err := mergeDirectives(previousDefinition, newDefinition)
+			err := mergeDirectives(previousDefinition, definition)
 			if err != nil {
 				return nil, err
 			}
