@@ -109,6 +109,10 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			} else if len(definition.EnumValues) > 0 {
 				// the definition is an enum value
 				err = mergeEnums(previousDefinition, definition)
+
+			} else if len(definition.Types) > 0 {
+				// the definition is a union
+				err = mergeUnions(previousDefinition, definition)
 			}
 
 			if err != nil {
@@ -206,6 +210,31 @@ func mergeEnums(previousDefinition *ast.Definition, newDefinition *ast.Definitio
 	}
 
 	return fmt.Errorf("enum %s cannot be split across services", newDefinition.Name)
+}
+
+func mergeUnions(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+	// unions are defined by a list of strings that name the sub types
+
+	// if the length of the 2 lists is not the same
+	if len(previousDefinition.Types) != len(newDefinition.Types) {
+		return fmt.Errorf("union %s did not have a consistent number of sub types", previousDefinition.Name)
+	}
+
+	// pass over the types in the first definition
+	previousTypes := Set{}
+	for _, subType := range previousDefinition.Types {
+		previousTypes.Add(subType)
+	}
+
+	// make sure each type of one is present in the other
+	for _, subType := range newDefinition.Types {
+		if !previousTypes.Has(subType) {
+			return fmt.Errorf("union %s did not have a consistent set of subtypes", previousDefinition.Name)
+		}
+	}
+
+	// nothing is wrong
+	return nil
 }
 
 func mergeDirectivesEqual(previousDefinition *ast.DirectiveDefinition, newDefinition *ast.DirectiveDefinition) error {
