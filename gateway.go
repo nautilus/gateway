@@ -63,12 +63,11 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		fieldURLs([]*graphql.RemoteSchema{internalSchema}, false),
 	)
 
-	// grab the schemas to compute the sources
+	// grab the schemas within each source
 	sourceSchemas := []*ast.Schema{}
 	for _, source := range sources {
 		sourceSchemas = append(sourceSchemas, source.Schema)
 	}
-	// add the internal schema
 	sourceSchemas = append(sourceSchemas, internalSchema.Schema)
 
 	// merge them into one
