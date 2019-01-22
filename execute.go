@@ -188,7 +188,6 @@ func executeStep(
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,
 	}, &queryResult)
-	fmt.Println("RESULT ->", queryResult, err)
 	if err != nil {
 		fmt.Println("ERROR", err.Error())
 		log.Warn("Network Error: ", err)

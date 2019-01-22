@@ -8,7 +8,7 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
-func TestMergeSchema_fields(t *testing.T) {
+func TestMergeSchema_objectTypeFields(t *testing.T) {
 	// create the first schema
 	schema1, err := graphql.LoadSchema(`
 			type User {
@@ -139,40 +139,7 @@ func TestMergeSchema_assignMutationType(t *testing.T) {
 	}
 }
 
-func TestMergeSchema_conflictedEnums(t *testing.T) {
-	// create the first schema
-	schema1, err := graphql.LoadSchema(`
-			enum Foo {
-				Bar
-				Baz
-			}
-	`)
-
-	// make sure nothing went wrong
-	assert.Nil(t, err)
-
-	// and the second schema we are going to make
-	schema2, err := graphql.LoadSchema(`
-		enum Foo {
-			Bar
-		}
-	`)
-	// make sure nothing went wrong
-	assert.Nil(t, err)
-
-	// merge the schemas together
-	_, err = New([]*graphql.RemoteSchema{
-		{Schema: schema1, URL: "url1"},
-		{Schema: schema2, URL: "url2"},
-	})
-	// make sure nothing went wrong
-	if err == nil {
-		t.Error("did not encounter error while merging schemas")
-		return
-	}
-}
-
-func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
+func TestMergeSchema_objectTypes(t *testing.T) {
 	// create the first schema
 	schema1, err := graphql.LoadSchema(`
 			type User {
@@ -183,25 +150,44 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	// make sure nothing went wrong
 	assert.Nil(t, err)
 
-	// and the second schema we are going to make
-	schema2, err := graphql.LoadSchema(`
-			type User {
-				firstName: Int
-			}
+	// the table we are testing
+	testRunMergeTable(t, schema1, []testMergeTableRow{
+		{
+			"Conflicting Field Type",
+			false,
+			`
+				type User {
+					firstName: Int
+				}
+			`,
+		},
+	})
+}
+
+func TestMergeSchema_enums(t *testing.T) {
+	// the directive that we are always comparing to
+	originalSchema, err := graphql.LoadSchema(`
+		enum Foo {
+			Bar
+			Baz
+		}
 	`)
 	// make sure nothing went wrong
-	assert.Nil(t, err)
-
-	// merge the schemas together
-	_, err = New([]*graphql.RemoteSchema{
-		{Schema: schema1, URL: "url1"},
-		{Schema: schema2, URL: "url2"},
-	})
-	// make sure nothing went wrong
-	if err == nil {
-		t.Error("didn't encounter error while merging schemas")
+	if !assert.Nil(t, err, "original schema didn't parse") {
 		return
 	}
+
+	// the table we are testing
+	testRunMergeTable(t, originalSchema, []testMergeTableRow{
+		{
+			"Conflicting Names",
+			false, `
+				enum Foo {
+					Bar
+				}
+			`,
+		},
+	})
 }
 
 func TestMergeSchema_directives(t *testing.T) {
@@ -215,12 +201,8 @@ func TestMergeSchema_directives(t *testing.T) {
 		return
 	}
 
-	// the table we are testing
-	table := []struct {
-		Message string
-		Pass    bool
-		Schema  string
-	}{
+	// run the table of tests
+	testRunMergeTable(t, originalSchema, []testMergeTableRow{
 		{
 			"Matching",
 			true,
@@ -254,6 +236,14 @@ func TestMergeSchema_directives(t *testing.T) {
 			`,
 		},
 		{
+			"Different Number of Locations",
+			false,
+			`
+				"description"
+				directive @foo(url: String = "url") on FRAGMENT_SPREAD | FIELD_DEFINITION
+			`,
+		},
+		{
 			"Different Description",
 			false,
 			`
@@ -269,8 +259,81 @@ func TestMergeSchema_directives(t *testing.T) {
 				directive @foo(url: String = "not-url") on FIELD_DEFINITION
 			`,
 		},
+	})
+}
+
+func TestMergeSchema_interfaces(t *testing.T) {
+	// the directive that we are always comparing to
+	originalSchema, err := graphql.LoadSchema(`
+		interface Foo {
+			name: String!
+		}
+	`)
+	// make sure nothing went wrong
+	if !assert.Nil(t, err, "original schema didn't parse") {
+		return
 	}
 
+	// the table we are testing
+	testRunMergeTable(t, originalSchema, []testMergeTableRow{
+		{
+			"Matching",
+			true,
+			`
+				interface Foo {
+					name: String!
+				}
+			`,
+		},
+		{
+			"Different Field Directives",
+			false,
+			`
+				directive @foo on FIELD_DEFINITION
+
+				interface Foo {
+					name: String! @foo
+				}
+			`,
+		},
+		{
+			"Different Field Types",
+			false,
+			`
+				interface Foo {
+					name: String
+				}
+			`,
+		},
+		{
+			"Different Fields",
+			false,
+			`
+				interface Foo {
+					name: String!
+					lastName: String!
+				}
+			`,
+		},
+		{
+			"Different Arguments",
+			false,
+			`
+				interface Foo {
+					name(foo: String): String!
+				}
+			`,
+		},
+	})
+}
+
+type testMergeTableRow struct {
+	Message string
+	Pass    bool
+	Schema  string
+}
+
+func testRunMergeTable(t *testing.T, original *ast.Schema, table []testMergeTableRow) {
 	for _, row := range table {
 		t.Run(row.Message, func(t *testing.T) {
 			// create a schema with the provided content
@@ -281,7 +344,7 @@ func TestMergeSchema_directives(t *testing.T) {
 			}
 			// create remote schemas with each
 			_, err = New([]*graphql.RemoteSchema{
-				{Schema: originalSchema, URL: "url1"},
+				{Schema: original, URL: "url1"},
 				{Schema: schema2, URL: "url2"},
 			})
 			// if we were supposed to pass and didn't

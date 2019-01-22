@@ -45,11 +45,12 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	for _, schema := range sources {
 		// add each type declared by the source schema to the one we are building up
 		for name, definition := range schema.Types {
-			// if the definition is not an interface
-			if definition.Kind != ast.Interface {
-				types[name] = append(types[name], definition)
-			} else {
+			// if the definition is an interface
+			if definition.Kind == ast.Interface {
+				// ad it to the list
 				interfaces[name] = append(interfaces[name], definition)
+			} else {
+				types[name] = append(types[name], definition)
 			}
 		}
 
@@ -59,9 +60,29 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 		}
 	}
 
+	// merge each interface into one
+	for name, definitions := range interfaces {
+		for _, definition := range definitions {
+			// look up if the type is already registered in the aggregate
+			previousDefinition, exists := result.Types[name]
+
+			// if we haven't seen it before
+			if !exists {
+				// use the declaration that we got from the new schema
+				result.Types[name] = definition
+
+				// we're done with this definition
+				continue
+			}
+
+			if err := mergeInterfaces(previousDefinition, definition); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// merge each definition of each type into one
 	for name, definitions := range types {
-		// merge each definition together
 		for _, definition := range definitions {
 			// look up if the type is already registered in the aggregate
 			previousDefinition, exists := result.Types[name]
@@ -96,9 +117,8 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 		}
 	}
 
-	// for each directive
+	// merge each directive definition together
 	for name, definitions := range directives {
-		// merge each definition together
 		for _, definition := range definitions {
 			// look up if the type is already registered in the aggregate
 			previousDefinition, exists := result.Directives[name]
@@ -113,7 +133,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			}
 
 			// we have to merge the 2 directives
-			err := mergeDirectives(previousDefinition, definition)
+			err := mergeDirectivesEqual(previousDefinition, definition)
 			if err != nil {
 				return nil, err
 			}
@@ -131,6 +151,28 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 
 	// we're done here
 	return result, nil
+}
+
+func mergeInterfaces(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+	// descriptions
+	if previousDefinition.Description != newDefinition.Description {
+		return fmt.Errorf("conflict in interface descriptions: \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
+	}
+
+	// fields
+	if len(previousDefinition.Fields) != len(newDefinition.Fields) {
+		return fmt.Errorf("inconsistent number of fields")
+	}
+	for _, field := range previousDefinition.Fields {
+		// get the corresponding field in the other definition
+		otherField := newDefinition.Fields.ForName(field.Name)
+
+		if err := mergeFieldsEqual(field, otherField); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
@@ -166,17 +208,17 @@ func mergeEnums(previousDefinition *ast.Definition, newDefinition *ast.Definitio
 	return fmt.Errorf("enum %s cannot be split across services", newDefinition.Name)
 }
 
-func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition *ast.DirectiveDefinition) error {
+func mergeDirectivesEqual(previousDefinition *ast.DirectiveDefinition, newDefinition *ast.DirectiveDefinition) error {
 	// currently, the only meaning to merging directives is to ignore the second one as long as it has the same definition
 	// as the first
 
 	// if the 2 descriptions don't match
 	if previousDefinition.Description != newDefinition.Description {
-		return fmt.Errorf("conflict in directive descriptions: \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
+		return fmt.Errorf("conflict in directive descriptions. Found \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
 	}
 
 	// make sure the 2 definitions take the same arguments
-	if err := mergeArgumentListEqual(previousDefinition.Arguments, newDefinition.Arguments); err != nil {
+	if err := mergeArgumentDefinitionListEqual(previousDefinition.Arguments, newDefinition.Arguments); err != nil {
 		return fmt.Errorf("conflict in argument definitions for directive %s. %s", previousDefinition.Name, err.Error())
 	}
 
@@ -189,7 +231,75 @@ func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition 
 	return nil
 }
 
-func mergeArgumentListEqual(list1, list2 ast.ArgumentDefinitionList) error {
+func mergeFieldsEqual(field1, field2 *ast.FieldDefinition) error {
+	// if the 2 descriptions don't match
+	if field1.Description != field2.Description {
+		return fmt.Errorf("conflict in field descriptions. Found \"%v\" and \"%v\"", field1.Description, field2.Description)
+	}
+
+	// fields
+	if err := mergeTypesEqual(field1.Type, field2.Type); err != nil {
+		return err
+	}
+
+	// arguments
+	if err := mergeArgumentDefinitionListEqual(field1.Arguments, field2.Arguments); err != nil {
+		return err
+	}
+
+	// default values
+	if err := mergeValuesEqual(field1.DefaultValue, field2.DefaultValue); err != nil {
+		return err
+	}
+
+	// directives
+	if err := mergeDirectiveListsEqual(field1.Directives, field2.Directives); err != nil {
+		return err
+	}
+
+	// nothing went wrong
+	return nil
+}
+
+func mergeDirectiveListsEqual(list1, list2 ast.DirectiveList) error {
+	// if the 2 lists are not the same length
+	if len(list1) != len(list2) {
+		// they will never be the same
+		return errors.New("there were an inconsistent number of directives")
+	}
+
+	// compare each argument to its counterpart in the other list
+	for _, arg1 := range list1 {
+		arg2 := list2.ForName(arg1.Name)
+		if arg2 == nil {
+			return fmt.Errorf("could not find the directive with name %s", arg1.Name)
+		}
+
+		// if the 2 arguments are not the same
+		if err := mergeDirectiveEqual(arg1, arg2); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func mergeDirectiveEqual(directive1, directive2 *ast.Directive) error {
+	// if their names aren't equal
+	if directive1.Name != directive2.Name {
+		return errors.New("directives do not have the same name")
+	}
+
+	// if their list of arguments aren't equal
+	if err := mergeArgumentListEqual(directive1.Arguments, directive2.Arguments); err != nil {
+		return err
+	}
+
+	// if the argumenst
+	return nil
+}
+
+func mergeArgumentListEqual(list1, list2 ast.ArgumentList) error {
 	// if the 2 lists are not the same length
 	if len(list1) != len(list2) {
 		// they will never be the same
@@ -199,6 +309,9 @@ func mergeArgumentListEqual(list1, list2 ast.ArgumentDefinitionList) error {
 	// compare each argument to its counterpart in the other list
 	for _, arg1 := range list1 {
 		arg2 := list2.ForName(arg1.Name)
+		if arg2 == nil {
+			return fmt.Errorf("could not find the argument with name %s", arg1.Name)
+		}
 
 		// if the 2 arguments are not the same
 		if err := mergeArgumentsEqual(arg1, arg2); err != nil {
@@ -209,7 +322,45 @@ func mergeArgumentListEqual(list1, list2 ast.ArgumentDefinitionList) error {
 	return nil
 }
 
-func mergeArgumentsEqual(arg1 *ast.ArgumentDefinition, arg2 *ast.ArgumentDefinition) error {
+func mergeArgumentsEqual(arg1, arg2 *ast.Argument) error {
+	// if the names aren't the same
+	if arg1.Name != arg2.Name {
+		return errors.New("names were not the same")
+	}
+
+	// if the values are different
+	if err := mergeValuesEqual(arg1.Value, arg2.Value); err != nil {
+		return err
+	}
+
+	// they're the same
+	return nil
+}
+
+func mergeArgumentDefinitionListEqual(list1, list2 ast.ArgumentDefinitionList) error {
+	// if the 2 lists are not the same length
+	if len(list1) != len(list2) {
+		// they will never be the same
+		return errors.New("there were an inconsistent number of arguments")
+	}
+
+	// compare each argument to its counterpart in the other list
+	for _, arg1 := range list1 {
+		arg2 := list2.ForName(arg1.Name)
+		if arg2 == nil {
+			return fmt.Errorf("could not find the argument with name %s", arg1.Name)
+		}
+
+		// if the 2 arguments are not the same
+		if err := mergeArgumentDefinitionsEqual(arg1, arg2); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func mergeArgumentDefinitionsEqual(arg1 *ast.ArgumentDefinition, arg2 *ast.ArgumentDefinition) error {
 	// if the 2 descriptions are not the same
 	if arg1.Description != arg2.Description {
 		return errors.New("descriptions were not the same")
