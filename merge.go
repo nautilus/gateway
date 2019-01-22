@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/vektah/gqlparser/ast"
 )
@@ -33,27 +32,25 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				// register the type as an implementer of itself
 				result.AddPossibleType(name, newDefinition)
 
-				// we are merging the same type from 2 different schemas together
-			} else {
-				// the fields in the aggregate
-				previousFields := previousDefinition.Fields
+				// we're done with this type
+				continue
+			}
 
-				// we have to add the fields in the source definition with the one in the aggregate
-				for _, newField := range newDefinition.Fields {
-					// look up if we already know about this field
-					field := previousFields.ForName(newField.Name)
-					// if we already have that field defined and it has a different type and the one from the source schema
-					if field != nil && field.Type.String() != newField.Type.String() {
-						log.Warn(fmt.Sprintf("Could not merge schemas together. Conflicting definitions of %s", field.Name))
-						return nil, errors.New("schema merge conflict: Two schemas cannot the same field defined for the same type")
-					}
+			// unify handling of errors for merging
+			var err error
 
-					// its safe to copy over the definition
-					previousFields = append(previousFields, newField)
-				}
+			if len(newDefinition.Fields) > 0 {
+				// if the definition is an object or input object we have to merge it
+				err = mergeObjectTypes(previousDefinition, newDefinition)
 
-				// copy over the new fields for this type definition
-				previousDefinition.Fields = previousFields
+			} else if len(newDefinition.EnumValues) > 0 {
+				// the definition is an enum value
+				err = mergeEnums(previousDefinition, newDefinition)
+			}
+
+			if err != nil {
+				log.Warn("Encountered error merging schemas: ", err.Error())
+				return nil, err
 			}
 		}
 
@@ -74,4 +71,31 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 
 	// we're done here
 	return result, nil
+}
+
+func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+	// the fields in the aggregate
+	previousFields := previousDefinition.Fields
+
+	// we have to add the fields in the source definition with the one in the aggregate
+	for _, newField := range newDefinition.Fields {
+		// look up if we already know about this field
+		field := previousFields.ForName(newField.Name)
+		// if we already have that field defined and it has a different type and the one from the source schema
+		if field != nil && field.Type.String() != newField.Type.String() {
+			return errors.New("schema merge conflict: Two schemas cannot the same field defined for the same type")
+		}
+
+		// its safe to copy over the definition
+		previousFields = append(previousFields, newField)
+	}
+
+	// copy over the new fields for this type definition
+	previousDefinition.Fields = previousFields
+
+	return nil
+}
+
+func mergeEnums(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+	return errors.New("enums cannot be split across services")
 }

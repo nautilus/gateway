@@ -139,6 +139,39 @@ func TestMergeSchema_assignMutationType(t *testing.T) {
 	}
 }
 
+func TestMergeSchema_conflictedEnums(t *testing.T) {
+	// create the first schema
+	schema1, err := graphql.LoadSchema(`
+			enum Foo {
+				Bar
+				Baz
+			}
+	`)
+
+	// make sure nothing went wrong
+	assert.Nil(t, err)
+
+	// and the second schema we are going to make
+	schema2, err := graphql.LoadSchema(`
+		enum Foo {
+			Bar
+		}
+	`)
+	// make sure nothing went wrong
+	assert.Nil(t, err)
+
+	// merge the schemas together
+	_, err = New([]*graphql.RemoteSchema{
+		{Schema: schema1, URL: "url1"},
+		{Schema: schema2, URL: "url2"},
+	})
+	// make sure nothing went wrong
+	if err == nil {
+		t.Error("did not encounter error while merging schemas")
+		return
+	}
+}
+
 func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 	// create the first schema
 	schema1, err := graphql.LoadSchema(`
