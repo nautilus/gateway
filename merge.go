@@ -2,9 +2,27 @@ package gateway
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/vektah/gqlparser/ast"
 )
+
+// Merger is an interface for structs that are capable of taking a list of schemas and returning something that resembles
+// a "merge" of those schemas.
+type Merger interface {
+	Merge([]*ast.Schema) (*ast.Schema, error)
+}
+
+// MergerFn is a wrapper of a function of the same signature as Merger.Merge
+type MergerFn struct {
+	Fn func([]*ast.Schema) (*ast.Schema, error)
+}
+
+// Merge invokes and returns the wrapped function
+func (m *MergerFn) Merge(sources []*ast.Schema) (*ast.Schema, error) {
+	return m.Fn(sources)
+}
 
 // mergeSchemas takes in a bunch of schemas and merges them into one. Following the strategies outlined here:
 // https://github.com/AlecAivazis/graphql-gateway/blob/master/docs/mergingStrategies.md
@@ -97,5 +115,11 @@ func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Def
 }
 
 func mergeEnums(previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
-	return errors.New("enums cannot be split across services")
+	// if we are merging an internal enums
+	if strings.HasPrefix(previousDefinition.Name, "__") {
+		// let it through without changing
+		return nil
+	}
+
+	return fmt.Errorf("enum %s cannot be split across services", newDefinition.Name)
 }

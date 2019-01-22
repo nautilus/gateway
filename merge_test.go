@@ -203,3 +203,77 @@ func TestMergeSchema_conflictingFieldTypes(t *testing.T) {
 		return
 	}
 }
+
+func TestMergeSchema_directives(t *testing.T) {
+	// the directive that we are always comparing to
+	originalSchema, err := graphql.LoadSchema(`
+		directive @foo on FIELD_DEFINITION
+	`)
+	// make sure nothing went wrong
+	if !assert.Nil(t, err, "original schema didn't parse") {
+		return
+	}
+
+	// the table we are testing
+	table := []struct {
+		Message string
+		Pass    bool
+		Schema  string
+	}{
+		{
+			"Matching",
+			true,
+			`
+				directive @foo on FIELD_DEFINITION
+			`,
+		},
+		{
+			"Different Argument Type",
+			false,
+			`
+				directive @foo(url: String!) on FIELD_DEFINITION
+			`,
+		},
+		{
+			"Different Arguments",
+			false,
+			`
+				directive @foo(url: String, number: Int) on FIELD_DEFINITION
+			`,
+		},
+		{
+			"Different Location",
+			false,
+			`
+				directive @foo(url: String) on FRAGMENT_SPREAD
+			`,
+		},
+	}
+
+	for _, row := range table {
+		t.Run(row.Message, func(t *testing.T) {
+			// create a schema with the provided content
+			schema2, err := graphql.LoadSchema(`
+				directive @foo on FIELD_DEFINITION
+			`)
+			// make sure nothing went wrong
+			if !assert.Nil(t, err, "comparison schema didn't parse") {
+				return
+			}
+			// create remote schemas with each
+			_, err = New([]*graphql.RemoteSchema{
+				{Schema: originalSchema, URL: "url1"},
+				{Schema: schema2, URL: "url2"},
+			})
+
+			// if we were supposed to pass and didn't
+			if row.Pass && err != nil {
+				t.Errorf("Encountered error: %v", err.Error())
+			}
+			// if we were not supposed to pass and didn't encounter an error
+			if !row.Pass && err == nil {
+				t.Error("Did not encounter an error when one was expected")
+			}
+		})
+	}
+}

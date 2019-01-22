@@ -18,6 +18,7 @@ type Gateway struct {
 	schema   *ast.Schema
 	planner  QueryPlanner
 	executor Executor
+	merger   Merger
 
 	// the urls we have to visit to access certain fields
 	fieldURLs FieldURLMap
@@ -43,6 +44,19 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		return nil, errors.New("a gateway must have at least one schema")
 	}
 
+	// configure the gateway with any default values before we start doing stuff with it
+	gateway := &Gateway{
+		sources:  sources,
+		planner:  &MinQueriesPlanner{},
+		executor: &ParallelExecutor{},
+		merger:   &MergerFn{Fn: mergeSchemas},
+	}
+
+	// pass the gateway through any configurators
+	for _, config := range configs {
+		config(gateway)
+	}
+
 	// find the field URLs before we merge schemas. We need to make sure to include
 	// the fields defined by the gateway's internal schema
 	urls := fieldURLs(sources, true).Concat(
@@ -58,27 +72,15 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 	sourceSchemas = append(sourceSchemas, internalSchema.Schema)
 
 	// merge them into one
-	schema, err := mergeSchemas(sourceSchemas)
+	schema, err := gateway.merger.Merge(sourceSchemas)
 	if err != nil {
 		// if something went wrong during the merge, return the result
 		return nil, err
 	}
 
-	// return the resulting gateway
-	gateway := &Gateway{
-		sources:  sources,
-		schema:   schema,
-		planner:  &MinQueriesPlanner{},
-		executor: &ParallelExecutor{},
-
-		// internal fields
-		fieldURLs: urls,
-	}
-
-	// pass the gateway through any configurators
-	for _, config := range configs {
-		config(gateway)
-	}
+	// assign the computed values
+	gateway.schema = schema
+	gateway.fieldURLs = urls
 
 	// we're done here
 	return gateway, nil
