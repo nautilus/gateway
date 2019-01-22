@@ -67,14 +67,29 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			}
 
 			if err != nil {
-				log.Warn("Encountered error merging schemas: ", err.Error())
 				return nil, err
 			}
 		}
 
 		// for each directive
-		for directiveName, definition := range schema.Directives {
-			result.Directives[directiveName] = definition
+		for name, newDefinition := range schema.Directives {
+			// look up if the type is already registered in the aggregate
+			previousDefinition, exists := result.Directives[name]
+
+			// if we haven't seen it before
+			if !exists {
+				// use the declaration that we got from the new schema
+				result.Directives[name] = newDefinition
+
+				// we're done with this type
+				continue
+			}
+
+			// we have to merge the 2 directives
+			err := mergeDirectives(previousDefinition, newDefinition)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -122,4 +137,145 @@ func mergeEnums(previousDefinition *ast.Definition, newDefinition *ast.Definitio
 	}
 
 	return fmt.Errorf("enum %s cannot be split across services", newDefinition.Name)
+}
+
+func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition *ast.DirectiveDefinition) error {
+	// currently, the only meaning to merging directives is to ignore the second one as long as it has the same definition
+	// as the first
+
+	// if the 2 descriptions don't match
+	if previousDefinition.Description != newDefinition.Description {
+		return fmt.Errorf("conflict in directive descriptions: \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
+	}
+
+	// make sure the 2 definitions take the same arguments
+	if err := mergeArgumentListEqual(previousDefinition.Arguments, newDefinition.Arguments); err != nil {
+		return fmt.Errorf("conflict in argument definitions for directive %s. %s", previousDefinition.Name, err.Error())
+	}
+
+	// make sure the 2 directives can be placed on the same locations
+	if err := mergeDirectiveLocationsEqual(previousDefinition.Locations, newDefinition.Locations); err != nil {
+		return fmt.Errorf("conflict in locations for directive %s. %s", previousDefinition.Name, err.Error())
+	}
+
+	// the 2 directives can coexist
+	return nil
+}
+
+func mergeArgumentListEqual(list1, list2 ast.ArgumentDefinitionList) error {
+	// if the 2 lists are not the same length
+	if len(list1) != len(list2) {
+		// they will never be the same
+		return errors.New("there were an inconsistent number of arguments")
+	}
+
+	// compare each argument to its counterpart in the other list
+	for _, arg1 := range list1 {
+		arg2 := list2.ForName(arg1.Name)
+
+		// if the 2 arguments are not the same
+		if err := mergeArgumentsEqual(arg1, arg2); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func mergeArgumentsEqual(arg1 *ast.ArgumentDefinition, arg2 *ast.ArgumentDefinition) error {
+	// if the 2 descriptions are not the same
+	if arg1.Description != arg2.Description {
+		return errors.New("descriptions were not the same")
+	}
+
+	// check that the 2 types are equal
+	if err := mergeTypesEqual(arg1.Type, arg2.Type); err != nil {
+		return err
+	}
+
+	// check that the 2 default values are equal
+	if err := mergeValuesEqual(arg1.DefaultValue, arg2.DefaultValue); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func mergeValuesEqual(value1, value2 *ast.Value) error {
+	// if one is null and the other isn't
+	if (value1 == nil && value2 != nil) || (value1 != nil && value2 == nil) {
+		return errors.New("one is a list the other isn't")
+	}
+
+	// if they are both nil values, there's no error
+	if value1 == nil {
+		return nil
+	}
+
+	// if the kinds are not the same
+	if value1.Kind != value2.Kind {
+		return errors.New("encountered inconsistent kinds")
+	}
+
+	// if the raw values are not the same
+	if value1.Raw != value2.Raw {
+		return errors.New("encountered different raw values")
+	}
+
+	return nil
+}
+
+func mergeTypesEqual(type1, type2 *ast.Type) error {
+	// if one is null and the other isn't
+	if (type1 == nil && type2 != nil) || (type1 != nil && type2 == nil) {
+		return errors.New("one is a list the other isn't")
+	}
+
+	// if they are both nil types, there's no error
+	if type1 == nil {
+		return nil
+	}
+
+	// name
+	if type1.NamedType != type2.NamedType {
+		return errors.New("types do not have the same name")
+	}
+
+	// nullability
+	if type1.NonNull != type2.NonNull {
+		return errors.New("types do not have the same nullability constraints")
+	}
+
+	// subtypes (ie, non-null string)
+	if err := mergeTypesEqual(type1.Elem, type2.Elem); err != nil {
+		return err
+	}
+
+	// they're equal
+	return nil
+}
+
+func mergeDirectiveLocationsEqual(list1, list2 []ast.DirectiveLocation) error {
+	// if the 2 lists are not the same length
+	if len(list1) != len(list2) {
+		// they will never be the same
+		return errors.New("do not have the same number of locations")
+	}
+
+	// build up a set of the locations for list1
+	list1Locs := map[ast.DirectiveLocation]bool{}
+	for _, location := range list1 {
+		list1Locs[location] = true
+	}
+
+	// make sure every location in list2 is there
+	for _, location := range list2 {
+		// if its not then the 2 lists are different
+		if _, ok := list1Locs[location]; !ok {
+			return fmt.Errorf("directive could be found on %s in one definition but not the other", location)
+		}
+	}
+
+	// build a set of the locations for the
+	return nil
 }

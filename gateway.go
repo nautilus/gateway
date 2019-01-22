@@ -73,6 +73,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 	// merge them into one
 	schema, err := gateway.merger.Merge(sourceSchemas)
 	if err != nil {
+		log.Warn("Encountered error merging schemas: ", err.Error())
 		// if something went wrong during the merge, return the result
 		return nil, err
 	}
