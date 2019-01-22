@@ -304,7 +304,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 		// if we didn't find a selection
 		if foundSelection == nil {
-			return nil, fmt.Errorf("Could not find selection for %v", point)
+			return [][]string{}, nil
 		}
 
 		log.Debug("")
@@ -318,7 +318,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		// the bit of result chunk with the appropriate key should be a list
 		rootValue, ok := value[point]
 		if !ok {
-			return nil, errors.New("Root value of result chunk could not be found")
+			return [][]string{}, nil
 		}
 
 		// get the type of the object in question

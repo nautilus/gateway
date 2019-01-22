@@ -531,6 +531,101 @@ func TestExecutor_multipleErrors(t *testing.T) {
 	}
 }
 
+func TestExecutor_includeIf(t *testing.T) {
+
+	// the query we want to execute is
+	// {
+	// 		user @include(if: false) {   <- from serviceA
+	// 			favoriteCatPhoto {   	 <- from serviceB
+	// 				url              	 <- from serviceB
+	// 			}
+	// 		}
+	// }
+
+	// build a query plan that the executor will follow
+	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+		RootStep: &QueryPlanStep{
+			Then: []*QueryPlanStep{
+				{
+
+					// this is equivalent to
+					// query { user }
+					ParentType:     "Query",
+					InsertionPoint: []string{},
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "user",
+							Definition: &ast.FieldDefinition{
+								Type: ast.NamedType("User", &ast.Position{}),
+							},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "firstName",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("String", &ast.Position{}),
+									},
+								},
+							},
+							Directives: ast.DirectiveList{
+								&ast.Directive{
+									Name: "include",
+									Arguments: ast.ArgumentList{
+										&ast.Argument{
+											Name: "if",
+											Value: &ast.Value{
+												Kind: ast.BooleanValue,
+												Raw:  "true",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					// return a known value we can test against
+					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{}},
+					// then we have to ask for the users favorite cat photo and its url
+					Then: []*QueryPlanStep{
+						{
+							ParentType:     "User",
+							InsertionPoint: []string{"user"},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "favoriteCatPhoto",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("User", &ast.Position{}),
+									},
+									SelectionSet: ast.SelectionSet{
+										&ast.Field{
+											Name: "url",
+											Definition: &ast.FieldDefinition{
+												Type: ast.NamedType("String", &ast.Position{}),
+											},
+										},
+									},
+								},
+							},
+							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+								"node": map[string]interface{}{
+									"favoriteCatPhoto": map[string]interface{}{
+										"url": "hello world",
+									},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}, map[string]interface{}{})
+	if err != nil {
+		t.Errorf("Encountered error executing plan: %v", err.Error())
+		return
+	}
+
+	assert.Equal(t, map[string]interface{}{}, result)
+}
+
 func TestExecutor_threadsVariables(t *testing.T) {
 	// the variables we'll be threading through
 	fullVariables := map[string]interface{}{
@@ -970,6 +1065,44 @@ func TestExecutorGetPointData(t *testing.T) {
 	}
 }
 
+func TestFindInsertionPoint_bailOnNil(t *testing.T) {
+	// we want the list of insertion points that point to
+	planInsertionPoint := []string{"post", "author"}
+	expected := [][]string{}
+
+	result := map[string]interface{}{
+		"post": map[string]interface{}{
+			"author": nil,
+		},
+	}
+
+	// the selection we're going to make
+	stepSelectionSet := ast.SelectionSet{
+		&ast.Field{
+			Name: "user",
+			Definition: &ast.FieldDefinition{
+				Type: ast.ListType(ast.NamedType("Photo", &ast.Position{}), &ast.Position{}),
+			},
+			SelectionSet: ast.SelectionSet{
+				&ast.Field{
+					Name: "firstName",
+					Definition: &ast.FieldDefinition{
+						Type: ast.NamedType("String", &ast.Position{}),
+					},
+				},
+			},
+		},
+	}
+
+	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, [][]string{})
+	if err != nil {
+		t.Error(t, err)
+		return
+	}
+
+	assert.Equal(t, expected, generatedPoint)
+}
+
 func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	// we want the list of insertion points that point to
 	planInsertionPoint := []string{"users", "photoGallery", "author"}
@@ -977,13 +1110,10 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	// pretend we are in the middle of stitching a larger object
 	startingPoint := [][]string{{"users:0"}}
 
-	// there are 6 total insertion points in this example
+	// there are 3 total insertion points in this example
 	finalInsertionPoint := [][]string{
-		// photo 0 is liked by 2 users whose firstName we have to resolve
 		{"users:0", "photoGallery:0", "author#1"},
-		// photo 1 is liked by 3 users whose firstName we have to resolve
 		{"users:0", "photoGallery:1", "author#2"},
-		// photo 2 is liked by 1 user whose firstName we have to resolve
 		{"users:0", "photoGallery:2", "author#3"},
 	}
 
