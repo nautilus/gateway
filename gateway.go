@@ -104,6 +104,13 @@ func WithExecutor(e Executor) Configurator {
 	}
 }
 
+// WithMerger returns a Configurator that sets the merger of the gateway
+func WithMerger(m Merger) Configurator {
+	return func(g *Gateway) {
+		g.merger = m
+	}
+}
+
 func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap {
 	// build the mapping of fields to urls
 	locations := FieldURLMap{}
