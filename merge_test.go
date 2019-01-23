@@ -156,6 +156,40 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 				}
 			`,
 		},
+		{
+			"Conflicting field directives",
+			`
+				input Foo {
+					lastName: String!
+				}
+			`,
+			`
+				directive @foo on FIELD_DEFINITION
+
+				input Foo  {
+					lastName: String! @foo
+				}
+			`,
+		},
+		{
+			"Conflicting total field directives",
+			`
+				directive @foo on FIELD_DEFINITION
+
+				directive @bar on FIELD_DEFINITION
+
+				input Foo {
+					lastName: String! @foo @bar
+				}
+			`,
+			`
+				directive @foo on FIELD_DEFINITION
+
+				input Foo  {
+					lastName: String! @foo
+				}
+			`,
+		},
 	})
 }
 
@@ -324,6 +358,45 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 
 				type User {
 					firstName: String! @foo(url: "3", url2: "3")
+				}
+			`,
+		},
+		{
+			"Conflicting name of multipe arguments",
+			`
+				type User {
+					firstName(url: String, url2: String): String!
+				}
+			`,
+			`
+				type User {
+					firstName(url: String, url3: String): String!
+				}
+			`,
+		},
+		{
+			"Conflicting field types",
+			`
+				type User {
+					firstName: [String]
+				}
+			`,
+			`
+				type User {
+					firstName: String
+				}
+			`,
+		},
+		{
+			"Conflicting inner field types",
+			`
+				type User {
+					firstName: [Int]
+				}
+			`,
+			`
+				type User {
+					firstName: [String]
 				}
 			`,
 		},
