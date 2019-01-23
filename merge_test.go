@@ -266,6 +266,24 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 				}
 			`,
 		},
+
+		{
+			"Conflicting number of directive arguments",
+			`
+				directive @foo(url: String!, url2: String!) on FIELD_DEFINITION
+
+				type User {
+					firstName: String! @foo(url: "3")
+				}
+			`,
+			`
+				directive @foo(url: String!, url2: String!) on FIELD_DEFINITION
+
+				type User {
+					firstName: String! @foo(url: "3", url2: "3")
+				}
+			`,
+		},
 	})
 }
 
