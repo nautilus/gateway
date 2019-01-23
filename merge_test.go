@@ -79,6 +79,62 @@ func TestMergeSchema_assignMutationType(t *testing.T) {
 	}
 }
 
+func TestMergeSchema_inputTypes(t *testing.T) {
+	// create the first schema
+	originalSchema, err := graphql.LoadSchema(`
+		input Foo {
+			firstName: String!
+		}
+	`)
+	assert.Nil(t, err)
+
+	t.Run("Matching", func(t *testing.T) {
+		// merge the schema with one that should work
+		schema, err := testMergeSchemas(t, originalSchema, `
+			input Foo {
+				firstName: String!
+			}
+		`)
+		if err != nil {
+			t.Error(err.Error())
+		}
+
+		// look up the Foo input type
+		inputType := schema.Types["Foo"]
+
+		if !assert.NotNil(t, inputType, "Could not find input type Foo") {
+			return
+		}
+
+		if len(inputType.Fields) != 1 {
+			t.Errorf("Encountered incorrect number of fields. Expected 1 found %v", len(inputType.Fields))
+			return
+		}
+	})
+
+	// the table we are testing
+	testMergeRunNegativeTable(t, originalSchema, []testMergeTableRow{
+		{
+			"Conflicting Fields",
+			`
+				input Foo {
+					lastName: String!
+				}
+			`,
+		},
+		{
+			"Conflicting directives",
+			`
+				directive @foo on INPUT_OBJECT
+
+				input Foo @foo {
+					lastName: String!
+				}
+			`,
+		},
+	})
+}
+
 func TestMergeSchema_objectTypes(t *testing.T) {
 	// create the first schema
 	originalSchema, err := graphql.LoadSchema(`
@@ -101,6 +157,7 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 
 			type User implements Foo {
 				lastName: String!
+				firstName: String!
 			}
 		`)
 		if err != nil {
@@ -111,6 +168,8 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 		definition, exists := schema.Types["User"]
 		// make sure the definition exists
 		assert.True(t, exists)
+
+		assert.Len(t, definition.Fields, 2)
 
 		// it should have 2 fields: firstName and lastName
 		var firstNameDefinition *ast.FieldDefinition

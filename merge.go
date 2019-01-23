@@ -100,6 +100,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				// each interface that this type implements needs to be registered
 				for _, iface := range definition.Interfaces {
 					result.AddPossibleType(iface, definition)
+					result.AddImplements(definition.Name, result.Types[definition.Name])
 				}
 
 				// we're done with this type
@@ -109,16 +110,14 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			// unify handling of errors for merging
 			var err error
 
-			if len(definition.Fields) > 0 {
-				// if the definition is an object or input object we have to merge it
+			switch definition.Kind {
+			case ast.Object:
 				err = mergeObjectTypes(result, previousDefinition, definition)
-
-			} else if len(definition.EnumValues) > 0 {
-				// the definition is an enum value
+			case ast.InputObject:
+				err = mergeInputObjects(result, previousDefinition, definition)
+			case ast.Enum:
 				err = mergeEnums(result, previousDefinition, definition)
-
-			} else if len(definition.Types) > 0 {
-				// the definition is a union
+			case ast.Union:
 				err = mergeUnions(result, previousDefinition, definition)
 			}
 
@@ -199,8 +198,11 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 			return errors.New("schema merge conflict: Two schemas cannot the same field defined for the same type")
 		}
 
-		// its safe to copy over the definition
-		previousFields = append(previousFields, newField)
+		// if we haven't seen the field
+		if field == nil {
+			// its safe to copy over the definition
+			previousFields = append(previousFields, newField)
+		}
 	}
 
 	// make sure the 2 implement the same number of interfaces
@@ -215,6 +217,15 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 
 	// copy over the new fields for this type definition
 	previousDefinition.Fields = previousFields
+
+	return nil
+}
+
+func mergeInputObjects(result *ast.Schema, object1, object2 *ast.Definition) error {
+	// if the field list isn't the same
+	if err := mergeFieldListEqual(object1.Fields, object2.Fields); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -288,6 +299,25 @@ func mergeDirectivesEqual(previousDefinition *ast.DirectiveDefinition, newDefini
 	}
 
 	// the 2 directives can coexist
+	return nil
+}
+
+func mergeFieldListEqual(list1, list2 ast.FieldList) error {
+	if len(list1) != len(list2) {
+		return fmt.Errorf("inconsistent number of fields")
+	}
+	for _, field := range list1 {
+		// get the corresponding field in the other definition
+		otherField := list2.ForName(field.Name)
+		if otherField == nil {
+			return fmt.Errorf("could not find field %s", field.Name)
+		}
+
+		if err := mergeFieldsEqual(field, otherField); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
