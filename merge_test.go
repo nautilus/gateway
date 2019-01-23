@@ -266,7 +266,36 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 				}
 			`,
 		},
-
+		{
+			"Conflicting field descriptions",
+			`
+				type User {
+					"description"
+					firstName: String!
+				}
+			`,
+			`
+				type User {
+					"other-description"
+					firstName: String!
+				}
+			`,
+		},
+		{
+			"Conflicting field argument default value",
+			`
+				type User {
+					"description"
+					firstName: String!
+				}
+			`,
+			`
+				type User {
+					"other-description"
+					firstName: String!
+				}
+			`,
+		},
 		{
 			"Conflicting number of directive arguments",
 			`
@@ -356,6 +385,27 @@ func TestMergeSchema_directives(t *testing.T) {
 			`,
 			`
 				directive @foo on FRAGMENT_SPREAD
+			`,
+		},
+		{
+			"Different description",
+			`
+				"other-desription"
+				directive @foo on FIELD_DEFINITION
+			`,
+			`
+				"desription"
+				directive @foo on FIELD_DEFINITION
+			`,
+		},
+		{
+			"Different field types",
+			`
+				directive @foo(foo: String) on FIELD_DEFINITION
+			`,
+			`
+				"desription"
+				directive @foo(foo: [String]) on FIELD_DEFINITION
 			`,
 		},
 		{
