@@ -18,6 +18,7 @@ type Gateway struct {
 	schema   *ast.Schema
 	planner  QueryPlanner
 	executor Executor
+	merger   Merger
 
 	// the urls we have to visit to access certain fields
 	fieldURLs FieldURLMap
@@ -43,42 +44,43 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		return nil, errors.New("a gateway must have at least one schema")
 	}
 
-	// find the field URLs before we merge schemas. We need to make sure to include
-	// the fields defined by the gateway's internal schema
-	urls := fieldURLs(sources, true).Concat(
-		fieldURLs([]*graphql.RemoteSchema{internalSchema}, false),
-	)
-
-	// grab the schemas to compute the sources
-	sourceSchemas := []*ast.Schema{}
-	for _, source := range sources {
-		sourceSchemas = append(sourceSchemas, source.Schema)
-	}
-	// add the internal schema
-	sourceSchemas = append(sourceSchemas, internalSchema.Schema)
-
-	// merge them into one
-	schema, err := mergeSchemas(sourceSchemas)
-	if err != nil {
-		// if something went wrong during the merge, return the result
-		return nil, err
-	}
-
-	// return the resulting gateway
+	// configure the gateway with any default values before we start doing stuff with it
 	gateway := &Gateway{
 		sources:  sources,
-		schema:   schema,
 		planner:  &MinQueriesPlanner{},
 		executor: &ParallelExecutor{},
-
-		// internal fields
-		fieldURLs: urls,
+		merger:   &MergerFn{Fn: mergeSchemas},
 	}
 
 	// pass the gateway through any configurators
 	for _, config := range configs {
 		config(gateway)
 	}
+
+	// find the field URLs before we merge schemas. We need to make sure to include
+	// the fields defined by the gateway's internal schema
+	urls := fieldURLs(sources, true).Concat(
+		fieldURLs([]*graphql.RemoteSchema{internalSchema}, false),
+	)
+
+	// grab the schemas within each source
+	sourceSchemas := []*ast.Schema{}
+	for _, source := range sources {
+		sourceSchemas = append(sourceSchemas, source.Schema)
+	}
+	sourceSchemas = append(sourceSchemas, internalSchema.Schema)
+
+	// merge them into one
+	schema, err := gateway.merger.Merge(sourceSchemas)
+	if err != nil {
+		log.Warn("Encountered error merging schemas: ", err.Error())
+		// if something went wrong during the merge, return the result
+		return nil, err
+	}
+
+	// assign the computed values
+	gateway.schema = schema
+	gateway.fieldURLs = urls
 
 	// we're done here
 	return gateway, nil
@@ -99,6 +101,13 @@ func WithPlanner(p QueryPlanner) Configurator {
 func WithExecutor(e Executor) Configurator {
 	return func(g *Gateway) {
 		g.executor = e
+	}
+}
+
+// WithMerger returns a Configurator that sets the merger of the gateway
+func WithMerger(m Merger) Configurator {
+	return func(g *Gateway) {
+		g.merger = m
 	}
 }
 

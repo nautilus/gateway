@@ -294,21 +294,25 @@ func TestIntrospectQuery_interfaces(t *testing.T) {
 	// make sure the 2 types implement the interface
 
 	type1Implements := schema.GetImplements(schema.Types["Type1"])
-	// type 1 implements only one type
-	if len(type1Implements) != 1 {
+	// type 1 implements 2 types
+	if len(type1Implements) != 2 {
 		t.Errorf("Type1 implements incorrect number of types: %v", len(type1Implements))
 		return
 	}
-	type1Implementer := type1Implements[0]
+	// make sure it implements intself
+	assert.Equal(t, "Type1", type1Implements[0].Name)
+
+	type1Implementer := type1Implements[1]
 	assert.Equal(t, "IFace", type1Implementer.Name)
 
 	type2Implements := schema.GetImplements(schema.Types["Type2"])
 	// type 1 implements only one type
-	if len(type2Implements) != 1 {
+	if len(type2Implements) != 2 {
 		t.Errorf("Type2 implements incorrect number of types: %v", len(type2Implements))
 		return
 	}
-	type2Implementer := type2Implements[0]
+	assert.Equal(t, "Type2", type2Implements[0].Name)
+	type2Implementer := type2Implements[1]
 	assert.Equal(t, "IFace", type2Implementer.Name)
 }
 
@@ -389,7 +393,7 @@ func TestIntrospectQuery_unions(t *testing.T) {
 
 	type1Implements := schema.GetImplements(schema.Types["Type1"])
 	// type 1 implements only one type
-	if len(type1Implements) != 1 {
+	if len(type1Implements) != 2 {
 		t.Errorf("Type1 implements incorrect number of types: %v", len(type1Implements))
 		return
 	}
@@ -398,7 +402,7 @@ func TestIntrospectQuery_unions(t *testing.T) {
 
 	type2Implements := schema.GetImplements(schema.Types["Type2"])
 	// type 1 implements only one type
-	if len(type2Implements) != 1 {
+	if len(type2Implements) != 2 {
 		t.Errorf("Type2 implements incorrect number of types: %v", len(type2Implements))
 		return
 	}
