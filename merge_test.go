@@ -362,7 +362,7 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 			`,
 		},
 		{
-			"Conflicting name of multipe arguments",
+			"Conflicting name of multiple arguments",
 			`
 				type User {
 					firstName(url: String, url2: String): String!

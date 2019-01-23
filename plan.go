@@ -427,7 +427,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 				return nil, err
 			}
 
-			// if the step has a definiton for this fragment
+			// if the step has a definition for this fragment
 			if config.step.FragmentDefinitions.ForName(defn.Name) == nil {
 				// we're going to leave a different fragment definition behind for this step
 				config.step.FragmentDefinitions = append(config.step.FragmentDefinitions,

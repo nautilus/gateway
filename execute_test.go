@@ -519,7 +519,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 		return
 	}
 
-	// since 3 errors were thrown we need to make sure we actually recieved an error list
+	// since 3 errors were thrown we need to make sure we actually received an error list
 	list, ok := err.(graphql.ErrorList)
 	if !ok {
 		t.Error("Error was not an error list")
