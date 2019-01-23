@@ -128,6 +128,20 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 			`,
 		},
 		{
+			"Different Fields",
+			`
+				input Foo {
+					firstName: String!
+					lastName: String!
+				}
+			`,
+			`
+				input Foo {
+					lastName: String!
+				}
+			`,
+		},
+		{
 			"Conflicting directives",
 			`
 				input Foo {
@@ -513,6 +527,36 @@ func TestMergeSchema_union(t *testing.T) {
 				union Photo = NotCatPhoto | NotDogPhoto
 			`,
 		},
+		{
+			"Different number of subtypes",
+			`
+				type CatPhoto {
+					species: String
+				}
+
+				type DogPhoto {
+					species: String
+				}
+
+				union Photo = CatPhoto | DogPhoto
+			`,
+			`
+				type CatPhoto {
+					url: String
+				}
+
+				type DogPhoto {
+					url: String
+				}
+
+				type LemurPhoto {
+					url: String
+				}
+
+
+				union Photo = CatPhoto | DogPhoto | LemurPhoto
+			`,
+		},
 	})
 }
 
@@ -592,6 +636,21 @@ func TestMergeSchema_interfaces(t *testing.T) {
 				}
 			`,
 			`
+				interface Foo {
+					name: String
+				}
+			`,
+		},
+		{
+			"Different Descriptions",
+			`
+				"description"
+				interface Foo {
+					name: String!
+				}
+			`,
+			`
+				"not-description"
 				interface Foo {
 					name: String
 				}
