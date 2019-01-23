@@ -497,8 +497,6 @@ func mergeValuesEqual(value1, value2 *ast.Value) error {
 		return errors.New("encountered different raw values")
 	}
 
-	fmt.Println(value1.Raw, value2.Raw)
-
 	return nil
 }
 

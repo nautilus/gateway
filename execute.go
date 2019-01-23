@@ -91,7 +91,6 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 
 			case err := <-errCh:
 				if err != nil {
-					fmt.Println("Error! ", err)
 					errMutex.Lock()
 					// if the error was a list
 					if errList, ok := err.(graphql.ErrorList); ok {
@@ -189,7 +188,6 @@ func executeStep(
 		Variables:     variables,
 	}, &queryResult)
 	if err != nil {
-		fmt.Println("ERROR", err.Error())
 		log.Warn("Network Error: ", err)
 		errCh <- err
 		return
