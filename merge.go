@@ -71,6 +71,8 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				// use the declaration that we got from the new schema
 				result.Types[name] = definition
 
+				result.AddPossibleType(name, definition)
+
 				// we're done with this definition
 				continue
 			}
@@ -94,6 +96,11 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 
 				// register the type as an implementer of itself
 				result.AddPossibleType(name, definition)
+
+				// each interface that this type implements needs to be registered
+				for _, iface := range definition.Interfaces {
+					result.AddPossibleType(iface, definition)
+				}
 
 				// we're done with this type
 				continue
@@ -194,6 +201,26 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 
 		// its safe to copy over the definition
 		previousFields = append(previousFields, newField)
+	}
+
+	// make sure the 2 implement the same number of interfaces
+	if len(previousDefinition.Interfaces) != len(newDefinition.Interfaces) {
+		return errors.New("object types have different number of interfaces")
+	}
+	if len(previousDefinition.Interfaces) > 0 {
+		// build a unique list of every interface
+		previousInterfaces := Set{}
+		for _, iface := range previousDefinition.Interfaces {
+			previousInterfaces.Add(iface)
+		}
+
+		// make sure that the new definition is in the same interfaces
+		for _, iface := range newDefinition.Interfaces {
+			if _, ok := previousInterfaces[iface]; !ok {
+				return errors.New("object type implements and inconsistent list of interfaces")
+			}
+		}
+
 	}
 
 	// copy over the new fields for this type definition

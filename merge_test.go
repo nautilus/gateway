@@ -81,7 +81,11 @@ func TestMergeSchema_assignMutationType(t *testing.T) {
 func TestMergeSchema_objectTypes(t *testing.T) {
 	// create the first schema
 	originalSchema, err := graphql.LoadSchema(`
-		type User {
+		interface Foo {
+			firstName: String!
+		}
+
+		type User implements Foo {
 			firstName: String!
 		}
 	`)
@@ -90,7 +94,11 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 	t.Run("Merge fields", func(t *testing.T) {
 		// merge the schema with one that should work
 		schema, err := testMergeSchemas(originalSchema, `
-			type User {
+			interface Foo {
+				firstName: String!
+			}
+
+			type User implements Foo {
 				lastName: String!
 			}
 		`)
@@ -139,6 +147,14 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 			`
 				type User {
 					firstName: Int
+				}
+			`,
+		},
+		{
+			"Conflicting Implements",
+			`
+				type User {
+					firstName: String!
 				}
 			`,
 		},
@@ -310,6 +326,10 @@ func TestMergeSchema_interfaces(t *testing.T) {
 		interface Foo {
 			name: String!
 		}
+
+		type User implements Foo {
+			name: String!
+		}
 	`)
 	// make sure nothing went wrong
 	if !assert.Nil(t, err, "original schema didn't parse") {
@@ -318,14 +338,37 @@ func TestMergeSchema_interfaces(t *testing.T) {
 
 	t.Run("Matching", func(t *testing.T) {
 		// merge the schema with one that should work
-		_, err := testMergeSchemas(originalSchema, `
+		schema, err := testMergeSchemas(originalSchema, `
 			interface Foo {
+				name: String!
+			}
+
+			type NotUser implements Foo {
 				name: String!
 			}
 		`)
 		if err != nil {
 			t.Error(err.Error())
+			return
 		}
+
+		possibleTypes := schema.GetPossibleTypes(schema.Types["Foo"])
+		// we need to make sure that the interface has 3 possible types: Foo, User, and NotUser
+		if len(possibleTypes) != 3 {
+			t.Errorf("Interface has incorrect number of types. Expected 3, found %v", len(schema.GetPossibleTypes(schema.Types["Foo"])))
+			return
+		}
+
+		// keep the unique set of the types we visisted
+		visited := Set{}
+		for _, possibleType := range possibleTypes {
+			visited.Add(possibleType.Name)
+		}
+
+		assert.True(t, visited["Foo"], "did not have Foo in possible type")
+		assert.True(t, visited["User"], "did not have User in possible type")
+		assert.True(t, visited["NotUser"], "did not have NotUser in possible type")
+
 	})
 
 	// the table we are testing
@@ -378,7 +421,6 @@ func testMergeRunNegativeTable(t *testing.T, original *ast.Schema, table []testM
 		t.Run(row.Message, func(t *testing.T) {
 			// we're assuming the test needs to fail
 			_, err := testMergeSchemas(original, row.Schema)
-
 			if err == nil {
 				t.Error("Did not encounter an error when one was expected")
 			}
