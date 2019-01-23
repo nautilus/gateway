@@ -193,16 +193,19 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 	for _, newField := range newDefinition.Fields {
 		// look up if we already know about this field
 		field := previousFields.ForName(newField.Name)
-		// if we already have that field defined and it has a different type and the one from the source schema
-		if field != nil && field.Type.String() != newField.Type.String() {
-			return errors.New("schema merge conflict: Two schemas cannot the same field defined for the same type")
-		}
 
-		// if we haven't seen the field
-		if field == nil {
+		// if we already know about the field
+		if field != nil {
+			// and they aren't equal
+			if err := mergeFieldsEqual(field, newField); err != nil {
+				//  we don't allow 2 fields that have different types
+				return err
+			}
+		} else {
 			// its safe to copy over the definition
 			previousFields = append(previousFields, newField)
 		}
+
 	}
 
 	// make sure the 2 implement the same number of interfaces
@@ -224,6 +227,11 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 func mergeInputObjects(result *ast.Schema, object1, object2 *ast.Definition) error {
 	// if the field list isn't the same
 	if err := mergeFieldListEqual(object1.Fields, object2.Fields); err != nil {
+		return err
+	}
+
+	// check directives
+	if err := mergeDirectiveListsEqual(object1.Directives, object2.Directives); err != nil {
 		return err
 	}
 
@@ -484,11 +492,12 @@ func mergeValuesEqual(value1, value2 *ast.Value) error {
 	if value1.Kind != value2.Kind {
 		return errors.New("encountered inconsistent kinds")
 	}
-
 	// if the raw values are not the same
 	if value1.Raw != value2.Raw {
 		return errors.New("encountered different raw values")
 	}
+
+	fmt.Println(value1.Raw, value2.Raw)
 
 	return nil
 }

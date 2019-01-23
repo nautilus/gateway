@@ -113,9 +113,14 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 	})
 
 	// the table we are testing
-	testMergeRunNegativeTable(t, originalSchema, []testMergeTableRow{
+	testMergeRunNegativeTable(t, []testMergeTableRow{
 		{
 			"Conflicting Fields",
+			`
+				input Foo {
+					firstName: String!
+				}
+			`,
 			`
 				input Foo {
 					lastName: String!
@@ -124,6 +129,11 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 		},
 		{
 			"Conflicting directives",
+			`
+				input Foo {
+					lastName: String!
+				}
+			`,
 			`
 				directive @foo on INPUT_OBJECT
 
@@ -136,32 +146,24 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 }
 
 func TestMergeSchema_objectTypes(t *testing.T) {
-	// create the first schema
-	originalSchema, err := graphql.LoadSchema(`
-		interface Foo {
-			firstName: String!
-		}
-
-		type User implements Foo {
-			firstName: String!
-		}
-	`)
-	assert.Nil(t, err)
-
 	t.Run("Merge fields", func(t *testing.T) {
-		// merge the schema with one that should work
-		schema, err := testMergeSchemas(t, originalSchema, `
-			interface Foo {
-				firstName: String!
-			}
-
-			type User implements Foo {
-				lastName: String!
+		// create the first schema
+		originalSchema, err := graphql.LoadSchema(`
+			type User {
 				firstName: String!
 			}
 		`)
+		assert.Nil(t, err)
+
+		// merge the schema with one that should work
+		schema, err := testMergeSchemas(t, originalSchema, `
+				type User {
+					lastName: String!
+				}
+		`)
 		if err != nil {
 			t.Error(err.Error())
+			return
 		}
 
 		// look up the definition for the User type
@@ -201,15 +203,16 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 	})
 
 	// the table we are testing
-	testMergeRunNegativeTable(t, originalSchema, []testMergeTableRow{
+	testMergeRunNegativeTable(t, []testMergeTableRow{
 		{
 			"Conflicting Field Type",
 			`
-				interface Foo {
-					firstName: String!
+				type User {
+					firstName: String
 				}
-
-				type User implements Foo {
+			`,
+			`
+				type User {
 					firstName: Int
 				}
 			`,
@@ -217,22 +220,49 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 		{
 			"Conflicting Implements",
 			`
+				interface Foo {
+					firstName: String
+				}
+
+				type User implements Foo {
+					firstName: String
+				}
+			`,
+			`
 				type User {
-					firstName: String!
+					firstName: String
 				}
 			`,
 		},
 		{
-			"Conflicting directives",
+			"Conflicting declaration directives",
 			`
-				interface Foo {
-					firstName: String!
+				directive @foo(url: String!) on OBJECT
+
+				type User @foo {
+					firstName: String
 				}
+			`,
+			`
+				type User {
+					firstName: String
+				}
+			`,
+		},
+		{
+			"Conflicting field directives",
+			`
+				directive @foo(url: String!) on FIELD_DEFINITION
 
-				directive @foo on OBJECT
+				type User {
+					firstName: String! @foo(url: "3")
+				}
+			`,
+			`
+				directive @foo(url: String!) on FIELD_DEFINITION
 
-				type User implements Foo @foo {
-					firstName: String!
+				type User {
+					firstName: String! @foo(url: "2")
 				}
 			`,
 		},
@@ -240,22 +270,17 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 }
 
 func TestMergeSchema_enums(t *testing.T) {
-	// the directive that we are always comparing to
-	originalSchema, err := graphql.LoadSchema(`
-		enum Foo {
-			Bar
-			Baz
-		}
-	`)
-	// make sure nothing went wrong
-	if !assert.Nil(t, err, "original schema didn't parse") {
-		return
-	}
-
 	// the table we are testing
-	testMergeRunNegativeTable(t, originalSchema, []testMergeTableRow{
+	testMergeRunNegativeTable(t, []testMergeTableRow{
 		{
-			"Conflicting Names", `
+			"Conflicting Names",
+			`
+				enum Foo {
+					Bar
+					Baz
+				}
+			`,
+			`
 				enum Foo {
 					Bar
 				}
@@ -265,19 +290,19 @@ func TestMergeSchema_enums(t *testing.T) {
 }
 
 func TestMergeSchema_directives(t *testing.T) {
-	// the directive that we are always comparing to
-	originalSchema, err := graphql.LoadSchema(`
-		"description"
-		directive @foo(url: String = "url") on FIELD_DEFINITION
-	`)
-	// make sure nothing went wrong
-	if !assert.Nil(t, err, "original schema didn't parse") {
-		return
-	}
-
 	t.Run("Matching", func(t *testing.T) {
+		// the directive that we are always comparing to
+		originalSchema, err := graphql.LoadSchema(`
+			"description"
+			directive @foo(url: String = "url") on FIELD_DEFINITION
+		`)
+		// make sure nothing went wrong
+		if !assert.Nil(t, err, "original schema didn't parse") {
+			return
+		}
+
 		// merge the schema with one that should work
-		_, err := testMergeSchemas(t, originalSchema, `
+		_, err = testMergeSchemas(t, originalSchema, `
 			"description"
 			directive @foo(url: String = "url") on FIELD_DEFINITION
 		`)
@@ -287,46 +312,60 @@ func TestMergeSchema_directives(t *testing.T) {
 	})
 
 	// run the table of tests
-	testMergeRunNegativeTable(t, originalSchema, []testMergeTableRow{
+	testMergeRunNegativeTable(t, []testMergeTableRow{
 		{
 			"Different Argument Type",
 			`
-				"description"
-				directive @foo(url: String! = "url") on FIELD_DEFINITION
+				directive @foo(url: String) on FIELD_DEFINITION
+			`,
+			`
+				directive @foo(url: String!) on FIELD_DEFINITION
 			`,
 		},
 		{
 			"Different Arguments",
 			`
-				"description"
-				directive @foo(url: String = "url", number: Int) on FIELD_DEFINITION
+				directive @foo(url: String) on FIELD_DEFINITION
+			`,
+			`
+				directive @foo(url: String, number: Int) on FIELD_DEFINITION
 			`,
 		},
 		{
 			"Different Location",
 			`
-				"description"
-				directive @foo(url: String = "url") on FRAGMENT_SPREAD
+				directive @foo on FIELD_DEFINITION
+			`,
+			`
+				directive @foo on FRAGMENT_SPREAD
 			`,
 		},
 		{
 			"Different Number of Locations",
 			`
-				"description"
-				directive @foo(url: String = "url") on FRAGMENT_SPREAD | FIELD_DEFINITION
+				directive @foo on FIELD_DEFINITION
+			`,
+			`
+				directive @foo on FRAGMENT_SPREAD | FIELD_DEFINITION
 			`,
 		},
 		{
 			"Different Description",
 			`
+				"description"
+				directive @foo on FIELD_DEFINITION
+			`,
+			`
 				"other description"
-				directive @foo(url: String = "url") on FIELD_DEFINITION
+				directive @foo on FIELD_DEFINITION
 			`,
 		},
 		{
 			"Different Default Value",
 			`
-				"description"
+				directive @foo(url: String = "url") on FIELD_DEFINITION
+			`,
+			`
 				directive @foo(url: String = "not-url") on FIELD_DEFINITION
 			`,
 		},
@@ -334,24 +373,24 @@ func TestMergeSchema_directives(t *testing.T) {
 }
 
 func TestMergeSchema_union(t *testing.T) {
-	// the directive that we are always comparing to
-	originalSchema, err := graphql.LoadSchema(`
-		type CatPhoto {
-			species: String
-		}
-
-		type DogPhoto {
-			species: String
-		}
-
-		union Photo = CatPhoto | DogPhoto
-	`)
-	// make sure nothing went wrong
-	if !assert.Nil(t, err, "original schema didn't parse") {
-		return
-	}
-
 	t.Run("Matching", func(t *testing.T) {
+		// the directive that we are always comparing to
+		originalSchema, err := graphql.LoadSchema(`
+			type CatPhoto {
+				species: String
+			}
+
+			type DogPhoto {
+				species: String
+			}
+
+			union Photo = CatPhoto | DogPhoto
+		`)
+		// make sure nothing went wrong
+		if !assert.Nil(t, err, "original schema didn't parse") {
+			return
+		}
+
 		// merge the schema with one that should work
 		schema, err := testMergeSchemas(t, originalSchema, `
 			type CatPhoto {
@@ -380,9 +419,20 @@ func TestMergeSchema_union(t *testing.T) {
 	})
 
 	// the table we are testing
-	testMergeRunNegativeTable(t, originalSchema, []testMergeTableRow{
+	testMergeRunNegativeTable(t, []testMergeTableRow{
 		{
 			"Different Subtypes",
+			`
+				type CatPhoto {
+					species: String
+				}
+
+				type DogPhoto {
+					species: String
+				}
+
+				union Photo = CatPhoto | DogPhoto
+			`,
 			`
 				type NotCatPhoto {
 					url: String
@@ -399,22 +449,22 @@ func TestMergeSchema_union(t *testing.T) {
 }
 
 func TestMergeSchema_interfaces(t *testing.T) {
-	// the directive that we are always comparing to
-	originalSchema, err := graphql.LoadSchema(`
-		interface Foo {
-			name: String!
-		}
-
-		type User implements Foo {
-			name: String!
-		}
-	`)
-	// make sure nothing went wrong
-	if !assert.Nil(t, err, "original schema didn't parse") {
-		return
-	}
-
 	t.Run("Matching", func(t *testing.T) {
+		// the directive that we are always comparing to
+		originalSchema, err := graphql.LoadSchema(`
+			interface Foo {
+				name: String!
+			}
+
+			type User implements Foo {
+				name: String!
+			}
+		`)
+		// make sure nothing went wrong
+		if !assert.Nil(t, err, "original schema didn't parse") {
+			return
+		}
+
 		// merge the schema with one that should work
 		schema, err := testMergeSchemas(t, originalSchema, `
 			interface Foo {
@@ -450,9 +500,14 @@ func TestMergeSchema_interfaces(t *testing.T) {
 	})
 
 	// the table we are testing
-	testMergeRunNegativeTable(t, originalSchema, []testMergeTableRow{
+	testMergeRunNegativeTable(t, []testMergeTableRow{
 		{
 			"Different Field Directives",
+			`
+				interface Foo {
+					name: String!
+				}
+			`,
 			`
 				directive @foo on FIELD_DEFINITION
 
@@ -465,12 +520,22 @@ func TestMergeSchema_interfaces(t *testing.T) {
 			"Different Field Types",
 			`
 				interface Foo {
+					name: String!
+				}
+			`,
+			`
+				interface Foo {
 					name: String
 				}
 			`,
 		},
 		{
 			"Different Fields",
+			`
+				interface Foo {
+					name: String!
+				}
+			`,
 			`
 				interface Foo {
 					name: String!
@@ -482,6 +547,11 @@ func TestMergeSchema_interfaces(t *testing.T) {
 			"Different Arguments",
 			`
 				interface Foo {
+					name: String!
+				}
+			`,
+			`
+				interface Foo {
 					name(foo: String): String!
 				}
 			`,
@@ -491,14 +561,20 @@ func TestMergeSchema_interfaces(t *testing.T) {
 
 type testMergeTableRow struct {
 	Message string
-	Schema  string
+	Schema1 string
+	Schema2 string
 }
 
-func testMergeRunNegativeTable(t *testing.T, original *ast.Schema, table []testMergeTableRow) {
+func testMergeRunNegativeTable(t *testing.T, table []testMergeTableRow) {
 	for _, row := range table {
 		t.Run(row.Message, func(t *testing.T) {
+			original, _ := graphql.LoadSchema(row.Schema1)
+			if original == nil {
+				t.Error("could not build schema")
+			}
+
 			// we're assuming the test needs to fail
-			_, err := testMergeSchemas(t, original, row.Schema)
+			_, err := testMergeSchemas(t, original, row.Schema2)
 			if err == nil {
 				t.Error("Did not encounter an error when one was expected")
 			}
