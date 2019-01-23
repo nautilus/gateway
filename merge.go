@@ -204,27 +204,40 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 	}
 
 	// make sure the 2 implement the same number of interfaces
-	if len(previousDefinition.Interfaces) != len(newDefinition.Interfaces) {
-		return errors.New("object types have different number of interfaces")
+	if err := mergeStringSliceEquivalent(previousDefinition.Interfaces, newDefinition.Interfaces); err != nil {
+		return fmt.Errorf("object type does not implement a consistent set of interfaces. %s", err.Error())
 	}
-	if len(previousDefinition.Interfaces) > 0 {
-		// build a unique list of every interface
-		previousInterfaces := Set{}
-		for _, iface := range previousDefinition.Interfaces {
-			previousInterfaces.Add(iface)
-		}
 
-		// make sure that the new definition is in the same interfaces
-		for _, iface := range newDefinition.Interfaces {
-			if _, ok := previousInterfaces[iface]; !ok {
-				return errors.New("object type implements and inconsistent list of interfaces")
-			}
-		}
-
+	// make sure that the 2 directive lists are the same
+	if err := mergeDirectiveListsEqual(previousDefinition.Directives, newDefinition.Directives); err != nil {
+		return err
 	}
 
 	// copy over the new fields for this type definition
 	previousDefinition.Fields = previousFields
+
+	return nil
+}
+
+func mergeStringSliceEquivalent(slice1, slice2 []string) error {
+	if len(slice1) != len(slice2) {
+		return errors.New("object types have different number of entries")
+	}
+	if len(slice1) > 0 {
+		// build a unique list of every interface
+		previousInterfaces := Set{}
+		for _, iface := range slice1 {
+			previousInterfaces.Add(iface)
+		}
+
+		// make sure that the new definition is in the same interfaces
+		for _, iface := range slice2 {
+			if _, ok := previousInterfaces[iface]; !ok {
+				return errors.New("inconsistent values")
+			}
+		}
+
+	}
 
 	return nil
 }
@@ -247,17 +260,8 @@ func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefi
 		return fmt.Errorf("union %s did not have a consistent number of sub types", previousDefinition.Name)
 	}
 
-	// pass over the types in the first definition
-	previousTypes := Set{}
-	for _, subType := range previousDefinition.Types {
-		previousTypes.Add(subType)
-	}
-
-	// make sure each type of one is present in the other
-	for _, subType := range newDefinition.Types {
-		if !previousTypes.Has(subType) {
-			return fmt.Errorf("union %s did not have a consistent set of subtypes", previousDefinition.Name)
-		}
+	if err := mergeStringSliceEquivalent(previousDefinition.Types, newDefinition.Types); err != nil {
+		return err
 	}
 
 	// nothing is wrong

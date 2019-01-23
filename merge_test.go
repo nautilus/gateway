@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/alecaivazis/graphql-gateway/graphql"
@@ -93,7 +94,7 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 
 	t.Run("Merge fields", func(t *testing.T) {
 		// merge the schema with one that should work
-		schema, err := testMergeSchemas(originalSchema, `
+		schema, err := testMergeSchemas(t, originalSchema, `
 			interface Foo {
 				firstName: String!
 			}
@@ -145,7 +146,11 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 		{
 			"Conflicting Field Type",
 			`
-				type User {
+				interface Foo {
+					firstName: String!
+				}
+
+				type User implements Foo {
 					firstName: Int
 				}
 			`,
@@ -154,6 +159,20 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 			"Conflicting Implements",
 			`
 				type User {
+					firstName: String!
+				}
+			`,
+		},
+		{
+			"Conflicting directives",
+			`
+				interface Foo {
+					firstName: String!
+				}
+
+				directive @foo on OBJECT
+
+				type User implements Foo @foo {
 					firstName: String!
 				}
 			`,
@@ -199,7 +218,7 @@ func TestMergeSchema_directives(t *testing.T) {
 
 	t.Run("Matching", func(t *testing.T) {
 		// merge the schema with one that should work
-		_, err := testMergeSchemas(originalSchema, `
+		_, err := testMergeSchemas(t, originalSchema, `
 			"description"
 			directive @foo(url: String = "url") on FIELD_DEFINITION
 		`)
@@ -275,7 +294,7 @@ func TestMergeSchema_union(t *testing.T) {
 
 	t.Run("Matching", func(t *testing.T) {
 		// merge the schema with one that should work
-		schema, err := testMergeSchemas(originalSchema, `
+		schema, err := testMergeSchemas(t, originalSchema, `
 			type CatPhoto {
 				species: String
 			}
@@ -338,7 +357,7 @@ func TestMergeSchema_interfaces(t *testing.T) {
 
 	t.Run("Matching", func(t *testing.T) {
 		// merge the schema with one that should work
-		schema, err := testMergeSchemas(originalSchema, `
+		schema, err := testMergeSchemas(t, originalSchema, `
 			interface Foo {
 				name: String!
 			}
@@ -420,7 +439,7 @@ func testMergeRunNegativeTable(t *testing.T, original *ast.Schema, table []testM
 	for _, row := range table {
 		t.Run(row.Message, func(t *testing.T) {
 			// we're assuming the test needs to fail
-			_, err := testMergeSchemas(original, row.Schema)
+			_, err := testMergeSchemas(t, original, row.Schema)
 			if err == nil {
 				t.Error("Did not encounter an error when one was expected")
 			}
@@ -428,9 +447,13 @@ func testMergeRunNegativeTable(t *testing.T, original *ast.Schema, table []testM
 	}
 }
 
-func testMergeSchemas(schema1 *ast.Schema, schema2Str string) (*ast.Schema, error) {
+func testMergeSchemas(t *testing.T, schema1 *ast.Schema, schema2Str string) (*ast.Schema, error) {
 	// create a schema with the provided content
 	schema2, _ := graphql.LoadSchema(schema2Str)
+	if schema2 == nil {
+		t.Error("could not build schema")
+		return nil, errors.New("could not build schema")
+	}
 
 	// create remote schemas with each
 	gateway, err := New([]*graphql.RemoteSchema{
