@@ -7,6 +7,14 @@ A standalone service designed to consolidate your graphql APIs into one endpoint
 For a more detailed description of this project's
 motivation read [this post](). For a guide to getting started read [this post]().
 
+
+## Table of Contents
+
+1. [Running the Gateway Directly](#running-the-executable-directly)
+1. [Customizing the Gateway](#customizing-the-gateway)
+   1. [Further Customization](#further-customization)
+
+
 ## Running the Executable Directly
 
 The simplest way to run a gateway is to download the executable
