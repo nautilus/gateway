@@ -9,3 +9,9 @@ install-ci:
 install:
   summary: install the dependencies to develop locally
   command: go get ./...
+
+test:coverage:
+  summary: run the tests, generate a coverage report, and report it to coveralls
+  command: |-
+    go test -v -covermode=atomic -coverprofile=coverage.out ./...
+    $HOME/gopath/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN

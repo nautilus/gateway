@@ -13,5 +13,5 @@ install:
   - run install-ci
 
 script:
-  - go test -v -covermode=atomic -coverprofile=coverage.out ./...
-  - $HOME/gopath/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN
+  # generate and report the test coverage
+  - run test:coverage

@@ -2,8 +2,12 @@ github.com/99designs/gqlgen v0.7.1 h1:uRf7C+/33spvj24B5fKAExQcHbZkJHE5yjoSgSYBmi
 github.com/99designs/gqlgen v0.7.1/go.mod h1:KSQDfLlTTGmzlRgLGm6HeKKKo598l5E2svEM6Nz2Jnw=
 github.com/AlecAivazis/run v0.4.1 h1:WavXCjR8OSi4ECxRKffXUEjwCzhTgWPD0IbK6WBZbiE=
 github.com/AlecAivazis/run v0.4.1/go.mod h1:9nY+mGMhUcImvNo7KDVGr1VsewcfowDoc2yMpVKpDbA=
+github.com/AlecAivazis/run v1.0.0 h1:yzA+Uf4f3vc8UNJQHQzcVJ75Bp5SOHmoY1Urc37ZITs=
+github.com/AlecAivazis/run v1.0.0/go.mod h1:9nY+mGMhUcImvNo7KDVGr1VsewcfowDoc2yMpVKpDbA=
 github.com/agnivade/levenshtein v1.0.1 h1:3oJU7J3FGFmyhn8KHjmVaZCN5hxTr7GxgRue+sxIXdQ=
 github.com/agnivade/levenshtein v1.0.1/go.mod h1:CURSv5d9Uaml+FovSIICkLbAUZ9S4RqaHDIsdSBg7lM=
+github.com/alecaivazis/run v0.4.1 h1:sg81zhAQ9g69gleJacbYdyKh/YG2jJb5T5bH71egR0w=
+github.com/alecaivazis/run v0.4.1/go.mod h1:h6IFNZaFucPAvclL5i4d57i9hf//7dsZFvanPnsfnpI=
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883 h1:bvNMNQO63//z+xNgfBlViaCIJKLlCJ6/fmUseuG0wVQ=
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883/go.mod h1:rCTlJbsFo29Kk6CurOXKm700vrz8f0KW0JNfpkRJY/8=
 github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6/go.mod h1:grANhF5doyWs3UAsr3K4I6qtAmlQcZDesFNEHPZAzj8=

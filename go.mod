@@ -2,8 +2,9 @@ module github.com/alecaivazis/graphql-gateway
 
 require (
 	github.com/99designs/gqlgen v0.7.1
-	github.com/AlecAivazis/run v0.4.1 // indirect
+	github.com/AlecAivazis/run v1.0.0 // indirect
 	github.com/agnivade/levenshtein v1.0.1 // indirect
+	github.com/alecaivazis/run v0.4.1 // indirect
 	github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883 // indirect
 	github.com/carted/graphql v0.7.6
 	github.com/fatih/color v1.7.0 // indirect
