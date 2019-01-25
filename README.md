@@ -96,15 +96,24 @@ func main() {
 
 ### Further Customization
 
-The `Gateway` is made up of 3 components: 
+The `Gateway` is made up of 4 interface-driven components: 
 
  * the `Merger` is responsible for taking a list of `graphql.RemoteSchema` and merging them into 
  a single schema. Along the way, it keeps track of what fields are defined at what locations so 
  that the `Planner` can do its job.
  
  * the `Planner`s job is to take an incoming query and construct a query plan that will resolve 
- the requested query.
+ the requested query. These query plans have a `Queryer` embedded in them for more flexibility
+ 
+ * the `Queryer` is responsible for actually performing the required query.
  
  * the `Executor` then takes the query plan and executes the query with the provided variables 
  and context representing the current user.
 
+At the moment, `graphql-gateway` only provides a single implementation of `Merger`, `Planner`, and 
+`Executor`. If you have a custom implementation, you can configure the gateway to use them at 
+construction time using any number of `gateway.Configurator`s:
+
+```golang
+gateway.New(schemas, gateway.WithPlanner(MyCustomPlanner{}), gateway.WithExecutor(MyCustomExecutor{}))
+```
