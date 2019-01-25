@@ -93,8 +93,17 @@ func main() {
 }
 ```
 
+### Authentication and Authorization
 
-### Further Customization
+Currently the gateway has no opinion on a method for authentication and authorization.
+Descisions for wether a user can or cannot do something is pushed down to the services
+handling the queries. To pass information about the current request to the backing
+services, information can be attach to the request context and then used when executing
+a query.
+
+See the [auth example](./examples/auth) for more information.
+
+### Customizing Internal Algorithms
 
 The `Gateway` is made up of 4 interface-driven components:
 
@@ -103,9 +112,9 @@ The `Gateway` is made up of 4 interface-driven components:
   that the `Planner` can do its job.
 
 - the `Planner`s job is to take an incoming query and construct a query plan that will resolve
-  the requested query. These query plans have a `Queryer` embedded in them for more flexibility
-
-- the `Queryer` is responsible for actually performing the required query.
+  the requested query. These query plans have a `Queryer` embedded in them for more flexibility.
+  Any kind of query-time changes have to be made to the executor since planning happens once for
+  a given query.
 
 - the `Executor` then takes the query plan and executes the query with the provided variables
   and context representing the current user.
