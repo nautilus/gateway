@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -96,7 +95,6 @@ func IntrospectRemoteSchemas(urls ...string) ([]*RemoteSchema, error) {
 	schemas := []*RemoteSchema{}
 
 	for _, service := range urls {
-		fmt.Println("introspecting", service)
 		// introspect the locations
 		schema, err := IntrospectRemoteSchema(service)
 		if err != nil {
