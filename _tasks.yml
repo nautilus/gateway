@@ -1,5 +1,5 @@
-install-ci:
-  summary: install the necessary dependencies to run in CI
+install:ci:
+  summary: install the necessary dependencies to run in CI. does not run `install`
   command: |-
     go get \
         golang.org/x/tools/cmd/cover \

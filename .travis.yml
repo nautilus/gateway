@@ -10,7 +10,7 @@ install:
   # download our task runner
   - go get github.com/AlecAivazis/run
   # install the ci dependencies
-  - run install-ci
+  - run install:ci
 
 script:
   # generate and report the test coverage
