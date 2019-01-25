@@ -20,7 +20,7 @@ require (
 	github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d // indirect
 	github.com/smartystreets/goconvey v0.0.0-20181108003508-044398e4856c // indirect
 	github.com/spf13/cobra v0.0.3
-	github.com/spf13/viper v1.3.1 // indirect
+	github.com/spf13/viper v1.3.1
 	github.com/stretchr/testify v1.2.2
 	github.com/urfave/cli v1.20.0 // indirect
 	github.com/vektah/gqlparser v1.0.0

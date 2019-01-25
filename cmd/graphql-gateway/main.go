@@ -12,10 +12,6 @@ var rootCmd = &cobra.Command{
 	Short: "GraphQL Gateway is a standalone service to consolidate your GraphQL APIs.",
 }
 
-func init() {
-	rootCmd.AddCommand(startCmd)
-}
-
 // start the gateway executable
 func main() {
 	if err := rootCmd.Execute(); err != nil {

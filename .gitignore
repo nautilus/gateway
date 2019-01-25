@@ -1,2 +1,4 @@
 
 cmd/graphql-gateway/graphql-gateway
+
+cmd/graphql-gateway/gateway.json

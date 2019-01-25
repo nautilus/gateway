@@ -6,35 +6,25 @@ import (
 
 	gateway "github.com/alecaivazis/graphql-gateway"
 	"github.com/alecaivazis/graphql-gateway/graphql"
-	"github.com/spf13/cobra"
 )
 
-var startCmd = &cobra.Command{
-	Use:   "start",
-	Short: "Start the gateway",
-	Run:   startServer,
-}
+func ListenAndServe(services []string) {
+	// build up the list of remote schemas
+	schemas := []*graphql.RemoteSchema{}
 
-var Port string
+	for _, service := range services {
+		// introspect the locations
+		schema, err := graphql.IntrospectRemoteSchema(service)
+		if err != nil {
+			panic(err)
+		}
 
-func init() {
-	startCmd.Flags().StringVarP(&Port, "port", "p", "", "The port to listen on.")
-
-}
-
-func startServer(cmd *cobra.Command, args []string) {
-	// introspect the apis
-	serviceASchema, err := graphql.IntrospectRemoteSchema("http://localhost:4000")
-	if err != nil {
-		panic(err)
-	}
-	serviceBSchema, err := graphql.IntrospectRemoteSchema("http://localhost:4001")
-	if err != nil {
-		panic(err)
+		// add the schema to the list
+		schemas = append(schemas, schema)
 	}
 
 	// create the gateway instance
-	gateway, err := gateway.New([]*graphql.RemoteSchema{serviceASchema, serviceBSchema})
+	gateway, err := gateway.New(schemas)
 	if err != nil {
 		panic(err)
 	}
