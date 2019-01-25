@@ -9,18 +9,10 @@ import (
 )
 
 func ListenAndServe(services []string) {
-	// build up the list of remote schemas
-	schemas := []*graphql.RemoteSchema{}
-
-	for _, service := range services {
-		// introspect the locations
-		schema, err := graphql.IntrospectRemoteSchema(service)
-		if err != nil {
-			panic(err)
-		}
-
-		// add the schema to the list
-		schemas = append(schemas, schema)
+	// introspect the schemas
+	schemas, err := graphql.IntrospectRemoteSchemas(services...)
+	if err != nil {
+		panic(err)
 	}
 
 	// create the gateway instance
