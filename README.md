@@ -5,14 +5,7 @@
 A standalone service designed to consolidate your graphql APIs into one endpoint.
 
 For a more detailed description of this project's
-motivation read [this post](). For a guide to getting started read [this post]().
-
-
-## Table of Contents
-
-1. [Running the Gateway Directly](#running-the-executable-directly)
-1. [Customizing the Gateway](#customizing-the-gateway)
-   1. [Further Customization](#further-customization)
+motivation read [this post](). For a guide to getting started read [this post]()
 
 
 ## Running the Executable Directly
@@ -62,14 +55,14 @@ func main() {
 	}
 
 	// create the gateway instance
-	gateway, err := gateway.New([]*graphql.RemoteSchema{serviceASchema, serviceBSchema})
+	gateway, err := gateway.New(schemas)
 	if err != nil {
 		panic(err)
 	}
 }
 ```
 
-The `Gateway` provides 2 different handlers that can plug into whatever web server you prefer:
+A `Gateway` provides 2 different handlers that can plug into whatever web server you prefer:
 
 - `gateway.GraphQLHandler` responds to both `GET` and `POST` requests as described
   [in the spec](https://graphql.org/learn/serving-over-http/).
@@ -100,6 +93,7 @@ func main() {
 	}
 }
 ```
+
 
 ### Further Customization
 
