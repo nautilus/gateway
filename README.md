@@ -105,7 +105,7 @@ See the [auth example](./examples/auth) for more information.
 
 ### Customizing Internal Algorithms
 
-The `Gateway` is made up of 4 interface-driven components:
+The `Gateway` is made up of 3 interface-driven algorithm:
 
 - the `Merger` is responsible for taking a list of `graphql.RemoteSchema` and merging them into
   a single schema. Along the way, it keeps track of what fields are defined at what locations so
@@ -121,7 +121,7 @@ The `Gateway` is made up of 4 interface-driven components:
 
 At the moment, `graphql-gateway` only provides a single implementation of `Merger`, `Planner`, and
 `Executor`. If you have a custom implementation, you can configure the gateway to use them at
-construction time using any number of `gateway.Configurator`s:
+construction time:
 
 ```golang
 gateway.New(schemas, gateway.WithPlanner(MyCustomPlanner{}), gateway.WithExecutor(MyCustomExecutor{}))
