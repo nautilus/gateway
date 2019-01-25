@@ -107,6 +107,11 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				continue
 			}
 
+			// we only want one copy of the internal stuff
+			if strings.HasPrefix(definition.Name, "__") {
+				continue
+			}
+
 			// unify handling of errors for merging
 			var err error
 
@@ -139,6 +144,11 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				result.Directives[name] = definition
 
 				// we're done with this type
+				continue
+			}
+
+			// we only want one copy of the internal stuff
+			if definition.Name == "skip" || definition.Name == "include" || definition.Name == "deprecated" {
 				continue
 			}
 
