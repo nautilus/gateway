@@ -8,16 +8,16 @@ can see their specific todo list.
 
 The general flow goes something like:
 
-- The user service defines a mutation called `loginUser` that checks if
-  the combo is valid and responds with a token.
+- The user service defines a mutation called `loginUser` that [checks if
+  the combo is valid](https://github.com/AlecAivazis/graphql-gateway/blob/examples/examples/auth/users.go#L53) and responds with a token.
 
 - Somehow (not shown here), the client holds onto this tokens and sends it
   with future requests to the gateway under the `Authorization` header.
 
-- When the gateway receives a query, it looks for the token and if its present,
+- When the gateway receives a query, it [looks for the token]() and if its present,
   sends the value as the `USER_ID` header when sending queries to the services.
 
-- The other services use the header value to perform whatever user-specific logic is
+- The other services [uses the header value]() to perform whatever user-specific logic is
   required.
 
 Keep in mind that this demo should not be taken as an example of a secure

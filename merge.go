@@ -178,7 +178,7 @@ func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, new
 		otherField := newDefinition.Fields.ForName(field.Name)
 
 		if err := mergeFieldsEqual(field, otherField); err != nil {
-			return err
+			return fmt.Errorf("encountered error merging interface %v: %v", previousDefinition.Name, err.Error())
 		}
 	}
 
@@ -199,7 +199,7 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 			// and they aren't equal
 			if err := mergeFieldsEqual(field, newField); err != nil {
 				//  we don't allow 2 fields that have different types
-				return err
+				return fmt.Errorf("encountered error merging object %v: %v", previousDefinition.Name, err.Error())
 			}
 		} else {
 			// its safe to copy over the definition
@@ -337,22 +337,22 @@ func mergeFieldsEqual(field1, field2 *ast.FieldDefinition) error {
 
 	// fields
 	if err := mergeTypesEqual(field1.Type, field2.Type); err != nil {
-		return err
+		return fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// arguments
 	if err := mergeArgumentDefinitionListEqual(field1.Arguments, field2.Arguments); err != nil {
-		return err
+		return fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// default values
 	if err := mergeValuesEqual(field1.DefaultValue, field2.DefaultValue); err != nil {
-		return err
+		return fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// directives
 	if err := mergeDirectiveListsEqual(field1.Directives, field2.Directives); err != nil {
-		return err
+		return fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// nothing went wrong
