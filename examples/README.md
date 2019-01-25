@@ -16,3 +16,5 @@ List of Examples:
 
 - [Auth](./auth) An overview of how to support authentication and authorization
   behind a gateway
+- Watch Schema (Coming Soon) A way to support CD workflows. In this example,
+  the gateway listen for some kind of event that triggers a refresh of its internal schema
