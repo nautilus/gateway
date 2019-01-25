@@ -44,11 +44,11 @@ import (
 )
 
 func main() {
-    // introspect the apis
+	// introspect the apis
 	schemas, err := graphql.IntrospectRemoteSchemas(
 		"http://localhost:3000",
 		"http://localhost:3001",
-    )
+    	)
 	if err != nil {
 		panic(err)
 	}
