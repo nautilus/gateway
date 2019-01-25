@@ -66,9 +66,8 @@ The `Gateway` provides 2 different handlers that can plug into whatever web serv
 * `gateway.GraphQLHandler` responds to both `GET` and `POST` requests as described 
 [in the spec](https://graphql.org/learn/serving-over-http/).
 * `gateway.PlaygroundHandler` responds to `GET` requests with a web-based IDE for easy exploration 
-and interprets `POST` bodies as queries to process.
+and interprets `POST`s as queries to process.
 
-The examples in this document and in the `examples` directory, use the standard `net/http` package:
 ```golang
 package main
 
@@ -103,5 +102,9 @@ The `Gateway` is made up of 3 components:
  a single schema. Along the way, it keeps track of what fields are defined at what locations so 
  that the `Planner` can do its job.
  
- * the `Planner`s job is to take an incoming query and construct a query plan that will 
+ * the `Planner`s job is to take an incoming query and construct a query plan that will resolve 
+ the requested query.
+ 
+ * the `Executor` then takes the query plan and executes the query with the provided variables 
+ and context representing the current user.
 
