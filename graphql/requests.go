@@ -88,6 +88,26 @@ func IntrospectRemoteSchema(url string) (*RemoteSchema, error) {
 	}, nil
 }
 
+// IntrospectRemoteSchemas takes a list of URLs and creates a RemoteSchema by invoking
+// graphql.IntrospectRemoteSchema at that location.
+func IntrospectRemoteSchemas(urls ...string) ([]*RemoteSchema, error) {
+	// build up the list of remote schemas
+	schemas := []*RemoteSchema{}
+
+	for _, service := range urls {
+		// introspect the locations
+		schema, err := IntrospectRemoteSchema(service)
+		if err != nil {
+			return nil, err
+		}
+
+		// add the schema to the list
+		schemas = append(schemas, schema)
+	}
+
+	return schemas, nil
+}
+
 // Query sends the query to the designated url and returns the response.
 func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 	// the payload

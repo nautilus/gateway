@@ -1,2 +1,2 @@
-
-cmd/graphql-gateway/graphql-gateway
+bin/*
+cmd

@@ -8,29 +8,25 @@ import (
 	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
-func main() {
-	// introspect the apis
-	serviceASchema, err := graphql.IntrospectRemoteSchema("http://localhost:4000")
-	if err != nil {
-		panic(err)
-	}
-	serviceBSchema, err := graphql.IntrospectRemoteSchema("http://localhost:4001")
+func ListenAndServe(services []string) {
+	// introspect the schemas
+	schemas, err := graphql.IntrospectRemoteSchemas(services...)
 	if err != nil {
 		panic(err)
 	}
 
 	// create the gateway instance
-	gateway, err := gateway.New([]*graphql.RemoteSchema{serviceASchema, serviceBSchema})
+	gw, err := gateway.New(schemas)
 	if err != nil {
 		panic(err)
 	}
 
 	// add the graphql endpoints to the router
-	http.HandleFunc("/graphql", setCORSHeaders(gateway.PlaygroundHandler))
+	http.HandleFunc("/graphql", setCORSHeaders(gw.PlaygroundHandler))
 
 	// start the server
 	fmt.Println("Starting server")
-	err = http.ListenAndServe(":3001", nil)
+	err = http.ListenAndServe(fmt.Sprintf(":%s", Port), nil)
 	if err != nil {
 		fmt.Println(err.Error())
 	}

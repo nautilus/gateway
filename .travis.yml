@@ -7,8 +7,31 @@ go:
   - "1.11"
 
 install:
-  - go get golang.org/x/tools/cmd/cover github.com/mattn/goveralls ./...
+  # download our task runner
+  - go get github.com/AlecAivazis/run
+  # install the ci dependencies
+  - run install:ci
 
 script:
-  - go test -v -covermode=atomic -coverprofile=coverage.out ./...
-  - $HOME/gopath/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN
+  # install the dependencies
+  - run install
+  # generate and report the test coverage
+  - run test:coverage
+
+before_deploy:
+  # build the binaries
+  - run build
+
+deploy:
+  # only deploy on tagged releases
+  on:
+    tags: true
+  # we need to push a github release with this tag
+  provider: releases
+  file:
+    - "graphql-gateway_darwin_amd64"
+    - "graphql-gateway_linux_amd64"
+    - "graphql-gateway_windows_amd64"
+  skip_cleanup: true
+  api_key:
+    secure: wZvr4nxpD9Yiq/AGSSnWQGi82VKJ9Lo881cC/gyD12Bb6JJN7LTBMMFsMGZ8wwL2f35W0r/z8l3PXQllXqianarbAJZ/zm76eVfbjU4o/NUpaOVoKcqWzLGTHnGa84XzRCUSXd0gYHRO2ZN1VAR5WGmR7GZ0q44XZTs4+8xrJrXqvohPfNuR4MimDfwiB+UskLvjXnYSOLQdLKSZhsHnK+RHSg0Uz8jS0sAvWWUZwTzFclrFLA2AVuqFq48c8WwxDGykxKJqd/m6qHeVpJrtHjc4NuOvUPZWWSLkeRZB+VAC8Hh4vu48z/4iEnF0AbXE/1Lr8/oV4MPBiD/j9tKF5SAoWBARm+vSnN38760rOc8oL0xOGnFAedU+j0mrjFpOBFP1a8KnfLTLrW+1oQB9QAcygn0wMwG+KbBPUCvBps+N3bNrMJNX6rJwoxouWzvTgGh5Zod6Vnir4GYrmt5m/ETIgNFM/sZqq+v+rEcXSTgHO99W0nfX4VskQlEshNzBI56vB+AnRFH0NS2CHWk1LF9UKIbRgzrsZboAXTU5gWvB9hw8ZOHsHG4hvwQjG+vwQxngXlrIbN5GqgZ10XPc+51+8VksMHt1xM3Ls2Ix/SJ8sllN6GF/gUzzbYT8qgySPM5cZzGsLZKLGupCS0dP17g68Ihq5o46Nr+ChzN8s2w=
