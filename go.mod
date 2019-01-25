@@ -12,14 +12,19 @@ require (
 	github.com/ianlancetaylor/demangle v0.0.0-20181102032728-5e5cf60278f6 // indirect
 	github.com/jtolds/gls v4.2.1+incompatible // indirect
 	github.com/kr/pretty v0.1.0 // indirect
+	github.com/mitchellh/go-homedir v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
+	github.com/pkg/errors v0.8.1 // indirect
 	github.com/sergi/go-diff v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.2.0
 	github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d // indirect
 	github.com/smartystreets/goconvey v0.0.0-20181108003508-044398e4856c // indirect
+	github.com/spf13/cobra v0.0.3
+	github.com/spf13/viper v1.3.1 // indirect
 	github.com/stretchr/testify v1.2.2
+	github.com/urfave/cli v1.20.0 // indirect
 	github.com/vektah/gqlparser v1.0.0
 	golang.org/x/arch v0.0.0-20181203225421-5a4828bb7045 // indirect
 	golang.org/x/net v0.0.0-20190110200230-915654e7eabc
-	gopkg.in/yaml.v2 v2.2.2 // indirect
+	golang.org/x/tools v0.0.0-20190124215303-cc6a436ffe6b // indirect
 )
