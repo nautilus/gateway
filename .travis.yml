@@ -7,7 +7,10 @@ go:
   - "1.11"
 
 install:
-  - go get golang.org/x/tools/cmd/cover github.com/mattn/goveralls ./...
+  # download our task runner
+  - go get github.com/AlecAivazis/run
+  # install the ci dependencies
+  - run install-ci
 
 script:
   - go test -v -covermode=atomic -coverprofile=coverage.out ./...
