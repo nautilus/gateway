@@ -24,8 +24,8 @@ func init() {
 	rootCmd.AddCommand(startCmd)
 }
 
+// StartServer begins an http server running the gateway
 func StartServer(cmd *cobra.Command, args []string) {
-
 	// start the http service wrapping those services
 	ListenAndServe(Services)
 }

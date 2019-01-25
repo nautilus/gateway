@@ -24,13 +24,13 @@ func ListenAndServe(services []string) {
 	}
 
 	// create the gateway instance
-	gateway, err := gateway.New(schemas)
+	gw, err := gateway.New(schemas)
 	if err != nil {
 		panic(err)
 	}
 
 	// add the graphql endpoints to the router
-	http.HandleFunc("/graphql", setCORSHeaders(gateway.PlaygroundHandler))
+	http.HandleFunc("/graphql", setCORSHeaders(gw.PlaygroundHandler))
 
 	// start the server
 	fmt.Println("Starting server")
