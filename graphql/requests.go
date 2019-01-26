@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -30,7 +31,7 @@ type QueryInput struct {
 
 // Queryer is a interface for objects that can perform
 type Queryer interface {
-	Query(*QueryInput, interface{}) error
+	Query(context.Context, *QueryInput, interface{}) error
 }
 
 // MockSuccessQueryer responds with pre-defined value when executing a query
@@ -39,7 +40,7 @@ type MockSuccessQueryer struct {
 }
 
 // Query looks up the name of the query in the map of responses and returns the value
-func (q *MockSuccessQueryer) Query(input *QueryInput, receiver interface{}) error {
+func (q *MockSuccessQueryer) Query(ctx context.Context, input *QueryInput, receiver interface{}) error {
 	// assume the mock is writing the same kind as the receiver
 	reflect.ValueOf(receiver).Elem().Set(reflect.ValueOf(q.Value))
 
@@ -48,14 +49,12 @@ func (q *MockSuccessQueryer) Query(input *QueryInput, receiver interface{}) erro
 }
 
 // QueryerFunc responds to the query by calling the provided function
-type QueryerFunc struct {
-	Fn func(*QueryInput) (interface{}, error)
-}
+type QueryerFunc func(*QueryInput) (interface{}, error)
 
 // Query invokes the provided function and writes the response to the receiver
-func (q *QueryerFunc) Query(input *QueryInput, receiver interface{}) error {
+func (q QueryerFunc) Query(ctx context.Context, input *QueryInput, receiver interface{}) error {
 	// invoke the handler
-	response, err := q.Fn(input)
+	response, err := q(input)
 	if err != nil {
 		return err
 	}
@@ -69,9 +68,14 @@ func (q *QueryerFunc) Query(input *QueryInput, receiver interface{}) error {
 
 // NetworkQueryer sends the query to a url and returns the response
 type NetworkQueryer struct {
-	URL    string
-	Client *http.Client
+	URL         string
+	Client      *http.Client
+	middlewares []NetworkMiddleware
 }
+
+// NetworkMiddleware are functions can be passed to NetworkQueryer.WithMiddleware to affect its internal
+// behavior
+type NetworkMiddleware func(*http.Request) (*http.Request, error)
 
 // IntrospectRemoteSchema is used to build a RemoteSchema by firing the introspection query
 // at a remote service and reconstructing the schema object from the response
@@ -108,8 +112,16 @@ func IntrospectRemoteSchemas(urls ...string) ([]*RemoteSchema, error) {
 	return schemas, nil
 }
 
+func (q *NetworkQueryer) WithMiddlewares(mwares []NetworkMiddleware) *NetworkQueryer {
+	return &NetworkQueryer{
+		URL:         q.URL,
+		Client:      q.Client,
+		middlewares: mwares,
+	}
+}
+
 // Query sends the query to the designated url and returns the response.
-func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
+func (q *NetworkQueryer) Query(ctx context.Context, input *QueryInput, receiver interface{}) error {
 	// the payload
 	payload, err := json.Marshal(map[string]interface{}{
 		"query":         input.Query,
@@ -120,8 +132,27 @@ func (q *NetworkQueryer) Query(input *QueryInput, receiver interface{}) error {
 		return err
 	}
 
+	// construct the initial request we will send to the client
+	req, err := http.NewRequest("POST", q.URL, bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
+	// add the current context to the request
+	acc := req.WithContext(ctx)
+
+	// we could have any number of middlewares that we have to go through so
+	for _, mware := range q.middlewares {
+		result, err := mware(acc)
+		if err != nil {
+			return err
+		}
+
+		// use this result as the next request
+		acc = result
+	}
+
 	// fire the response to the queryer's url
-	resp, err := q.Client.Post(q.URL, "application/json", bytes.NewBuffer(payload))
+	resp, err := q.Client.Do(req)
 	if err != nil {
 		return err
 	}

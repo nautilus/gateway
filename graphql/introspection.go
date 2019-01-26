@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -14,7 +15,7 @@ func IntrospectAPI(queryer Queryer) (*ast.Schema, error) {
 	result := IntrospectionQueryResult{}
 
 	// fire the introspection query
-	err := queryer.Query(&QueryInput{Query: IntrospectionQuery}, &result)
+	err := queryer.Query(context.Background(), &QueryInput{Query: IntrospectionQuery}, &result)
 	if err != nil {
 		return nil, err
 	}

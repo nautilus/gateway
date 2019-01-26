@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,31 +11,45 @@ import (
 	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
+type contextKey int
+
 // Gateway is the top level entry for interacting with a gateway. It is responsible for merging a list of
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
 type Gateway struct {
-	sources  []*graphql.RemoteSchema
-	schema   *ast.Schema
-	planner  QueryPlanner
-	executor Executor
-	merger   Merger
+	sources     []*graphql.RemoteSchema
+	schema      *ast.Schema
+	planner     QueryPlanner
+	executor    Executor
+	merger      Merger
+	middlewares MiddlewareList
 
 	// the urls we have to visit to access certain fields
 	fieldURLs FieldURLMap
 }
 
 // Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(query string, variables map[string]interface{}) (map[string]interface{}, error) {
+func (g *Gateway) Execute(ctx context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	// generate a query plan for the query
 	plan, err := g.planner.Plan(query, g.schema, g.fieldURLs)
 	if err != nil {
 		return nil, err
 	}
 
+	// build up a list of the middlewares that will affect the request
+	requestMiddlewares := []graphql.NetworkMiddleware{}
+	for _, mware := range g.middlewares {
+		if requestMiddleware, ok := mware.(RequestMiddleware); ok {
+			requestMiddlewares = append(requestMiddlewares, graphql.NetworkMiddleware(requestMiddleware))
+		}
+	}
+
+	// embed the list of available middlewares in our execution context
+	mCtx := ctxWithRequestMiddlewares(ctx, requestMiddlewares)
+
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	return g.executor.Execute(plan[0], variables)
+	return g.executor.Execute(mCtx, plan[0], variables)
 }
 
 // New instantiates a new schema with the required stuffs.
@@ -49,7 +64,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		sources:  sources,
 		planner:  &MinQueriesPlanner{},
 		executor: &ParallelExecutor{},
-		merger:   &MergerFn{Fn: mergeSchemas},
+		merger:   MergerFunc(mergeSchemas),
 	}
 
 	// pass the gateway through any configurators
@@ -107,6 +122,13 @@ func WithExecutor(e Executor) Configurator {
 func WithMerger(m Merger) Configurator {
 	return func(g *Gateway) {
 		g.merger = m
+	}
+}
+
+// WithMiddleware returns a Configurator that adds middlewares to the gateway
+func WithMiddleware(middlewares ...Middleware) Configurator {
+	return func(g *Gateway) {
+		g.middlewares = append(g.middlewares, middlewares...)
 	}
 }
 
@@ -201,4 +223,21 @@ func (m FieldURLMap) RegisterURL(parent string, field string, locations ...strin
 
 func (m FieldURLMap) keyFor(parent string, field string) string {
 	return fmt.Sprintf("%s.%s", parent, field)
+}
+
+const requestMiddlewaresCtxKey contextKey = iota
+
+func ctxWithRequestMiddlewares(ctx context.Context, l []graphql.NetworkMiddleware) context.Context {
+	return context.WithValue(ctx, requestMiddlewaresCtxKey, l)
+}
+
+func getCtxRequestMiddlewares(ctx context.Context) []graphql.NetworkMiddleware {
+	// pull the list of middlewares out of context
+	val, ok := ctx.Value(requestMiddlewaresCtxKey).([]graphql.NetworkMiddleware)
+	if !ok {
+		return nil
+	}
+
+	// return the list
+	return val
 }

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/99designs/gqlgen/graphql/introspection"
@@ -24,7 +25,7 @@ type SchemaQueryer struct {
 }
 
 // Query takes a query definition and writes the result to the receiver
-func (q *SchemaQueryer) Query(input *graphql.QueryInput, receiver interface{}) error {
+func (q *SchemaQueryer) Query(ctx context.Context, input *graphql.QueryInput, receiver interface{}) error {
 	// a place to store the result
 	result := map[string]interface{}{}
 

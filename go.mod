@@ -10,6 +10,7 @@ require (
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/google/pprof v0.0.0-20181206194817-3ea8567a2e57 // indirect
 	github.com/gorilla/websocket v1.4.0 // indirect
+	github.com/graph-gophers/graphql-go v0.0.0-20190108123631-d5b7dc6be53b
 	github.com/graphql-go/graphql v0.7.7
 	github.com/hashicorp/golang-lru v0.5.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20181102032728-5e5cf60278f6 // indirect
@@ -23,6 +24,7 @@ require (
 	github.com/mitchellh/gox v0.4.0 // indirect
 	github.com/mitchellh/iochan v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
+	github.com/opentracing/opentracing-go v1.0.2 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/sergi/go-diff v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.2.0

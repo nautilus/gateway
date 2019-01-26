@@ -1,7 +1,12 @@
 package gateway
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
+	"io/ioutil"
+	"net/http"
 	"sync"
 	"testing"
 
@@ -10,9 +15,16 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
+type roundTripFunc func(req *http.Request) *http.Response
+
+// RoundTrip .
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req), nil
+}
+
 func TestExecutor_plansOfOne(t *testing.T) {
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -64,7 +76,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	// }
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -156,7 +168,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 	// }
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{ // this is equivalent to
@@ -235,7 +247,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 	followerName := "John"
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -363,7 +375,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 									},
 									// planner will actually leave behind a queryer that hits service B
 									// for testing we can just return a known value
-									Queryer: &graphql.QueryerFunc{
+									Queryer: graphql.QueryerFunc(
 										func(input *graphql.QueryInput) (interface{}, error) {
 											// make sure that we got the right variable inputs
 											assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
@@ -374,7 +386,8 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 													"firstName": followerName,
 												},
 											}, nil
-										}},
+										},
+									),
 								},
 							},
 						},
@@ -470,7 +483,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 	// an executor should return a list of every error that it encounters while executing the plan
 
 	// build a query plan that the executor will follow
-	_, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	_, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -486,11 +499,11 @@ func TestExecutor_multipleErrors(t *testing.T) {
 						},
 					},
 					// return a known value we can test against
-					Queryer: &graphql.QueryerFunc{
+					Queryer: graphql.QueryerFunc(
 						func(input *graphql.QueryInput) (interface{}, error) {
 							return map[string]interface{}{"data": map[string]interface{}{}}, errors.New("message")
 						},
-					},
+					),
 				},
 				{
 					// this is equivalent to
@@ -505,11 +518,11 @@ func TestExecutor_multipleErrors(t *testing.T) {
 						},
 					},
 					// return a known value we can test against
-					Queryer: &graphql.QueryerFunc{
+					Queryer: graphql.QueryerFunc(
 						func(input *graphql.QueryInput) (interface{}, error) {
 							return map[string]interface{}{"data": map[string]interface{}{}}, graphql.ErrorList{errors.New("message"), errors.New("message")}
 						},
-					},
+					),
 				},
 			},
 		},
@@ -543,7 +556,7 @@ func TestExecutor_includeIf(t *testing.T) {
 	// }
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -626,6 +639,104 @@ func TestExecutor_includeIf(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{}, result)
 }
 
+func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
+	schema, _ := graphql.LoadSchema(
+		`
+			type Query {
+				allUsers: [String!]!
+			}
+		`,
+	)
+
+	remoteSchema := &graphql.RemoteSchema{
+		Schema: schema,
+		URL:    "hello",
+	}
+
+	// the middleware to apply
+	called := false
+	middleware := RequestMiddleware(func(r *http.Request) (*http.Request, error) {
+		called = true
+		return r, nil
+	})
+
+	// in order to execute the request middleware we need to be dealing with a network queryer
+	// which means we need to fake out the http client
+	httpClient := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) *http.Response {
+			// serialize the json we want to send back
+			result, _ := json.Marshal(map[string]interface{}{
+				"allUsers": []string{
+					"John Jacob",
+					"Jinglehymer Schmidt",
+				},
+			})
+
+			return &http.Response{
+				StatusCode: 200,
+				// Send response to be tested
+				Body: ioutil.NopCloser(bytes.NewBuffer(result)),
+				// Must be set to non-nil value or it panics
+				Header: make(http.Header),
+			}
+		}),
+	}
+
+	// we need a planner that will leave behind a simple plan
+	planner := &MockPlanner{
+		[]*QueryPlan{
+			{
+				Operation: &ast.OperationDefinition{
+					Operation: ast.Query,
+				},
+				RootStep: &QueryPlanStep{
+					Then: []*QueryPlanStep{
+						{
+							// this is equivalent to
+							// query { values }
+							ParentType: "Query",
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "values",
+									Definition: &ast.FieldDefinition{
+										Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+									},
+								},
+							},
+							QueryDocument: &ast.QueryDocument{
+								Operations: ast.OperationList{
+									{
+										Operation: "Query",
+									},
+								},
+							},
+							QueryString: `hello`,
+							// return a known value we can test against
+							Queryer: &graphql.NetworkQueryer{
+								URL:    "hello",
+								Client: httpClient,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// create a gateway with the Middleware
+	gateway, err := New([]*graphql.RemoteSchema{remoteSchema}, WithMiddleware(middleware), WithPlanner(planner))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// execute any think
+	gateway.Execute(context.Background(), `{ values } `, map[string]interface{}{})
+
+	// make sure we called the middleware
+	assert.True(t, called, "Did not call middleware")
+}
+
 func TestExecutor_threadsVariables(t *testing.T) {
 	// the variables we'll be threading through
 	fullVariables := map[string]interface{}{
@@ -646,7 +757,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 	}
 
 	// build a query plan that the executor will follow
-	_, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	_, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		Operation: &ast.OperationDefinition{
 			Operation:           ast.Query,
 			VariableDefinitions: fullVariableDefs,
@@ -676,7 +787,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 					QueryString: `hello`,
 					Variables:   Set{"hello": true},
 					// return a known value we can test against
-					Queryer: &graphql.QueryerFunc{
+					Queryer: graphql.QueryerFunc(
 						func(input *graphql.QueryInput) (interface{}, error) {
 							// make sure that we got the right variable inputs
 							assert.Equal(t, map[string]interface{}{"hello": "world"}, input.Variables)
@@ -685,7 +796,8 @@ func TestExecutor_threadsVariables(t *testing.T) {
 							assert.Equal(t, "hello", input.Query)
 
 							return map[string]interface{}{"values": []string{"world"}}, nil
-						}},
+						},
+					),
 				},
 			},
 		},

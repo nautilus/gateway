@@ -14,14 +14,12 @@ type Merger interface {
 	Merge([]*ast.Schema) (*ast.Schema, error)
 }
 
-// MergerFn is a wrapper of a function of the same signature as Merger.Merge
-type MergerFn struct {
-	Fn func([]*ast.Schema) (*ast.Schema, error)
-}
+// MergerFunc is a wrapper of a function of the same signature as Merger.Merge
+type MergerFunc func([]*ast.Schema) (*ast.Schema, error)
 
 // Merge invokes and returns the wrapped function
-func (m *MergerFn) Merge(sources []*ast.Schema) (*ast.Schema, error) {
-	return m.Fn(sources)
+func (m MergerFunc) Merge(sources []*ast.Schema) (*ast.Schema, error) {
+	return m(sources)
 }
 
 // mergeSchemas takes in a bunch of schemas and merges them into one. Following the strategies outlined here:
@@ -107,6 +105,11 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				continue
 			}
 
+			// we only want one copy of the internal stuff
+			if strings.HasPrefix(definition.Name, "__") {
+				continue
+			}
+
 			// unify handling of errors for merging
 			var err error
 
@@ -139,6 +142,11 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				result.Directives[name] = definition
 
 				// we're done with this type
+				continue
+			}
+
+			// we only want one copy of the internal stuff
+			if definition.Name == "skip" || definition.Name == "include" || definition.Name == "deprecated" {
 				continue
 			}
 
@@ -178,7 +186,7 @@ func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, new
 		otherField := newDefinition.Fields.ForName(field.Name)
 
 		if err := mergeFieldsEqual(field, otherField); err != nil {
-			return err
+			return fmt.Errorf("encountered error merging interface %v: %v", previousDefinition.Name, err.Error())
 		}
 	}
 
@@ -199,7 +207,7 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 			// and they aren't equal
 			if err := mergeFieldsEqual(field, newField); err != nil {
 				//  we don't allow 2 fields that have different types
-				return err
+				return fmt.Errorf("encountered error merging object %v: %v", previousDefinition.Name, err.Error())
 			}
 		} else {
 			// its safe to copy over the definition
@@ -337,22 +345,22 @@ func mergeFieldsEqual(field1, field2 *ast.FieldDefinition) error {
 
 	// fields
 	if err := mergeTypesEqual(field1.Type, field2.Type); err != nil {
-		return err
+		return fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// arguments
 	if err := mergeArgumentDefinitionListEqual(field1.Arguments, field2.Arguments); err != nil {
-		return err
+		return fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// default values
 	if err := mergeValuesEqual(field1.DefaultValue, field2.DefaultValue); err != nil {
-		return err
+		return fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// directives
 	if err := mergeDirectiveListsEqual(field1.Directives, field2.Directives); err != nil {
-		return err
+		return fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// nothing went wrong

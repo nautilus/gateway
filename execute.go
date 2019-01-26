@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -14,7 +15,7 @@ import (
 // Executor is responsible for executing a query plan against the remote
 // schemas and returning the result
 type Executor interface {
-	Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
+	Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
 }
 
 // ParallelExecutor executes the given query plan by starting at the root of the plan and
@@ -28,7 +29,7 @@ type queryExecutionResult struct {
 }
 
 // Execute returns the result of the query plan
-func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+func (executor *ParallelExecutor) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -59,7 +60,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 	// the root step could have multiple steps that have to happen
 	for _, step := range plan.RootStep.Then {
 		stepWg.Add(1)
-		go executeStep(plan, step, []string{}, resultLock, variables, resultCh, errCh, stepWg)
+		go executeStep(ctx, plan, step, []string{}, resultLock, variables, resultCh, errCh, stepWg)
 	}
 
 	// the list of errors we have encountered while executing the plan
@@ -126,6 +127,7 @@ func (executor *ParallelExecutor) Execute(plan *QueryPlan, variables map[string]
 
 // TODO: ugh... so... many... variables...
 func executeStep(
+	ctx context.Context,
 	plan *QueryPlan,
 	step *QueryPlanStep,
 	insertionPoint []string,
@@ -180,9 +182,22 @@ func executeStep(
 		errCh <- errors.New(" could not find queryer for step")
 		return
 	}
-	// execute the query
+
+	// the query we will use
+	queryer := step.Queryer
+	// a place to save the result
 	queryResult := map[string]interface{}{}
-	err := step.Queryer.Query(&graphql.QueryInput{
+
+	// if we have middlewares
+	if mwares := getCtxRequestMiddlewares(ctx); mwares != nil {
+		// if the queryer is a network queryer
+		if nQueryer, ok := queryer.(*graphql.NetworkQueryer); ok {
+			queryer = nQueryer.WithMiddlewares(mwares)
+		}
+	}
+
+	// fire the query
+	err := queryer.Query(ctx, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,
@@ -236,7 +251,7 @@ func executeStep(
 			for _, insertionPoint := range insertPoints {
 				log.Info("Spawn ", insertionPoint)
 				stepWg.Add(1)
-				go executeStep(plan, dependent, insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
+				go executeStep(ctx, plan, dependent, insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
 			}
 		}
 	}
@@ -607,14 +622,12 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 	}, nil
 }
 
-// ExecutorFn wraps a function to be used as an executor.
-type ExecutorFn struct {
-	Fn func(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
-}
+// ExecutorFunc wraps a function to be used as an executor.
+type ExecutorFunc func(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
 
 // Execute invokes and returns the internal function
-func (e *ExecutorFn) Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
-	return e.Fn(plan, variables)
+func (e ExecutorFunc) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+	return e(ctx, plan, variables)
 }
 
 // ErrExecutor always returnes the internal error.
@@ -623,6 +636,6 @@ type ErrExecutor struct {
 }
 
 // Execute returns the internet error
-func (e *ErrExecutor) Execute(plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+func (e *ErrExecutor) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
 	return nil, e.Error
 }

@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -75,7 +76,7 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 
 	// get the response of the query
 	result := map[string]interface{}{}
-	err := queryer.Query(&QueryInput{Query: query}, &result)
+	err := queryer.Query(context.Background(), &QueryInput{Query: query}, &result)
 	if err != nil {
 		t.Error(err)
 		return
@@ -181,7 +182,7 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 
 			// get the response of the query
 			result := map[string]interface{}{}
-			err := queryer.Query(&QueryInput{Query: query}, &result)
+			err := queryer.Query(context.Background(), &QueryInput{Query: query}, &result)
 
 			// if we're supposed to hav ean error
 			if row.ErrorShape != nil {
@@ -220,7 +221,7 @@ func TestNetworkQueryer_respondsWithErr(t *testing.T) {
 
 	// get the response of the query
 	var result interface{}
-	err := queryer.Query(&QueryInput{Query: query}, result)
+	err := queryer.Query(context.Background(), &QueryInput{Query: query}, result)
 	if err == nil {
 		t.Error("Did not receive an error")
 		return
@@ -279,7 +280,7 @@ func TestNetworkQueryer_errorList(t *testing.T) {
 	}
 
 	// get the error of the query
-	err := queryer.Query(&QueryInput{Query: query}, &map[string]interface{}{})
+	err := queryer.Query(context.Background(), &QueryInput{Query: query}, &map[string]interface{}{})
 
 	_, ok := err.(ErrorList)
 	if !ok {
@@ -291,16 +292,16 @@ func TestNetworkQueryer_errorList(t *testing.T) {
 func TestQueryerFunc_success(t *testing.T) {
 	expected := map[string]interface{}{"hello": "world"}
 
-	queryer := QueryerFunc{
+	queryer := QueryerFunc(
 		func(*QueryInput) (interface{}, error) {
 			return expected, nil
 		},
-	}
+	)
 
 	// a place to write the result
 	result := map[string]interface{}{}
 
-	err := queryer.Query(&QueryInput{}, &result)
+	err := queryer.Query(context.Background(), &QueryInput{}, &result)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -313,14 +314,93 @@ func TestQueryerFunc_success(t *testing.T) {
 func TestQueryerFunc_failure(t *testing.T) {
 	expected := errors.New("message")
 
-	queryer := QueryerFunc{
+	queryer := QueryerFunc(
 		func(*QueryInput) (interface{}, error) {
 			return nil, expected
 		},
-	}
+	)
 
-	err := queryer.Query(&QueryInput{}, &map[string]interface{}{})
+	err := queryer.Query(context.Background(), &QueryInput{}, &map[string]interface{}{})
 
 	// make sure we got the right error
 	assert.Equal(t, expected, err)
+}
+
+func TestNetworkQueryer_middlewaresFailure(t *testing.T) {
+	queryer := (&NetworkQueryer{
+		URL: "Hello",
+	}).WithMiddlewares([]NetworkMiddleware{
+		func(r *http.Request) (*http.Request, error) {
+			return nil, errors.New("This One")
+		},
+	})
+
+	// the input to the query
+	input := &QueryInput{
+		Query: "",
+	}
+
+	// fire the query
+	err := queryer.Query(context.Background(), input, &map[string]interface{}{})
+	if err == nil {
+		t.Error("Did not enounter an error when we should have")
+		return
+	}
+	if err.Error() != "This One" {
+		t.Errorf("Did not encountered expected error message: Expected 'This One', found %v", err.Error())
+	}
+}
+func TestNetworkQueryer_middlewaresSuccess(t *testing.T) {
+	httpClient := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) *http.Response {
+			// if we did not get the right header value
+			if req.Header.Get("Hello") != "World" {
+				return &http.Response{
+					StatusCode: http.StatusExpectationFailed,
+					// Send response to be tested
+					Body: ioutil.NopCloser(bytes.NewBufferString("Did not recieve the right header")),
+					// Must be set to non-nil value or it panics
+					Header: make(http.Header),
+				}
+			}
+
+			// serialize the json we want to send back
+			result, _ := json.Marshal(map[string]interface{}{
+				"allUsers": []string{
+					"John Jacob",
+					"Jinglehymer Schmidt",
+				},
+			})
+
+			return &http.Response{
+				StatusCode: 200,
+				// Send response to be tested
+				Body: ioutil.NopCloser(bytes.NewBuffer(result)),
+				// Must be set to non-nil value or it panics
+				Header: make(http.Header),
+			}
+		}),
+	}
+
+	queryer := (&NetworkQueryer{
+		URL:    "Hello",
+		Client: httpClient,
+	}).WithMiddlewares([]NetworkMiddleware{
+		func(r *http.Request) (*http.Request, error) {
+			r.Header.Set("Hello", "World")
+
+			return r, nil
+		},
+	})
+
+	// the input to the query
+	input := &QueryInput{
+		Query: "",
+	}
+
+	err := queryer.Query(context.Background(), input, &map[string]interface{}{})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
 }

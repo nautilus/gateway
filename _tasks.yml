@@ -8,15 +8,22 @@ install:ci:
 
 install:
   summary: install the dependencies to develop locally
-  command: go get -v ./...
+  command: go get -v {{ .files }}
+
+tests:
+  summary: run the tests
+  command: go test {{ .files }}
 
 test:coverage:
   summary: run the tests, generate a coverage report, and report it to coveralls
   command: |-
-    go test -v -covermode=atomic -coverprofile=coverage.out ./...
+    go test -v -covermode=atomic -coverprofile=coverage.out {{ .files }}
     $HOME/gopath/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN
 
 build:
   summary: build executable in all supported architectures
   command: |-
-    gox -os="linux darwin windows" -arch="amd64" -output="bin/graphql-gateway_{{"{{"}}.OS}}_{{"{{"}}.Arch}}" -verbose ./...
+    gox -os="linux darwin windows" -arch="amd64" -output="bin/graphql-gateway_{{"{{"}}.OS}}_{{"{{"}}.Arch}}" -verbose ./cmd/...
+
+variables:
+  files: '$(go list -v ./... | grep -iEv "cmd|examples")'

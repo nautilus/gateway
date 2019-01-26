@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"testing"
 
 	"github.com/alecaivazis/graphql-gateway/graphql"
@@ -41,7 +42,7 @@ func schemaTestLoadQuery(query string, target interface{}) error {
 	}
 
 	// executing the introspection query should return a full description of the schema
-	response, err := gateway.Execute(query, map[string]interface{}{})
+	response, err := gateway.Execute(context.Background(), query, map[string]interface{}{})
 	if err != nil {
 		return err
 	}
