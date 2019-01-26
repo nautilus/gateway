@@ -96,7 +96,31 @@ func main() {
 }
 ```
 
-### Authentication and Authorization
+### Modifying Service Requests
+
+There are many situations where one might want to modify the network requests sent from 
+the gateway to the other services. In order to do this, you can define a `RequestMiddleware`
+that will be called for every request sent:
+
+```golang
+addHeader := gateway.RequestMiddleware(func(r *http.Request) (error) {
+	r.Header.Set("AwesomeHeader", "MyValue")
+
+	// return the modified request
+	return nil
+})
+
+// ... somewhere else ...
+
+gateway.New(..., gateway.withMiddleware(addHeader))
+```
+
+The context of this request is the same context of the incoming network request. If you 
+want to pull something out of the incoming network request (its IP for example) and add 
+it to the outbound requests, you would write it in 2 parts
+
+
+#### Authentication and Authorization
 
 Currently the gateway has no opinion on a method for authentication and authorization.
 Descisions for wether a user can or cannot do something is pushed down to the services
@@ -105,3 +129,4 @@ services, information can be attach to the request context and then used when ex
 a query.
 
 See the [auth example](./examples/auth) for more information.
+
