@@ -9,7 +9,7 @@ can see their specific todo list.
 The general flow goes something like:
 
 - The user service defines a mutation called `loginUser` that [checks if
-  the combo is valid](https://github.com/AlecAivazis/graphql-gateway/blob/master/examples/auth/users.go#L66) and responds with a token.
+  the credentials are valid](https://github.com/AlecAivazis/graphql-gateway/blob/master/examples/auth/users.go#L66) and responds with a token.
 
 - Somehow (not shown here), the client holds onto this tokens and sends it
   with future requests to the gateway under the `Authorization` header.
