@@ -214,7 +214,7 @@ func executeStep(
 
 	// if this is a query that falls underneath a `node(id: ???)` query then we only want to consider the object
 	// underneath the `node` field as the result for the query
-	stripNode := step.ParentType != "Query"
+	stripNode := step.ParentType != "Query" && step.ParentType != "Subscription" && step.ParentType != "Mutation"
 	if stripNode {
 		log.Debug("Should strip node")
 		// get the result from the response that we have to stitch there

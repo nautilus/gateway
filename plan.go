@@ -725,13 +725,21 @@ func plannerBuildQuery(parentType string, variables ast.VariableDefinitionList, 
 	log.Debug("Building Query: \n"+"\tParentType: ", parentType, " ")
 	// build up an operation for the query
 	operation := &ast.OperationDefinition{
-		Operation:           ast.Query,
 		VariableDefinitions: variables,
 	}
 
-	// if we are querying the top level Query all we need to do is add
-	// the selection set at the root
-	if parentType == "Query" {
+	// assign the right operation
+	switch parentType {
+	case "Mutation":
+		operation.Operation = ast.Mutation
+	case "Subscription":
+		operation.Operation = ast.Subscription
+	default:
+		operation.Operation = ast.Query
+	}
+
+	// if we are querying an operation all we need to do is add the selection set at the root
+	if parentType == "Query" || parentType == "Mutation" || parentType == "Subscription" {
 		operation.SelectionSet = selectionSet
 	} else {
 		// if we are not querying the top level then we have to embed the selection set
