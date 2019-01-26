@@ -326,6 +326,30 @@ func TestQueryerFunc_failure(t *testing.T) {
 	assert.Equal(t, expected, err)
 }
 
+func TestNetworkQueryer_middlewaresFailure(t *testing.T) {
+	queryer := (&NetworkQueryer{
+		URL: "Hello",
+	}).WithMiddlewares([]NetworkMiddleware{
+		func(r *http.Request) (*http.Request, error) {
+			return nil, errors.New("This One")
+		},
+	})
+
+	// the input to the query
+	input := &QueryInput{
+		Query: "",
+	}
+
+	// fire the query
+	err := queryer.Query(context.Background(), input, &map[string]interface{}{})
+	if err == nil {
+		t.Error("Did not enounter an error when we should have")
+		return
+	}
+	if err.Error() != "This One" {
+		t.Errorf("Did not encountered expected error message: Expected 'This One', found %v", err.Error())
+	}
+}
 func TestNetworkQueryer_middlewaresSuccess(t *testing.T) {
 	httpClient := &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) *http.Response {
@@ -369,14 +393,12 @@ func TestNetworkQueryer_middlewaresSuccess(t *testing.T) {
 		},
 	})
 
-	// a place to store the results
-	results := map[string]interface{}{}
-
+	// the input to the query
 	input := &QueryInput{
 		Query: "",
 	}
 
-	err := queryer.Query(context.Background(), input, &results)
+	err := queryer.Query(context.Background(), input, &map[string]interface{}{})
 	if err != nil {
 		t.Error(err.Error())
 		return
