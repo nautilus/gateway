@@ -13,8 +13,6 @@ import (
 
 type contextKey int
 
-const middlewaresCtxKey contextKey = iota
-
 // Gateway is the top level entry for interacting with a gateway. It is responsible for merging a list of
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
@@ -38,12 +36,20 @@ func (g *Gateway) Execute(ctx context.Context, query string, variables map[strin
 		return nil, err
 	}
 
-	// add the list of plugins to the execution context
-	middlewareCtx := context.WithValue(ctx, middlewaresCtxKey, g.middlewares)
+	// build up a list of the middlewares that will affect the request
+	requestMiddlewares := []graphql.NetworkMiddleware{}
+	for _, mware := range g.middlewares {
+		if requestMiddleware, ok := mware.(RequestMiddleware); ok {
+			requestMiddlewares = append(requestMiddlewares, graphql.NetworkMiddleware(requestMiddleware))
+		}
+	}
+
+	// embed the list of available middlewares in our execution context
+	mCtx := ctxWithRequestMiddlewares(ctx, requestMiddlewares)
 
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	return g.executor.Execute(middlewareCtx, plan[0], variables)
+	return g.executor.Execute(mCtx, plan[0], variables)
 }
 
 // New instantiates a new schema with the required stuffs.
@@ -119,10 +125,10 @@ func WithMerger(m Merger) Configurator {
 	}
 }
 
-// WithMiddlewares returns a Configurator that adds middlewares to the gateway
-func WithMiddlewares(middlewares ...Middleware) Configurator {
+// WithMiddleware returns a Configurator that adds middlewares to the gateway
+func WithMiddleware(middlewares ...Middleware) Configurator {
 	return func(g *Gateway) {
-		g.middlewares = MiddlewareList(middlewares)
+		g.middlewares = append(g.middlewares, middlewares...)
 	}
 }
 
@@ -217,4 +223,21 @@ func (m FieldURLMap) RegisterURL(parent string, field string, locations ...strin
 
 func (m FieldURLMap) keyFor(parent string, field string) string {
 	return fmt.Sprintf("%s.%s", parent, field)
+}
+
+const requestMiddlewaresCtxKey contextKey = iota
+
+func ctxWithRequestMiddlewares(ctx context.Context, l []graphql.NetworkMiddleware) context.Context {
+	return context.WithValue(ctx, requestMiddlewaresCtxKey, l)
+}
+
+func getCtxRequestMiddlewares(ctx context.Context) []graphql.NetworkMiddleware {
+	// pull the list of middlewares out of context
+	val, ok := ctx.Value(requestMiddlewaresCtxKey).([]graphql.NetworkMiddleware)
+	if !ok {
+		return nil
+	}
+
+	// return the list
+	return val
 }

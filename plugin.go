@@ -1,6 +1,10 @@
 package gateway
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/alecaivazis/graphql-gateway/graphql"
+)
 
 // Middleware are things that can modify a gateway normal execution
 type Middleware interface {
@@ -32,7 +36,7 @@ func (l MiddlewareList) ApplyRequestMiddlewares(r *http.Request) (*http.Request,
 }
 
 // RequestMiddleware is a middleware that can modify outbound requests to services
-type RequestMiddleware func(r *http.Request) (*http.Request, error)
+type RequestMiddleware graphql.NetworkMiddleware
 
-// Middleware marks RequestMiddleware as a Middleware
+// Middleware marks RequestMiddleware as a valid middleware
 func (p RequestMiddleware) Middleware() {}

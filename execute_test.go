@@ -1,8 +1,11 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"net/http"
 	"sync"
 	"testing"
@@ -11,6 +14,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/ast"
 )
+
+type roundTripFunc func(req *http.Request) *http.Response
+
+// RoundTrip .
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req), nil
+}
 
 func TestExecutor_plansOfOne(t *testing.T) {
 	// build a query plan that the executor will follow
@@ -643,12 +653,34 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 		URL:    "hello",
 	}
 
-	// the Middleware to apply
+	// the middleware to apply
 	called := false
 	middleware := RequestMiddleware(func(r *http.Request) (*http.Request, error) {
 		called = true
 		return r, nil
 	})
+
+	// in order to execute the request middleware we need to be dealing with a network queryer
+	// which means we need to fake out the http client
+	httpClient := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) *http.Response {
+			// serialize the json we want to send back
+			result, _ := json.Marshal(map[string]interface{}{
+				"allUsers": []string{
+					"John Jacob",
+					"Jinglehymer Schmidt",
+				},
+			})
+
+			return &http.Response{
+				StatusCode: 200,
+				// Send response to be tested
+				Body: ioutil.NopCloser(bytes.NewBuffer(result)),
+				// Must be set to non-nil value or it panics
+				Header: make(http.Header),
+			}
+		}),
+	}
 
 	// we need a planner that will leave behind a simple plan
 	planner := &MockPlanner{
@@ -680,7 +712,10 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 							},
 							QueryString: `hello`,
 							// return a known value we can test against
-							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{"values": []string{"world"}}},
+							Queryer: &graphql.NetworkQueryer{
+								URL:    "hello",
+								Client: httpClient,
+							},
 						},
 					},
 				},
@@ -689,7 +724,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 	}
 
 	// create a gateway with the Middleware
-	gateway, err := New([]*graphql.RemoteSchema{remoteSchema}, WithMiddlewares(middleware), WithPlanner(planner))
+	gateway, err := New([]*graphql.RemoteSchema{remoteSchema}, WithMiddleware(middleware), WithPlanner(planner))
 	if err != nil {
 		t.Error(err.Error())
 		return

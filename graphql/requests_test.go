@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -75,7 +76,7 @@ func TestNetworkQueryer_sendsQueries(t *testing.T) {
 
 	// get the response of the query
 	result := map[string]interface{}{}
-	err := queryer.Query(&QueryInput{Query: query}, &result)
+	err := queryer.Query(context.Background(), &QueryInput{Query: query}, &result)
 	if err != nil {
 		t.Error(err)
 		return
@@ -181,7 +182,7 @@ func TestNetworkQueryer_handlesErrorResponse(t *testing.T) {
 
 			// get the response of the query
 			result := map[string]interface{}{}
-			err := queryer.Query(&QueryInput{Query: query}, &result)
+			err := queryer.Query(context.Background(), &QueryInput{Query: query}, &result)
 
 			// if we're supposed to hav ean error
 			if row.ErrorShape != nil {
@@ -220,7 +221,7 @@ func TestNetworkQueryer_respondsWithErr(t *testing.T) {
 
 	// get the response of the query
 	var result interface{}
-	err := queryer.Query(&QueryInput{Query: query}, result)
+	err := queryer.Query(context.Background(), &QueryInput{Query: query}, result)
 	if err == nil {
 		t.Error("Did not receive an error")
 		return
@@ -279,7 +280,7 @@ func TestNetworkQueryer_errorList(t *testing.T) {
 	}
 
 	// get the error of the query
-	err := queryer.Query(&QueryInput{Query: query}, &map[string]interface{}{})
+	err := queryer.Query(context.Background(), &QueryInput{Query: query}, &map[string]interface{}{})
 
 	_, ok := err.(ErrorList)
 	if !ok {
@@ -300,7 +301,7 @@ func TestQueryerFunc_success(t *testing.T) {
 	// a place to write the result
 	result := map[string]interface{}{}
 
-	err := queryer.Query(&QueryInput{}, &result)
+	err := queryer.Query(context.Background(), &QueryInput{}, &result)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -319,7 +320,7 @@ func TestQueryerFunc_failure(t *testing.T) {
 		},
 	)
 
-	err := queryer.Query(&QueryInput{}, &map[string]interface{}{})
+	err := queryer.Query(context.Background(), &QueryInput{}, &map[string]interface{}{})
 
 	// make sure we got the right error
 	assert.Equal(t, expected, err)

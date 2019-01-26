@@ -57,7 +57,7 @@ var users = []*User{
 // LoginUser is the primary userResolver for the mutation to log a user in.
 // It's resposibility it to check that the credentials are correct
 // and return a string that will be used to identity the user later.
-func (r *Resolver) LoginUser(args struct {
+func (r *userResolver) LoginUser(args struct {
 	Username string
 	Password string
 }) (*LoginUserOutput, error) {

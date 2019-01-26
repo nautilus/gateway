@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -70,6 +71,8 @@ func (r *query) ViewerTodos(ctx context.Context) ([]*Todo, error) {
 	if !ok {
 		return nil, errors.New("user ID was not a string")
 	}
+
+	fmt.Println("Hello", userID)
 
 	// return the todos for the appropriate user
 	return todos[userID], nil

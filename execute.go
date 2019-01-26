@@ -182,9 +182,22 @@ func executeStep(
 		errCh <- errors.New(" could not find queryer for step")
 		return
 	}
-	// execute the query
+
+	// the query we will use
+	queryer := step.Queryer
+	// a place to save the result
 	queryResult := map[string]interface{}{}
-	err := step.Queryer.Query(&graphql.QueryInput{
+
+	// if we have middlewares
+	if mwares := getCtxRequestMiddlewares(ctx); mwares != nil {
+		// if the queryer is a network queryer
+		if nQueryer, ok := queryer.(*graphql.NetworkQueryer); ok {
+			queryer = nQueryer.WithMiddlewares(mwares)
+		}
+	}
+
+	// fire the query
+	err := queryer.Query(ctx, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,
