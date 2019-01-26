@@ -28,7 +28,7 @@ build:
 
 deploy:
   summary: push the built artifacts to the release. assumes its running in CI
-  commend: |-
+  command: |-
     ghr -t $GITHUB_TOKEN  -u "AlecAivazis" -r "graphql-gateway" -delete $TRAVIS_TAG ./bin
 
 variables:
