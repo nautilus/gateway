@@ -14,7 +14,7 @@ to write your APIs.
 
 List of Examples:
 
-- [Hello World](./hello) A simple proof of concept
-- [Authentication and Authorization](./auth) An overview of how to support authentication and authorization
-  behind a gateway
-- Watch Remote Schemas (Coming Soon) A way to support CD workflows
+- [Hello World](./hello): A simple proof of concept
+- Something a bit more complex (Coming Soon):  A more realistic example of an e-commerce platform
+- [Authentication and Authorization](./auth): An overview of how to support auth behind a gateway
+- Watch Remote Schemas (Coming Soon): A way to support CD workflows
