@@ -7,7 +7,17 @@ A standalone service designed to consolidate your graphql APIs into one endpoint
 For a more detailed description of this project's
 motivation read [this post](). For a guide to getting started read [this post]()
 
-## Running the Executable Directly
+## Table of Contents
+1. [Running the Execuable](#running-the-executable)
+1. [Customizing the Gateway](#customizing-the-gateway)
+   1. [Integrating with an HTTP server](#integrating-with-an-http-server)
+   1. [Modifying Service Requests](#modifying-service-requests)
+   1. [Authentication](#authentication-and-authorization)
+1. [Examples](./examples)
+   1. [Hello World](./examples/hello)
+   1. [Authentication and Authorization](./examples/auth)
+
+## Running the Executable
 
 The simplest way to run a gateway is to download the executable
 from the latest release on GitHub and then run it directly on
@@ -61,7 +71,7 @@ func main() {
 }
 ```
 
-### Integrating with a different HTTP Server
+### Integrating with an HTTP server
 
 A `Gateway` provides 2 different handlers which are both instances of `http.HandlerFunc` so they should easily 
 integrate into whichever web server you prefer:
