@@ -19,6 +19,7 @@ script:
   - run test:coverage
 
 before_deploy:
+  - go get github.com/tcnksm/ghr
   # build the binaries
   - run build
 
@@ -27,11 +28,11 @@ deploy:
   on:
     tags: true
   # we need to push a github release with this tag
-  provider: releases
-  file:
-    - "graphql-gateway_darwin_amd64"
-    - "graphql-gateway_linux_amd64"
-    - "graphql-gateway_windows_amd64"
+  provider: script
   skip_cleanup: true
-  api_key:
-    secure: "YaYrm5b82TG4767Q0iEEDyYxeNztRoolApuNnVgeybmIhDuz1z7KyYtgORJoT9fHGk0W5JJl0ZlAp5hZow0AkMI+c6ktTEoMVBhR4LG3Pwe23c+AtXbBMFHyyoRQHsndxh1XeCziZPGCCobDffXs+G2C4xHZMENg9XOZnuUIB3jXI7Uuh3kE40380m73RFA1xhoUCjoxyce/7mLoBhESH/sVHiGiHdxzxEBm+OJ3PY0aAXoV86zIKevyQ+d/WOEgcLtT2VbsuPQ4DSQhf4+L5BXJszp2yW1euzUksUNSZOLsUZJZ6l+NzkHcOz5jeBqF7cH6WVac9bGyV/6M0hgGGmEszO+WRaZIZbaOTCFCbj0Kr2z6h8Y9Ag1xbu7r1TqtuGRBx8/2WF0CIYduSpgAkoC7P6y1LW+30vBlhIWgW7Hb7j7Bv+U16P8UKmM+vQgLGQGhg8LgQml7ahXKa2jwbviPEGK3DmgARMt0QjOQGwyF4MJgGcK56rEQvnCJAv+SQs72FtbbE+DWORF5X/6mrGHRpHDdGZU65rviPuVLmq7hZ+LbIo5R0/ffKaGLx96rSYDDziX5+obCMqM7FMPZRI2kTHS42TdQCt05qGg3iGdDKjZLp6bp+4Dtkkc7GMh4hYToli42afp55GKi80OIwYEcorHHh7WTWTM9NnfRvEo="
+  script: |-
+    ghr -t ${GITHUB_TOKEN} \
+      -u "AlecAivazis" \
+      -r "graphql-gateway" \
+      -c ${TRAVIS_PULL_REQUEST_SHA} \
+      -delete ${TRAVIS_TAG} ./bin/
