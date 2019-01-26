@@ -141,7 +141,7 @@ addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
 	// i know i know ... context.Value is the worst. Feel free to put your favorite workaround here
 	r.Header.Set("X-Forwarded-For", r.Context().Value("source-ip").(string)
 
-	// return the modified request
+	// no errors
 	return nil
 })
 
