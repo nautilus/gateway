@@ -8,7 +8,7 @@ install:ci:
 
 install:
   summary: install the dependencies to develop locally
-  command: go get -v ./...
+  command: go get -v {{ .files }}
 
 tests:
   summary: run the tests
