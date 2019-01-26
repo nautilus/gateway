@@ -100,10 +100,11 @@ func main() {
 
 There are many situations where one might want to modify the network requests sent from 
 the gateway to the other services. In order to do this, you can define a `RequestMiddleware`
-that will be called for every request sent:
+that will be called for every request sent. The context of this request is the same context
+of the incoming network request. 
 
 ```golang
-addHeader := gateway.RequestMiddleware(func(r *http.Request) (error) {
+addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
 	r.Header.Set("AwesomeHeader", "MyValue")
 
 	// return the modified request
@@ -115,18 +116,47 @@ addHeader := gateway.RequestMiddleware(func(r *http.Request) (error) {
 gateway.New(..., gateway.withMiddleware(addHeader))
 ```
 
-The context of this request is the same context of the incoming network request. If you 
-want to pull something out of the incoming network request (its IP for example) and add 
-it to the outbound requests, you would write it in 2 parts
+If you wanted to do something more complicated like pull something out of the incoming 
+network request (its IP for example) and add it to the outbound requests, you would 
+write it in 2 parts.
+
+The first would grab the the value from the incoming request and set it in context
+
+```golang
+func withIP(handler http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// invoke the wrapped handler with the new context
+		handler.ServeHTTP(w, r.WithContext(
+			context.WithValue(r.Context(), "source-ip", r.RemoteAddr),
+		))
+	})
+}
+```
+
+Then, you would define a middleware similar to above that takes the value out of context
+and sets a header in the outbound requests:
+
+```golang
+addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
+	// i know i know ... context.Value is the worst. Feel free to put your favorite workaround here
+	r.Header.Set("X-Forwarded-For", r.Context().Value("source-ip").(string)
+
+	// return the modified request
+	return nil
+})
+
+// ... somewhere else ...
+
+gateway.New(..., gateway.withMiddleware(addHeader))
+```
 
 
 #### Authentication and Authorization
 
 Currently the gateway has no opinion on a method for authentication and authorization.
 Descisions for wether a user can or cannot do something is pushed down to the services
-handling the queries. To pass information about the current request to the backing
-services, information can be attach to the request context and then used when executing
-a query.
+handling the queries. Authentication and Authorization should be modeled as a special
+case of above. 
 
 See the [auth example](./examples/auth) for more information.
 
