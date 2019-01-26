@@ -32,7 +32,7 @@ func withUserInfo(handler http.HandlerFunc) http.HandlerFunc {
 var queryerPlugins = &gateway.PluginList{
 	// we only need to do one thing in this example: pull the id of the user out of context
 	// and set it as the outbound USER_ID header
-	gateway.RequestPlugin(func(r *http.Request) *http.Request {
+	gateway.RequestPlugin(func(r *http.Request) (*http.Request, error) {
 		// the initial context of the request is set as the same context
 		// provided by net/http
 
@@ -40,7 +40,7 @@ var queryerPlugins = &gateway.PluginList{
 		r.Header().Set("USER_ID", r.Context().Value("user-id").(string))
 
 		// return the modified request
-		return r
+		return r, nil
 	}),
 }
 
