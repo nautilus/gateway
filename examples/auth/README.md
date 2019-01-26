@@ -23,3 +23,15 @@ The general flow goes something like:
 Keep in mind that this demo should not be taken as an example of a secure
 authorization system. Its purpose is just to illustrate how one can pass
 pass user-specific information onto the backing services.
+
+## Running the example
+
+To run the example, start the services defined in `users.go` and `todo.go` first by running
+`go run <file name>` from this directory. You'll have to run them in separate terminals.
+Then in a third terminal, start the `gateway.go` and visit http://localhost:4000 which
+should show you a playground to interact with.
+
+## User Credentials
+
+In this example, there are 3 users (numbered 1,2,3) with credentials that take the form
+`username1`/`password1`. Each of them has a unique set of todo items.

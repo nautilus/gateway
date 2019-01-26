@@ -14,7 +14,7 @@ to write your APIs.
 
 List of Examples:
 
-- [Auth](./auth) An overview of how to support authentication and authorization
+- [Hello World](./hello) A simple proof of concept
+- [Authentication and Authorization](./auth) An overview of how to support authentication and authorization
   behind a gateway
-- Watch Schema (Coming Soon) A way to support CD workflows. In this example,
-  the gateway listen for some kind of event that triggers a refresh of its internal schema
+- Watch Remote Schemas (Coming Soon) A way to support CD workflows

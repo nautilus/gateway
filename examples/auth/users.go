@@ -39,17 +39,24 @@ var Schema = `
 var users = []*User{
 	{
 		ID:       "1",
-		Username: "username",
-		Password: "password",
+		Username: "username1",
+		Password: "password1",
+	},
+	{
+		ID:       "2",
+		Username: "username2",
+		Password: "password2",
+	},
+	{
+		ID:       "3",
+		Username: "username3",
+		Password: "password3",
 	},
 }
 
-// resolve the node field
-func (r *Resolver) Node(args struct{ Id string }) *NodeResolver {
-	return &NodeResolver{&UserResolver{users[0]}}
-}
-
-// handle the login mutation
+// LoginUser is the primary userResolver for the mutation to log a user in.
+// It's resposibility it to check that the credentials are correct
+// and return a string that will be used to identity the user later.
 func (r *Resolver) LoginUser(args struct {
 	Username string
 	Password string
@@ -57,7 +64,10 @@ func (r *Resolver) LoginUser(args struct {
 	// look for the user with the corresponding username and password
 	for _, user := range users {
 		if user.Username == args.Username && user.Password == args.Password {
-			return &LoginUserOutput{string(user.ID)}, nil
+			// return the token that the client will send back to us to claim the identity
+			return &LoginUserOutput{
+				Tkn: string(user.ID),
+			}, nil
 		}
 	}
 
@@ -70,6 +80,12 @@ func (r *Resolver) LoginUser(args struct {
 // boilerplate for rest of API
 //
 //
+
+type userResolver struct{}
+
+func (r *userResolver) Node(args struct{ ID string }) *NodeResolver {
+	return &NodeResolver{&UserResolver{users[0]}}
+}
 
 type User struct {
 	ID       graphql.ID
@@ -110,7 +126,7 @@ func (u *UserResolver) ID() graphql.ID {
 
 // start the service
 func main() {
-	schema := graphql.MustParseSchema(Schema, &Resolver{})
+	schema := graphql.MustParseSchema(Schema, &userResolver{})
 
 	http.Handle("/query", &relay.Handler{Schema: schema})
 

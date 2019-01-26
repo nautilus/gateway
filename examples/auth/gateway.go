@@ -18,13 +18,13 @@ func main() {
 	}
 
 	// create the gateway instance
-	gateway, err := gateway.New(schemas)
+	gw, err := gateway.New(schemas)
 	if err != nil {
 		panic(err)
 	}
 
 	// add the playground endpoint to the router
-	http.HandleFunc("/graphql", gateway.PlaygroundHandler)
+	http.HandleFunc("/graphql", gw.PlaygroundHandler)
 
 	// start the server
 	fmt.Println("Starting server")
