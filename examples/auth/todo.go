@@ -78,7 +78,7 @@ func (r *query) ViewerTodos(ctx context.Context) ([]*Todo, error) {
 	return todos[userID], nil
 }
 
-// addUserInfo is a handler middleware that extracts the appropriate header and set it
+// addUserInfo is a handler middleware that extracts the appropriate header and sets it
 // to a known place in context
 func addUserInfo(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

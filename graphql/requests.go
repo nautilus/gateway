@@ -137,9 +137,10 @@ func (q *NetworkQueryer) Query(ctx context.Context, input *QueryInput, receiver 
 	if err != nil {
 		return err
 	}
+	// add the current context to the request
 	acc := req.WithContext(ctx)
 
-	// we could have any number of middlewares that we have to go through
+	// we could have any number of middlewares that we have to go through so
 	for _, mware := range q.middlewares {
 		result, err := mware(acc)
 		if err != nil {
@@ -151,7 +152,7 @@ func (q *NetworkQueryer) Query(ctx context.Context, input *QueryInput, receiver 
 	}
 
 	// fire the response to the queryer's url
-	resp, err := q.Client.Do(acc)
+	resp, err := q.Client.Do(req)
 	if err != nil {
 		return err
 	}

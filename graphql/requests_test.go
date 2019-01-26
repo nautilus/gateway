@@ -325,3 +325,60 @@ func TestQueryerFunc_failure(t *testing.T) {
 	// make sure we got the right error
 	assert.Equal(t, expected, err)
 }
+
+func TestNetworkQueryer_middlewaresSuccess(t *testing.T) {
+	httpClient := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) *http.Response {
+			// if we did not get the right header value
+			if req.Header.Get("Hello") != "World" {
+				return &http.Response{
+					StatusCode: http.StatusExpectationFailed,
+					// Send response to be tested
+					Body: ioutil.NopCloser(bytes.NewBufferString("Did not recieve the right header")),
+					// Must be set to non-nil value or it panics
+					Header: make(http.Header),
+				}
+			}
+
+			// serialize the json we want to send back
+			result, _ := json.Marshal(map[string]interface{}{
+				"allUsers": []string{
+					"John Jacob",
+					"Jinglehymer Schmidt",
+				},
+			})
+
+			return &http.Response{
+				StatusCode: 200,
+				// Send response to be tested
+				Body: ioutil.NopCloser(bytes.NewBuffer(result)),
+				// Must be set to non-nil value or it panics
+				Header: make(http.Header),
+			}
+		}),
+	}
+
+	queryer := (&NetworkQueryer{
+		URL:    "Hello",
+		Client: httpClient,
+	}).WithMiddlewares([]NetworkMiddleware{
+		func(r *http.Request) (*http.Request, error) {
+			r.Header.Set("Hello", "World")
+
+			return r, nil
+		},
+	})
+
+	// a place to store the results
+	results := map[string]interface{}{}
+
+	input := &QueryInput{
+		Query: "",
+	}
+
+	err := queryer.Query(context.Background(), input, &results)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+}
