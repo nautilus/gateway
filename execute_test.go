@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sync"
 	"testing"
 
@@ -364,7 +365,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 									},
 									// planner will actually leave behind a queryer that hits service B
 									// for testing we can just return a known value
-									Queryer: &graphql.QueryerFunc{
+									Queryer: graphql.QueryerFunc(
 										func(input *graphql.QueryInput) (interface{}, error) {
 											// make sure that we got the right variable inputs
 											assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
@@ -375,7 +376,8 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 													"firstName": followerName,
 												},
 											}, nil
-										}},
+										},
+									),
 								},
 							},
 						},
@@ -487,11 +489,11 @@ func TestExecutor_multipleErrors(t *testing.T) {
 						},
 					},
 					// return a known value we can test against
-					Queryer: &graphql.QueryerFunc{
+					Queryer: graphql.QueryerFunc(
 						func(input *graphql.QueryInput) (interface{}, error) {
 							return map[string]interface{}{"data": map[string]interface{}{}}, errors.New("message")
 						},
-					},
+					),
 				},
 				{
 					// this is equivalent to
@@ -506,11 +508,11 @@ func TestExecutor_multipleErrors(t *testing.T) {
 						},
 					},
 					// return a known value we can test against
-					Queryer: &graphql.QueryerFunc{
+					Queryer: graphql.QueryerFunc(
 						func(input *graphql.QueryInput) (interface{}, error) {
 							return map[string]interface{}{"data": map[string]interface{}{}}, graphql.ErrorList{errors.New("message"), errors.New("message")}
 						},
-					},
+					),
 				},
 			},
 		},
@@ -627,6 +629,79 @@ func TestExecutor_includeIf(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{}, result)
 }
 
+func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
+	schema, _ := graphql.LoadSchema(
+		`
+			type Query {
+				allUsers: [String!]!
+			}
+		`,
+	)
+
+	remoteSchema := &graphql.RemoteSchema{
+		Schema: schema,
+		URL:    "hello",
+	}
+
+	// the Middleware to apply
+	called := false
+	middleware := RequestMiddleware(func(r *http.Request) (*http.Request, error) {
+		called = true
+		return r, nil
+	})
+
+	// we need a planner that will leave behind a simple plan
+	planner := &MockPlanner{
+		[]*QueryPlan{
+			{
+				Operation: &ast.OperationDefinition{
+					Operation: ast.Query,
+				},
+				RootStep: &QueryPlanStep{
+					Then: []*QueryPlanStep{
+						{
+							// this is equivalent to
+							// query { values }
+							ParentType: "Query",
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "values",
+									Definition: &ast.FieldDefinition{
+										Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+									},
+								},
+							},
+							QueryDocument: &ast.QueryDocument{
+								Operations: ast.OperationList{
+									{
+										Operation: "Query",
+									},
+								},
+							},
+							QueryString: `hello`,
+							// return a known value we can test against
+							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{"values": []string{"world"}}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// create a gateway with the Middleware
+	gateway, err := New([]*graphql.RemoteSchema{remoteSchema}, WithMiddlewares(middleware), WithPlanner(planner))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// execute any think
+	gateway.Execute(context.Background(), `{ values } `, map[string]interface{}{})
+
+	// make sure we called the middleware
+	assert.True(t, called, "Did not call middleware")
+}
+
 func TestExecutor_threadsVariables(t *testing.T) {
 	// the variables we'll be threading through
 	fullVariables := map[string]interface{}{
@@ -677,7 +752,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 					QueryString: `hello`,
 					Variables:   Set{"hello": true},
 					// return a known value we can test against
-					Queryer: &graphql.QueryerFunc{
+					Queryer: graphql.QueryerFunc(
 						func(input *graphql.QueryInput) (interface{}, error) {
 							// make sure that we got the right variable inputs
 							assert.Equal(t, map[string]interface{}{"hello": "world"}, input.Variables)
@@ -686,7 +761,8 @@ func TestExecutor_threadsVariables(t *testing.T) {
 							assert.Equal(t, "hello", input.Query)
 
 							return map[string]interface{}{"values": []string{"world"}}, nil
-						}},
+						},
+					),
 				},
 			},
 		},

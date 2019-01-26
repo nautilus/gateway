@@ -291,11 +291,11 @@ func TestNetworkQueryer_errorList(t *testing.T) {
 func TestQueryerFunc_success(t *testing.T) {
 	expected := map[string]interface{}{"hello": "world"}
 
-	queryer := QueryerFunc{
+	queryer := QueryerFunc(
 		func(*QueryInput) (interface{}, error) {
 			return expected, nil
 		},
-	}
+	)
 
 	// a place to write the result
 	result := map[string]interface{}{}
@@ -313,11 +313,11 @@ func TestQueryerFunc_success(t *testing.T) {
 func TestQueryerFunc_failure(t *testing.T) {
 	expected := errors.New("message")
 
-	queryer := QueryerFunc{
+	queryer := QueryerFunc(
 		func(*QueryInput) (interface{}, error) {
 			return nil, expected
 		},
-	}
+	)
 
 	err := queryer.Query(&QueryInput{}, &map[string]interface{}{})
 

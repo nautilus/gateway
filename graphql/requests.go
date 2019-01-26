@@ -48,14 +48,12 @@ func (q *MockSuccessQueryer) Query(input *QueryInput, receiver interface{}) erro
 }
 
 // QueryerFunc responds to the query by calling the provided function
-type QueryerFunc struct {
-	Fn func(*QueryInput) (interface{}, error)
-}
+type QueryerFunc func(*QueryInput) (interface{}, error)
 
 // Query invokes the provided function and writes the response to the receiver
-func (q *QueryerFunc) Query(input *QueryInput, receiver interface{}) error {
+func (q QueryerFunc) Query(input *QueryInput, receiver interface{}) error {
 	// invoke the handler
-	response, err := q.Fn(input)
+	response, err := q(input)
 	if err != nil {
 		return err
 	}

@@ -2,20 +2,22 @@ package gateway
 
 import "net/http"
 
-// Plugin are things that can modify a gateway normal execution
-type Plugin interface {
-	Plugin()
+// Middleware are things that can modify a gateway normal execution
+type Middleware interface {
+	Middleware()
 }
 
-// PluginList is a list of plugins
-type PluginList []Plugin
+// MiddlewareList is a list of Middlewares
+type MiddlewareList []Middleware
 
-func (l PluginList) applyQueryRequestPlugins(r *http.Request) (*http.Request, error) {
-	// look for each query request plugin and add it to the list
-	for _, plugin := range l {
-		if rPlugin, ok := plugin.(QueryRequestPlugin); ok {
-			// invoke the plugin
-			newValue, err := rPlugin(r)
+// ApplyRequestMiddlewares iterates over the list of middlewares and applies any that
+// affect a query request
+func (l MiddlewareList) ApplyRequestMiddlewares(r *http.Request) (*http.Request, error) {
+	// look for each query request Middleware and add it to the list
+	for _, Middleware := range l {
+		if rMiddleware, ok := Middleware.(RequestMiddleware); ok {
+			// invoke the Middleware
+			newValue, err := rMiddleware(r)
 			if err != nil {
 				return nil, err
 			}
@@ -25,12 +27,12 @@ func (l PluginList) applyQueryRequestPlugins(r *http.Request) (*http.Request, er
 		}
 	}
 
-	// return the list of plugins
+	// return the request
 	return r, nil
 }
 
-// QueryRequestPlugin is a plugin that can modify the outbound query requests
-type QueryRequestPlugin func(r *http.Request) (*http.Request, error)
+// RequestMiddleware is a middleware that can modify outbound requests to services
+type RequestMiddleware func(r *http.Request) (*http.Request, error)
 
-// Plugin marks QueryRequestPlugin as a Plugin
-func (p QueryRequestPlugin) Plugin() {}
+// Middleware marks RequestMiddleware as a Middleware
+func (p RequestMiddleware) Middleware() {}

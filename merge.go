@@ -14,14 +14,12 @@ type Merger interface {
 	Merge([]*ast.Schema) (*ast.Schema, error)
 }
 
-// MergerFn is a wrapper of a function of the same signature as Merger.Merge
-type MergerFn struct {
-	Fn func([]*ast.Schema) (*ast.Schema, error)
-}
+// MergerFunc is a wrapper of a function of the same signature as Merger.Merge
+type MergerFunc func([]*ast.Schema) (*ast.Schema, error)
 
 // Merge invokes and returns the wrapped function
-func (m *MergerFn) Merge(sources []*ast.Schema) (*ast.Schema, error) {
-	return m.Fn(sources)
+func (m MergerFunc) Merge(sources []*ast.Schema) (*ast.Schema, error) {
+	return m(sources)
 }
 
 // mergeSchemas takes in a bunch of schemas and merges them into one. Following the strategies outlined here:

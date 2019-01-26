@@ -609,14 +609,12 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 	}, nil
 }
 
-// ExecutorFn wraps a function to be used as an executor.
-type ExecutorFn struct {
-	Fn func(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
-}
+// ExecutorFunc wraps a function to be used as an executor.
+type ExecutorFunc func(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
 
 // Execute invokes and returns the internal function
-func (e *ExecutorFn) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
-	return e.Fn(ctx, plan, variables)
+func (e ExecutorFunc) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+	return e(ctx, plan, variables)
 }
 
 // ErrExecutor always returnes the internal error.

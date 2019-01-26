@@ -12,7 +12,7 @@ install:
 
 tests:
   summary: run the tests
-  command: go test -v {{ .files }}
+  command: go test {{ .files }}
 
 test:coverage:
   summary: run the tests, generate a coverage report, and report it to coveralls

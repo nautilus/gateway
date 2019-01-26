@@ -11,16 +11,20 @@ import (
 	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
+type contextKey int
+
+const middlewaresCtxKey contextKey = iota
+
 // Gateway is the top level entry for interacting with a gateway. It is responsible for merging a list of
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
 type Gateway struct {
-	sources  []*graphql.RemoteSchema
-	schema   *ast.Schema
-	planner  QueryPlanner
-	executor Executor
-	merger   Merger
-	plugins  PluginList
+	sources     []*graphql.RemoteSchema
+	schema      *ast.Schema
+	planner     QueryPlanner
+	executor    Executor
+	merger      Merger
+	middlewares MiddlewareList
 
 	// the urls we have to visit to access certain fields
 	fieldURLs FieldURLMap
@@ -34,9 +38,12 @@ func (g *Gateway) Execute(ctx context.Context, query string, variables map[strin
 		return nil, err
 	}
 
+	// add the list of plugins to the execution context
+	middlewareCtx := context.WithValue(ctx, middlewaresCtxKey, g.middlewares)
+
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	return g.executor.Execute(ctx, plan[0], variables)
+	return g.executor.Execute(middlewareCtx, plan[0], variables)
 }
 
 // New instantiates a new schema with the required stuffs.
@@ -51,7 +58,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		sources:  sources,
 		planner:  &MinQueriesPlanner{},
 		executor: &ParallelExecutor{},
-		merger:   &MergerFn{Fn: mergeSchemas},
+		merger:   MergerFunc(mergeSchemas),
 	}
 
 	// pass the gateway through any configurators
@@ -112,10 +119,10 @@ func WithMerger(m Merger) Configurator {
 	}
 }
 
-// WithPlugins returns a Configurator that adds plugins to the gateway
-func WithPlugins(plugins ...Plugin) Configurator {
+// WithMiddlewares returns a Configurator that adds middlewares to the gateway
+func WithMiddlewares(middlewares ...Middleware) Configurator {
 	return func(g *Gateway) {
-		g.plugins = PluginList(plugins)
+		g.middlewares = MiddlewareList(middlewares)
 	}
 }
 

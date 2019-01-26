@@ -56,13 +56,13 @@ func TestGraphQLHandler(t *testing.T) {
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
 		{Schema: schema, URL: "url1"},
-	}, WithExecutor(&ExecutorFn{
+	}, WithExecutor(ExecutorFunc(
 		func(context.Context, *QueryPlan, map[string]interface{}) (map[string]interface{}, error) {
 			return map[string]interface{}{
 				"Hello": "world",
 			}, nil
 		},
-	}))
+	)))
 
 	if err != nil {
 		t.Error(err.Error())
@@ -125,13 +125,13 @@ func TestGraphQLHandler(t *testing.T) {
 		// create gateway schema we can test against
 		innerGateway, err := New([]*graphql.RemoteSchema{
 			{Schema: schema, URL: "url1"},
-		}, WithExecutor(&ExecutorFn{
+		}, WithExecutor(ExecutorFunc(
 			func(context.Context, *QueryPlan, map[string]interface{}) (map[string]interface{}, error) {
 				return map[string]interface{}{
 					"foo": func() {},
 				}, nil
 			},
-		}))
+		)))
 
 		if err != nil {
 			t.Error(err.Error())

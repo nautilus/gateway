@@ -9,6 +9,10 @@ import (
 	"github.com/alecaivazis/graphql-gateway/graphql"
 )
 
+type contextKey int
+
+const userIDCtx contextKey = iota
+
 // the first thing we need to define is a middleware for our handler
 // that grabs the Authorization header and sets the context value for
 // our user id
@@ -23,20 +27,20 @@ func withUserInfo(handler http.HandlerFunc) http.HandlerFunc {
 
 		// invoke the handler with the new context
 		handler.ServeHTTP(w, r.WithContext(
-			context.WithValue(r.Context(), "user-id", tokenValue),
+			context.WithValue(r.Context(), userIDCtx, tokenValue),
 		))
 	})
 }
 
-// the next thing we need is to modify the queryers behavior. we only need to do one
-// thing in this example: pull the id of the user out of context
-// and set it as the outbound USER_ID header
-var plugin = gateway.QueryRequestPlugin(func(r *http.Request) (*http.Request, error) {
+// the next thing we need to do is to modify the network requests to our services.
+// To do this, we will define a Middleware that pulls the id of the user out
+// of the context of the incoming request set it as the USER_ID header in the outbound request.
+var forwardUserID = gateway.RequestMiddleware(func(r *http.Request) (*http.Request, error) {
 	// the initial context of the request is set as the same context
 	// provided by net/http
 
 	// we are safe to extract the value we saved in context and set it as the outbound header
-	r.Header.Set("USER_ID", r.Context().Value("user-id").(string))
+	r.Header.Set("USER_ID", r.Context().Value(userIDCtx).(string))
 
 	// return the modified request
 	return r, nil
@@ -53,7 +57,7 @@ func main() {
 	}
 
 	// create the gateway instance
-	gw, err := gateway.New(schemas, gateway.WithPlugins(plugin))
+	gw, err := gateway.New(schemas, gateway.WithMiddlewares(forwardUserID))
 	if err != nil {
 		panic(err)
 	}
