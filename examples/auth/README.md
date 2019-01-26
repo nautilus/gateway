@@ -1,4 +1,4 @@
-# Auth Example
+# Authentication Example
 
 This example showcases a typical approach to handling authorization and
 authentication behind a gateway. In this example, there are 2 services apart from
