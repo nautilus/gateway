@@ -128,7 +128,7 @@ func (u *UserResolver) ID() graphql.ID {
 func main() {
 	schema := graphql.MustParseSchema(Schema, &userResolver{})
 
-	http.Handle("/query", &relay.Handler{Schema: schema})
+	http.Handle("/", &relay.Handler{Schema: schema})
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

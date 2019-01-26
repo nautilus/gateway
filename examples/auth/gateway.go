@@ -11,7 +11,8 @@ import (
 func main() {
 	// introspect the apis
 	schemas, err := graphql.IntrospectRemoteSchemas(
-		"http://localhost:8080/query",
+		"http://localhost:8080/",
+		"http://localhost:8081/",
 	)
 	if err != nil {
 		panic(err)

@@ -97,7 +97,7 @@ func main() {
 	schema := graphql.MustParseSchema(Schema, &query{})
 
 	// make sure we add the user info to the execution context
-	http.Handle("/query", addUserInfo(&relay.Handler{Schema: schema}))
+	http.Handle("/", addUserInfo(&relay.Handler{Schema: schema}))
 
 	log.Fatal(http.ListenAndServe(":8081", nil))
 
