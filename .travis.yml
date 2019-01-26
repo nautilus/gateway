@@ -30,9 +30,4 @@ deploy:
   # we need to push a github release with this tag
   provider: script
   skip_cleanup: true
-  script: |-
-    ghr -t $GITHUB_TOKEN \
-      -u "AlecAivazis" \
-      -r "graphql-gateway" \
-      -c $TRAVIS_PULL_REQUEST_SHA \
-      -delete $TRAVIS_TAG ./bin/
+  script: ghr -t $GITHUB_TOKEN  -u "AlecAivazis" -r "graphql-gateway" -delete $TRAVIS_TAG ./bin
