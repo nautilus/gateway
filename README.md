@@ -8,7 +8,7 @@ For a more detailed description of this project's
 motivation read [this post](). For a guide to getting started read [this post]()
 
 ## Table of Contents
-1. [Running the Execuable](#running-the-executable)
+1. [Running the Executable](#running-the-executable)
 1. [Customizing the Gateway](#customizing-the-gateway)
    1. [Integrating with an HTTP server](#integrating-with-an-http-server)
    1. [Modifying Service Requests](#modifying-service-requests)
