@@ -29,8 +29,8 @@ authentication/authorization logic or other extensions when running a gateway wi
 cli. If being able to run a custom gateway with the cli is something that interests you,
 please open in an issue! For now, these common situations require building your own executable.
 
-The core object of the gateway is the `gateway.Gateway` struct exported by the module at
-`github.com/alecaivazis/graphql-gateway`. A `gateway.Gateway` is constructed by providing
+The core object of the gateway is the `Gateway` struct exported by the module at
+`github.com/alecaivazis/graphql-gateway`. A `Gateway` is constructed by providing
 a list of `graphql.RemoteSchema`s for each service to `gateway.New`. The easiest way to
 get a `graphql.RemoteSchema` is to introspect the remote schema using a utility from
 `github.com/alecaivazis/graphql-gateway/graphql`:
