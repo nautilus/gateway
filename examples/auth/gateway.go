@@ -15,7 +15,7 @@ import (
 func withUserInfo(handler http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// look up the value of the Authorization header
-		userID := r.Header.Get("Authorization")
+		tokenValue := r.Header.Get("Authorization")
 
 		// here is where you would perform some kind of validation on the token
 		// but we're going to skip that for this example and just save it as the
@@ -23,26 +23,24 @@ func withUserInfo(handler http.HandlerFunc) http.HandlerFunc {
 
 		// invoke the handler with the new context
 		handler.ServeHTTP(w, r.WithContext(
-			context.WithValue(r.Context(), "user-id", userID),
+			context.WithValue(r.Context(), "user-id", tokenValue),
 		))
 	})
 }
 
-// the next thing we need is to modify the queryers behavior
-var queryerPlugins = &gateway.PluginList{
-	// we only need to do one thing in this example: pull the id of the user out of context
-	// and set it as the outbound USER_ID header
-	gateway.RequestPlugin(func(r *http.Request) (*http.Request, error) {
-		// the initial context of the request is set as the same context
-		// provided by net/http
+// the next thing we need is to modify the queryers behavior. we only need to do one
+// thing in this example: pull the id of the user out of context
+// and set it as the outbound USER_ID header
+var plugin = gateway.QueryRequestPlugin(func(r *http.Request) (*http.Request, error) {
+	// the initial context of the request is set as the same context
+	// provided by net/http
 
-		// we are safe to extract the value we saved in context and set it as the outbound header
-		r.Header().Set("USER_ID", r.Context().Value("user-id").(string))
+	// we are safe to extract the value we saved in context and set it as the outbound header
+	r.Header.Set("USER_ID", r.Context().Value("user-id").(string))
 
-		// return the modified request
-		return r, nil
-	}),
-}
+	// return the modified request
+	return r, nil
+})
 
 func main() {
 	// introspect the apis
@@ -55,7 +53,7 @@ func main() {
 	}
 
 	// create the gateway instance
-	gw, err := gateway.New(schemas, gateway.WithQueryerPlugins(queryerPlugins))
+	gw, err := gateway.New(schemas, gateway.WithPlugins(plugin))
 	if err != nil {
 		panic(err)
 	}

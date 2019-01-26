@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,13 +20,14 @@ type Gateway struct {
 	planner  QueryPlanner
 	executor Executor
 	merger   Merger
+	plugins  PluginList
 
 	// the urls we have to visit to access certain fields
 	fieldURLs FieldURLMap
 }
 
 // Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(query string, variables map[string]interface{}) (map[string]interface{}, error) {
+func (g *Gateway) Execute(ctx context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	// generate a query plan for the query
 	plan, err := g.planner.Plan(query, g.schema, g.fieldURLs)
 	if err != nil {
@@ -34,7 +36,7 @@ func (g *Gateway) Execute(query string, variables map[string]interface{}) (map[s
 
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	return g.executor.Execute(plan[0], variables)
+	return g.executor.Execute(ctx, plan[0], variables)
 }
 
 // New instantiates a new schema with the required stuffs.
@@ -107,6 +109,13 @@ func WithExecutor(e Executor) Configurator {
 func WithMerger(m Merger) Configurator {
 	return func(g *Gateway) {
 		g.merger = m
+	}
+}
+
+// WithPlugins returns a Configurator that adds plugins to the gateway
+func WithPlugins(plugins ...Plugin) Configurator {
+	return func(g *Gateway) {
+		g.plugins = PluginList(plugins)
 	}
 }
 

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -12,7 +13,7 @@ import (
 
 func TestExecutor_plansOfOne(t *testing.T) {
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -64,7 +65,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	// }
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -156,7 +157,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 	// }
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{ // this is equivalent to
@@ -235,7 +236,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 	followerName := "John"
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -470,7 +471,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 	// an executor should return a list of every error that it encounters while executing the plan
 
 	// build a query plan that the executor will follow
-	_, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	_, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -543,7 +544,7 @@ func TestExecutor_includeIf(t *testing.T) {
 	// }
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		RootStep: &QueryPlanStep{
 			Then: []*QueryPlanStep{
 				{
@@ -646,7 +647,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 	}
 
 	// build a query plan that the executor will follow
-	_, err := (&ParallelExecutor{}).Execute(&QueryPlan{
+	_, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
 		Operation: &ast.OperationDefinition{
 			Operation:           ast.Query,
 			VariableDefinitions: fullVariableDefs,
