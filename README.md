@@ -61,7 +61,10 @@ func main() {
 }
 ```
 
-A `Gateway` provides 2 different handlers that can plug into whatever web server you prefer:
+### Integrating with a different HTTP Server
+
+A `Gateway` provides 2 different handlers which are both instances of `http.HandlerFunc` so they should easily 
+integrate into whichever web server you prefer:
 
 - `gateway.GraphQLHandler` responds to both `GET` and `POST` requests as described
   [in the spec](https://graphql.org/learn/serving-over-http/).
