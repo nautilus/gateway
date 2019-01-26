@@ -655,9 +655,9 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 
 	// the middleware to apply
 	called := false
-	middleware := RequestMiddleware(func(r *http.Request) (*http.Request, error) {
+	middleware := RequestMiddleware(func(r *http.Request) error {
 		called = true
-		return r, nil
+		return nil
 	})
 
 	// in order to execute the request middleware we need to be dealing with a network queryer

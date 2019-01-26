@@ -75,7 +75,7 @@ type NetworkQueryer struct {
 
 // NetworkMiddleware are functions can be passed to NetworkQueryer.WithMiddleware to affect its internal
 // behavior
-type NetworkMiddleware func(*http.Request) (*http.Request, error)
+type NetworkMiddleware func(*http.Request) error
 
 // IntrospectRemoteSchema is used to build a RemoteSchema by firing the introspection query
 // at a remote service and reconstructing the schema object from the response
@@ -142,13 +142,10 @@ func (q *NetworkQueryer) Query(ctx context.Context, input *QueryInput, receiver 
 
 	// we could have any number of middlewares that we have to go through so
 	for _, mware := range q.middlewares {
-		result, err := mware(acc)
+		err := mware(acc)
 		if err != nil {
 			return err
 		}
-
-		// use this result as the next request
-		acc = result
 	}
 
 	// fire the response to the queryer's url

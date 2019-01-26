@@ -330,8 +330,8 @@ func TestNetworkQueryer_middlewaresFailure(t *testing.T) {
 	queryer := (&NetworkQueryer{
 		URL: "Hello",
 	}).WithMiddlewares([]NetworkMiddleware{
-		func(r *http.Request) (*http.Request, error) {
-			return nil, errors.New("This One")
+		func(r *http.Request) error {
+			return errors.New("This One")
 		},
 	})
 
@@ -386,10 +386,10 @@ func TestNetworkQueryer_middlewaresSuccess(t *testing.T) {
 		URL:    "Hello",
 		Client: httpClient,
 	}).WithMiddlewares([]NetworkMiddleware{
-		func(r *http.Request) (*http.Request, error) {
+		func(r *http.Request) error {
 			r.Header.Set("Hello", "World")
 
-			return r, nil
+			return nil
 		},
 	})
 

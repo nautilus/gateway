@@ -31,7 +31,7 @@ func withUserInfo(handler http.HandlerFunc) http.HandlerFunc {
 // the next thing we need to do is to modify the network requests to our services.
 // To do this, we have to define a middleware that pulls the id of the user out
 // of the context of the incoming request and sets it as the USER_ID header.
-var forwardUserID = gateway.RequestMiddleware(func(r *http.Request) (*http.Request, error) {
+var forwardUserID = gateway.RequestMiddleware(func(r *http.Request) error {
 	// the initial context of the request is set as the same context
 	// provided by net/http
 
