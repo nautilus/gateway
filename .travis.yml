@@ -31,6 +31,8 @@ deploy:
   provider: script
   skip_cleanup: true
   script: |-
+    echo $TRAVIS_TAG
+    env
     ghr -t ${GITHUB_TOKEN} \
       -u "AlecAivazis" \
       -r "graphql-gateway" \
