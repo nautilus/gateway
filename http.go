@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/nautilus/graphql"
 )
 
 // QueryPOSTBody is the incoming payload when sending POST requests to the gateway

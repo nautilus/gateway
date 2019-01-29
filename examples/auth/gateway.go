@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	gateway "github.com/alecaivazis/graphql-gateway"
-	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/nautilus/graphql"
 )
 
 // the first thing we need to define is a middleware for our handler

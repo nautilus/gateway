@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alecaivazis/graphql-gateway/graphql"
 	"github.com/mitchellh/mapstructure"
+	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,7 +1,7 @@
 package gateway
 
 import (
-	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/nautilus/graphql"
 )
 
 // Middleware are things that can modify a gateway normal execution

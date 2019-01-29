@@ -8,7 +8,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/vektah/gqlparser/ast"
 
-	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/nautilus/graphql"
 )
 
 // internalSchema is a graphql schema that exists at the gateway level and is merged with the

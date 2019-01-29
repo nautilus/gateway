@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	gateway "github.com/alecaivazis/graphql-gateway"
-	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/nautilus/gateway"
+	"github.com/nautilus/graphql"
 )
 
 func ListenAndServe(services []string) {

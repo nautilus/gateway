@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/ast"
 )

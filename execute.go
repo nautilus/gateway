@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/nautilus/graphql"
 	"github.com/vektah/gqlparser/ast"
 )
 

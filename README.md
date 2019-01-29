@@ -8,6 +8,7 @@ For a more detailed description of this project's
 motivation read [this post](). For a guide to getting started read [this post]()
 
 ## Table of Contents
+
 1. [Running the Executable](#running-the-executable)
 1. [Customizing the Gateway](#customizing-the-gateway)
    1. [Integrating with an HTTP server](#integrating-with-an-http-server)
@@ -43,14 +44,14 @@ The core object of the gateway is the `Gateway` struct exported by the module at
 `github.com/alecaivazis/graphql-gateway`. A `Gateway` is constructed by providing
 a list of `graphql.RemoteSchema`s for each service to `gateway.New`. The easiest way to
 get a `graphql.RemoteSchema` is to introspect the remote schema using a utility from
-`github.com/alecaivazis/graphql-gateway/graphql`:
+`github.com/nautilus/graphql`:
 
 ```golang
 package main
 
 import (
 	gateway "github.com/alecaivazis/graphql-gateway"
-	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/nautilus/graphql"
 )
 
 func main() {
@@ -73,7 +74,7 @@ func main() {
 
 ### Integrating with an HTTP server
 
-A `Gateway` provides 2 different handlers which are both instances of `http.HandlerFunc` so they should easily 
+A `Gateway` provides 2 different handlers which are both instances of `http.HandlerFunc` so they should easily
 integrate into whichever web server you prefer:
 
 - `gateway.GraphQLHandler` responds to both `GET` and `POST` requests as described
@@ -108,10 +109,10 @@ func main() {
 
 ### Modifying Service Requests
 
-There are many situations where one might want to modify the network requests sent from 
+There are many situations where one might want to modify the network requests sent from
 the gateway to the other services. In order to do this, you can define a `RequestMiddleware`
 that will be called for every request sent. The context of this request is the same context
-of the incoming network request. 
+of the incoming network request.
 
 ```golang
 addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
@@ -126,8 +127,8 @@ addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
 gateway.New(..., gateway.withMiddleware(addHeader))
 ```
 
-If you wanted to do something more complicated like pull something out of the incoming 
-network request (its IP for example) and add it to the outbound requests, you would 
+If you wanted to do something more complicated like pull something out of the incoming
+network request (its IP for example) and add it to the outbound requests, you would
 write it in 2 parts.
 
 The first would grab the the value from the incoming request and set it in context
@@ -160,13 +161,11 @@ addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
 gateway.New(..., gateway.withMiddleware(addHeader))
 ```
 
-
 #### Authentication and Authorization
 
 Currently the gateway has no opinion on a method for authentication and authorization.
 Descisions for wether a user can or cannot do something is pushed down to the services
 handling the queries. Authentication and Authorization should be modeled as a special
-case of above. 
+case of above.
 
 See the [auth example](./examples/auth) for more information.
-

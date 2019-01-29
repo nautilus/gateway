@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alecaivazis/graphql-gateway/graphql"
+	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
 )
 
