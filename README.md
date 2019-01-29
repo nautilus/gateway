@@ -1,6 +1,6 @@
-# graphql-gateway
+# nautilus/gateway
 
-[![Build Status](https://travis-ci.com/AlecAivazis/graphql-gateway.svg?branch=master)](https://travis-ci.com/AlecAivazis/graphql-gateway) [![Coverage Status](https://coveralls.io/repos/github/AlecAivazis/graphql-gateway/badge.svg?branch=master)](https://coveralls.io/github/AlecAivazis/graphql-gateway?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/nautilus/gateway)](https://goreportcard.com/report/github.com/nautilus/gateway)
+[![Build Status](https://travis-ci.com/nautilus/gateway.svg?branch=master)](https://travis-ci.com/nautilus/gateway) [![Coverage Status](https://coveralls.io/repos/github/nautilus/gateway/badge.svg?branch=master)](https://coveralls.io/github/nautilus/gateway?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/nautilus/gateway)](https://goreportcard.com/report/github.com/nautilus/gateway)
 
 A standalone service designed to consolidate your graphql APIs into one endpoint.
 
@@ -30,7 +30,7 @@ $ ./gateway start --port 4000 --services http://localhost:3000,http://localhost:
 
 This will start a server on port 4000 that wraps over the services
 running at `http://localhost:3000` and `http://localhost:3001`. For more information on possible
-arguments to pass the executable, run `./graphql-gateway --help`.
+arguments to pass the executable, run `./gateway --help`.
 
 ## Customizing the Gateway
 
