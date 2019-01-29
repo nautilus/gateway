@@ -23,7 +23,7 @@ func (m MergerFunc) Merge(sources []*ast.Schema) (*ast.Schema, error) {
 }
 
 // mergeSchemas takes in a bunch of schemas and merges them into one. Following the strategies outlined here:
-// https://github.com/AlecAivazis/graphql-gateway/blob/master/docs/mergingStrategies.md
+// https://github.com/nautilus/gateway/blob/master/docs/mergingStrategies.md
 func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	// a placeholder schema we will build up using the sources
 	result := &ast.Schema{

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	gateway "github.com/alecaivazis/graphql-gateway"
+	"github.com/nautilus/gateway"
 	"github.com/nautilus/graphql"
 )
 

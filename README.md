@@ -1,6 +1,6 @@
 # graphql-gateway
 
-[![Build Status](https://travis-ci.com/AlecAivazis/graphql-gateway.svg?branch=master)](https://travis-ci.com/AlecAivazis/graphql-gateway) [![Coverage Status](https://coveralls.io/repos/github/AlecAivazis/graphql-gateway/badge.svg?branch=master)](https://coveralls.io/github/AlecAivazis/graphql-gateway?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/alecaivazis/graphql-gateway)](https://goreportcard.com/report/github.com/alecaivazis/graphql-gateway)
+[![Build Status](https://travis-ci.com/AlecAivazis/graphql-gateway.svg?branch=master)](https://travis-ci.com/AlecAivazis/graphql-gateway) [![Coverage Status](https://coveralls.io/repos/github/AlecAivazis/graphql-gateway/badge.svg?branch=master)](https://coveralls.io/github/AlecAivazis/graphql-gateway?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/nautilus/gateway)](https://goreportcard.com/report/github.com/nautilus/gateway)
 
 A standalone service designed to consolidate your graphql APIs into one endpoint.
 
@@ -41,7 +41,7 @@ cli. If being able to run a custom gateway with the cli is something that intere
 please open in an issue! For now, these common situations require building your own executable.
 
 The core object of the gateway is the `Gateway` struct exported by the module at
-`github.com/alecaivazis/graphql-gateway`. A `Gateway` is constructed by providing
+`github.com/nautilus/gateway`. A `Gateway` is constructed by providing
 a list of `graphql.RemoteSchema`s for each service to `gateway.New`. The easiest way to
 get a `graphql.RemoteSchema` is to introspect the remote schema using a utility from
 `github.com/nautilus/graphql`:
@@ -50,7 +50,7 @@ get a `graphql.RemoteSchema` is to introspect the remote schema using a utility 
 package main
 
 import (
-	gateway "github.com/alecaivazis/graphql-gateway"
+	"github.com/nautilus/gateway"
 	"github.com/nautilus/graphql"
 )
 
