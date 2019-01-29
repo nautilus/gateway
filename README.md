@@ -1,6 +1,6 @@
 # nautilus/gateway
 
-[![Build Status](https://travis-ci.com/nautilus/gateway.svg?branch=master)](https://travis-ci.com/nautilus/gateway) [![Coverage Status](https://coveralls.io/repos/github/nautilus/gateway/badge.svg?branch=master)](https://coveralls.io/github/nautilus/gateway?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/nautilus/gateway)](https://goreportcard.com/report/github.com/nautilus/gateway)
+[![Build Status](https://travis-ci.org/nautilus/gateway.svg?branch=master)](https://travis-ci.org/nautilus/gateway) [![Coverage Status](https://coveralls.io/repos/github/nautilus/gateway/badge.svg?branch=master)](https://coveralls.io/github/nautilus/gateway?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/nautilus/gateway)](https://goreportcard.com/report/github.com/nautilus/gateway)
 
 A standalone service designed to consolidate your graphql APIs into one endpoint.
 
