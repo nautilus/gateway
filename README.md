@@ -25,7 +25,7 @@ from the latest release on GitHub and then run it directly on
 your machine:
 
 ```bash
-$ ./graphql-gateway start --port 4000 --services http://localhost:3000,http://localhost:3001
+$ ./gateway start --port 4000 --services http://localhost:3000,http://localhost:3001
 ```
 
 This will start a server on port 4000 that wraps over the services
