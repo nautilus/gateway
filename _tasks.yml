@@ -29,7 +29,7 @@ build:
 deploy:
   summary: push the built artifacts to the release. assumes its running in CI
   command: |-
-    ghr -t $GITHUB_TOKEN  -u "AlecAivazis" -r "graphql-gateway" -delete $TRAVIS_TAG ./bin
+    ghr -t $GITHUB_TOKEN  -u "nautilus" -r "gateway" -delete $TRAVIS_TAG ./bin
 
 variables:
   files: '$(go list -v ./... | grep -iEv "cmd|examples")'
