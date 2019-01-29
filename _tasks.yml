@@ -24,7 +24,7 @@ test:coverage:
 build:
   summary: build executable in all supported architectures
   command: |-
-    gox -os="linux darwin windows" -arch="amd64" -output="bin/graphql-gateway_{{"{{"}}.OS}}_{{"{{"}}.Arch}}" -verbose ./cmd/...
+    gox -os="linux darwin windows" -arch="amd64" -output="bin/gateway_{{"{{"}}.OS}}_{{"{{"}}.Arch}}" -verbose ./cmd/...
 
 deploy:
   summary: push the built artifacts to the release. assumes its running in CI
