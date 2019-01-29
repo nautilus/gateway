@@ -40,7 +40,7 @@ func (t *Todo) Done() bool {
 
 // the list of todos for each user
 var todos = map[string][]*Todo{
-	"1": []*Todo{
+	"1": {
 		{
 			title: "Foo 1",
 		},
@@ -48,7 +48,7 @@ var todos = map[string][]*Todo{
 			title: "Bar 1",
 		},
 	},
-	"2": []*Todo{
+	"2": {
 		{
 			title: "Foo 2",
 		},
@@ -59,7 +59,7 @@ var todos = map[string][]*Todo{
 			title: "Baz 2",
 		},
 	},
-	"3": []*Todo{},
+	"3": {},
 }
 
 type query struct{}

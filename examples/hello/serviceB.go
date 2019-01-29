@@ -29,7 +29,7 @@ var Schema = `
 
 // the users by id
 var users = map[string]*User{
-	"1": &User{
+	"1": {
 		id:       "1",
 		lastName: "Aivazis",
 	},
