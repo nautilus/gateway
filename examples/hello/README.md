@@ -20,4 +20,4 @@ to the gateway:
 ## Running the Example
 
 - Start both services by running `go run <filename>` in 2 separate terminals.
-- Start the gateway over those 2 services: `graphql-gateway start --services http://localhost:8080,http://localhost:8081`
+- Start the gateway over those 2 services: `gateway start --services http://localhost:8080,http://localhost:8081`
