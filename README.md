@@ -149,7 +149,7 @@ and sets a header in the outbound requests:
 ```golang
 addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
 	// i know i know ... context.Value is the worst. Feel free to put your favorite workaround here
-	r.Header.Set("X-Forwarded-For", r.Context().Value("source-ip").(string)
+	r.Header.Set("X-Forwarded-For", r.Context().Value("source-ip").(string))
 
 	// no errors
 	return nil
