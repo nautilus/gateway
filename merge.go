@@ -276,7 +276,27 @@ func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefin
 		return nil
 	}
 
-	return fmt.Errorf("enum %s cannot be split across services", newDefinition.Name)
+	if previousDefinition.Description != newDefinition.Description {
+		return fmt.Errorf("enum %s has an inconsistent descriptions: %s and %s", previousDefinition.Name, previousDefinition.Description, newDefinition.Description)
+	}
+
+	// if the two definitions dont have the same length
+	if len(previousDefinition.EnumValues) != len(newDefinition.EnumValues) {
+		return fmt.Errorf("enum %s has an inconsistent definition in different services", newDefinition.Name)
+	}
+	// a set of values
+	for _, value := range previousDefinition.EnumValues {
+		// look up the valuein the new definition
+		newValue := newDefinition.EnumValues.ForName(value.Name)
+
+		// if the 2 values have different description
+		if err := mergeEnumValuesEqual(value, newValue); err != nil {
+			return err
+		}
+	}
+
+	// we're done
+	return nil
 }
 
 func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
@@ -304,17 +324,31 @@ func mergeDirectivesEqual(previousDefinition *ast.DirectiveDefinition, newDefini
 		return fmt.Errorf("conflict in directive descriptions. Found \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
 	}
 
-	// make sure the 2 definitions take the same arguments
-	if err := mergeArgumentDefinitionListEqual(previousDefinition.Arguments, newDefinition.Arguments); err != nil {
-		return fmt.Errorf("conflict in argument definitions for directive %s. %s", previousDefinition.Name, err.Error())
-	}
-
 	// make sure the 2 directives can be placed on the same locations
 	if err := mergeDirectiveLocationsEqual(previousDefinition.Locations, newDefinition.Locations); err != nil {
 		return fmt.Errorf("conflict in locations for directive %s. %s", previousDefinition.Name, err.Error())
 	}
 
+	// make sure the 2 definitions take the same arguments
+	if err := mergeArgumentDefinitionListEqual(previousDefinition.Arguments, newDefinition.Arguments); err != nil {
+		return fmt.Errorf("conflict in argument definitions for directive %s. %s", previousDefinition.Name, err.Error())
+	}
+
 	// the 2 directives can coexist
+	return nil
+}
+
+func mergeEnumValuesEqual(value1, value2 *ast.EnumValueDefinition) error {
+	// if the 2 descriptions don't match
+	if value1.Description != value2.Description {
+		return fmt.Errorf("conflict in enum value descriptions. Found \"%v\" and \"%v\"", value1.Description, value2.Description)
+	}
+
+	// if the 2 directives dont match
+	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
+		return fmt.Errorf("conflict in enum value directives. %s", err.Error())
+	}
+
 	return nil
 }
 

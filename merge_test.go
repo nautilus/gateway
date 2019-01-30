@@ -404,12 +404,82 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 }
 
 func TestMergeSchema_enums(t *testing.T) {
+	t.Run("Matching", func(t *testing.T) {
+		// the directive that we are always comparing to
+		originalSchema, err := graphql.LoadSchema(`
+			enum Foo {
+				Bar
+				Baz
+			}
+		`)
+		// make sure nothing went wrong
+		if !assert.Nil(t, err, "original schema didn't parse") {
+			return
+		}
+
+		// merge the schema with one that should work
+		_, err = testMergeSchemas(t, originalSchema, `
+			enum Foo {
+				Bar
+				Baz
+			}
+		`)
+		if err != nil {
+			t.Error(err.Error())
+		}
+	})
+
 	// the table we are testing
 	testMergeRunNegativeTable(t, []testMergeTableRow{
 		{
 			"Conflicting Names",
 			`
 				enum Foo {
+					Bar
+					Baz
+				}
+			`,
+			`
+				enum Foo {
+					Bar
+				}
+			`,
+		},
+		{
+			"Conflicting descriptions",
+			`
+				enum Foo {
+					"description"
+					Bar
+					Baz
+				}
+			`,
+			`
+				enum Foo {
+					Bar
+				}
+			`,
+		},
+		{
+			"Conflicting descriptions",
+			`
+				"description"
+				enum Foo {
+					Bar
+					Baz
+				}
+			`,
+			`
+				enum Foo {
+					Bar
+				}
+			`,
+		},
+		{
+			"Conflicting value descriptions",
+			`
+				enum Foo {
+					"description"
 					Bar
 					Baz
 				}
