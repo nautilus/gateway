@@ -65,7 +65,7 @@ func main() {
 	}
 
 	// create the gateway instance
-	gateway, err := gateway.New(schemas)
+	gw, err := gateway.New(schemas)
 	if err != nil {
 		panic(err)
 	}
@@ -76,9 +76,9 @@ func main() {
 
 An instance of `Gateway` provides 2 different handlers which are both instances of `http.HandlerFunc`:
 
-- `gateway.GraphQLHandler` responds to both `GET` and `POST` requests as described
+- `gw.GraphQLHandler` responds to both `GET` and `POST` requests as described
   [in the spec](https://graphql.org/learn/serving-over-http/).
-- `gateway.PlaygroundHandler` responds to `GET` requests with a web-based IDE for easy exploration
+- `gw.PlaygroundHandler` responds to `GET` requests with a web-based IDE for easy exploration
   and interprets `POST`s as queries to process.
 
 ```golang
@@ -95,7 +95,7 @@ func main() {
 	// ... including up above
 
 	// add the playground endpoint to the router
-	http.HandleFunc("/graphql", gateway.PlaygroundHandler)
+	http.HandleFunc("/graphql", gw.PlaygroundHandler)
 
 	// start the server
 	fmt.Println("Starting server")
