@@ -446,7 +446,7 @@ func TestMergeSchema_enums(t *testing.T) {
 			`,
 		},
 		{
-			"Conflicting descriptions",
+			"Conflicting value descriptions",
 			`
 				enum Foo {
 					"description"
@@ -465,21 +465,6 @@ func TestMergeSchema_enums(t *testing.T) {
 			`
 				"description"
 				enum Foo {
-					Bar
-					Baz
-				}
-			`,
-			`
-				enum Foo {
-					Bar
-				}
-			`,
-		},
-		{
-			"Conflicting value descriptions",
-			`
-				enum Foo {
-					"description"
 					Bar
 					Baz
 				}
