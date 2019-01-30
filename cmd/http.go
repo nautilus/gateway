@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/nautilus/gateway"
 	"github.com/nautilus/graphql"
@@ -12,13 +13,15 @@ func ListenAndServe(services []string) {
 	// introspect the schemas
 	schemas, err := graphql.IntrospectRemoteSchemas(services...)
 	if err != nil {
-		panic(err)
+		fmt.Println("Encountered error introspecting schemas:", err.Error())
+		os.Exit(1)
 	}
 
 	// create the gateway instance
 	gw, err := gateway.New(schemas)
 	if err != nil {
-		panic(err)
+		fmt.Println("Encountered error starting gateway:", err.Error())
+		os.Exit(1)
 	}
 
 	// add the graphql endpoints to the router
@@ -29,6 +32,7 @@ func ListenAndServe(services []string) {
 	err = http.ListenAndServe(fmt.Sprintf(":%s", Port), nil)
 	if err != nil {
 		fmt.Println(err.Error())
+		os.Exit(1)
 	}
 }
 
