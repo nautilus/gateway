@@ -28,7 +28,7 @@ func ListenAndServe(services []string) {
 	http.HandleFunc("/graphql", setCORSHeaders(gw.PlaygroundHandler))
 
 	// start the server
-	fmt.Println("Starting server")
+	fmt.Printf("🚀 Starting gateway on port %s \n", Port)
 	err = http.ListenAndServe(fmt.Sprintf(":%s", Port), nil)
 	if err != nil {
 		fmt.Println(err.Error())

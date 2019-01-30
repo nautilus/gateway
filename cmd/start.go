@@ -15,7 +15,7 @@ var Services []string
 
 func init() {
 	// add the configuration paramters for the start command
-	startCmd.Flags().StringVarP(&Port, "port", "p", "", "the port to listen on.")
+	startCmd.Flags().StringVarP(&Port, "port", "p", "4000", "the port to listen on.")
 
 	startCmd.Flags().StringSliceVarP(&Services, "services", "s", []string{}, "Specify the services to wrap over")
 	startCmd.MarkFlagRequired("services")
