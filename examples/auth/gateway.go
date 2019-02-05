@@ -41,7 +41,7 @@ var forwardUserID = gateway.RequestMiddleware(func(r *http.Request) error {
 	}
 
 	// return the modified request
-	return r, nil
+	return nil
 })
 
 func main() {
