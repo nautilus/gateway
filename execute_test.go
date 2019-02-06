@@ -155,6 +155,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	// make sure we got the right values back
 	assert.Equal(t, map[string]interface{}{
 		"user": map[string]interface{}{
+			"id":        "1",
 			"firstName": "hello",
 			"favoriteCatPhoto": map[string]interface{}{
 				"url": "hello world",
@@ -420,11 +421,13 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 				"friends": []interface{}{
 					map[string]interface{}{
 						"firstName": "John",
+						"id":        "1",
 						"photoGallery": []interface{}{
 							map[string]interface{}{
 								"url": photoGalleryURL,
 								"followers": []interface{}{
 									map[string]interface{}{
+										"id":        "1",
 										"firstName": followerName,
 									},
 								},
@@ -433,11 +436,13 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 					map[string]interface{}{
 						"firstName": "Jacob",
+						"id":        "2",
 						"photoGallery": []interface{}{
 							map[string]interface{}{
 								"url": photoGalleryURL,
 								"followers": []interface{}{
 									map[string]interface{}{
+										"id":        "1",
 										"firstName": followerName,
 									},
 								},
@@ -451,11 +456,13 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 				"friends": []interface{}{
 					map[string]interface{}{
 						"firstName": "Jingleheymer",
+						"id":        "3",
 						"photoGallery": []interface{}{
 							map[string]interface{}{
 								"url": photoGalleryURL,
 								"followers": []interface{}{
 									map[string]interface{}{
+										"id":        "1",
 										"firstName": followerName,
 									},
 								},
@@ -464,11 +471,13 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 					},
 					map[string]interface{}{
 						"firstName": "Schmidt",
+						"id":        "4",
 						"photoGallery": []interface{}{
 							map[string]interface{}{
 								"url": photoGalleryURL,
 								"followers": []interface{}{
 									map[string]interface{}{
+										"id":        "1",
 										"firstName": followerName,
 									},
 								},
