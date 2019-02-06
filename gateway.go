@@ -109,7 +109,8 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 	// pull out the executor middlewares once here so that we don't have
 	// to do it on every execute
 	requestMiddlewares := []graphql.NetworkMiddleware{}
-	responseMiddlewares := []ResponseMiddleware{}
+	// before we do anything that the user tells us to, we have to scrub the fields
+	responseMiddlewares := []ResponseMiddleware{scrubFields}
 	for _, mware := range gateway.middlewares {
 		switch mware := mware.(type) {
 		case ResponseMiddleware:

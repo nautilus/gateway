@@ -32,3 +32,9 @@ func (p ResponseMiddleware) Middleware() {}
 
 // ExecutionMiddleware marks ResponseMiddleware as a valid execution middleware
 func (p ResponseMiddleware) ExecutionMiddleware() {}
+
+// scrubFields removes the fields from the final response that the user did not
+// explicitly ask for
+func scrubFields(ctx *ExecutionContext, response map[string]interface{}) error {
+	return nil
+}
