@@ -8,6 +8,7 @@ import (
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
+	"github.com/vektah/gqlparser/ast"
 )
 
 type schemaTableRow struct {
@@ -125,7 +126,7 @@ func TestGateway(t *testing.T) {
 
 	t.Run("Response Middleware Error", func(t *testing.T) {
 		// create a new schema with the sources and some configuration
-		gateway, err := New([]*graphql.RemoteSchema{sources[0]},
+		gateway, err := New(sources,
 			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
 				return map[string]interface{}{"goodbye": "moon"}, nil
 			})),
@@ -147,9 +148,8 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("Response Middleware Success", func(t *testing.T) {
-
 		// create a new schema with the sources and some configuration
-		gateway, err := New([]*graphql.RemoteSchema{sources[0]},
+		gateway, err := New(sources,
 			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
 				return map[string]interface{}{"goodbye": "moon"}, nil
 			})),
@@ -181,6 +181,103 @@ func TestGateway(t *testing.T) {
 		}
 		// make sure our middleware changed the response
 		assert.Equal(t, map[string]interface{}{"hello": "world"}, response)
+	})
+
+	t.Run("filter out automatically inserted ids", func(t *testing.T) {
+		// the query we're going to fire. Query.allUsers comes from service one. User.lastName
+		// from service two.
+		query := `
+			{
+				allUsers {
+					lastName
+				}
+			}
+		`
+
+		// create a new schema with the sources and a planner that will respond with
+		// values that have ids
+		gateway, err := New(sources, WithPlanner(&MockPlanner{
+			Plans: []*QueryPlan{
+
+				&QueryPlan{
+					RootStep: &QueryPlanStep{
+						Then: []*QueryPlanStep{
+							{
+
+								// this is equivalent to
+								// query { allUsers }
+								ParentType:     "Query",
+								InsertionPoint: []string{},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "allUsers",
+										Definition: &ast.FieldDefinition{
+											Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "id",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("ID", &ast.Position{}),
+												},
+											},
+										},
+									},
+								},
+								// return a known value we can test against
+								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+									"allUsers": []interface{}{
+										map[string]interface{}{
+											"id": "1",
+										},
+									},
+								}},
+								// then we have to ask for the users favorite cat photo and its url
+								Then: []*QueryPlanStep{
+									{
+										ParentType:     "User",
+										InsertionPoint: []string{"allUsers"},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "lastName",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+										Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+											"node": map[string]interface{}{
+												"lastName": "Hello",
+											},
+										}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}))
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// execute the query
+		res, err := gateway.Execute(context.Background(), query, map[string]interface{}{})
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// make sure we didn't get any ids
+		assert.Equal(t, map[string]interface{}{
+			"allUsers": []interface{}{
+				map[string]interface{}{
+					"lastName": "Hello",
+				},
+			},
+		}, res)
 	})
 }
 
