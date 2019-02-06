@@ -638,11 +638,11 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 }
 
 // ExecutorFunc wraps a function to be used as an executor.
-type ExecutorFunc func(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
+type ExecutorFunc func(ctx *ExecutionContext) (map[string]interface{}, error)
 
 // Execute invokes and returns the internal function
-func (e ExecutorFunc) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
-	return e(ctx, plan, variables)
+func (e ExecutorFunc) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
+	return e(ctx)
 }
 
 // ErrExecutor always returnes the internal error.
@@ -651,6 +651,6 @@ type ErrExecutor struct {
 }
 
 // Execute returns the internet error
-func (e *ErrExecutor) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+func (e *ErrExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
 	return nil, e.Error
 }

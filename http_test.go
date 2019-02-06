@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"context"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -57,7 +56,7 @@ func TestGraphQLHandler(t *testing.T) {
 	gateway, err := New([]*graphql.RemoteSchema{
 		{Schema: schema, URL: "url1"},
 	}, WithExecutor(ExecutorFunc(
-		func(context.Context, *QueryPlan, map[string]interface{}) (map[string]interface{}, error) {
+		func(*ExecutionContext) (map[string]interface{}, error) {
 			return map[string]interface{}{
 				"Hello": "world",
 			}, nil
@@ -126,7 +125,7 @@ func TestGraphQLHandler(t *testing.T) {
 		innerGateway, err := New([]*graphql.RemoteSchema{
 			{Schema: schema, URL: "url1"},
 		}, WithExecutor(ExecutorFunc(
-			func(context.Context, *QueryPlan, map[string]interface{}) (map[string]interface{}, error) {
+			func(*ExecutionContext) (map[string]interface{}, error) {
 				return map[string]interface{}{
 					"foo": func() {},
 				}, nil
