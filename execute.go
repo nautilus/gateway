@@ -15,7 +15,7 @@ import (
 // Executor is responsible for executing a query plan against the remote
 // schemas and returning the result
 type Executor interface {
-	Execute(ctx *ExecutionContext, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
+	Execute(ctx *ExecutionContext) (map[string]interface{}, error)
 }
 
 // ParallelExecutor executes the given query plan by starting at the root of the plan and
@@ -39,10 +39,12 @@ type ExecutionContext struct {
 	ResponseMiddlewares []ResponseMiddleware
 	RequestMiddlewares  []graphql.NetworkMiddleware
 	RequestContext      context.Context
+	Plan                *QueryPlan
+	Variables           map[string]interface{}
 }
 
 // Execute returns the result of the query plan
-func (executor *ParallelExecutor) Execute(ctx *ExecutionContext, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -66,14 +68,14 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext, plan *QueryPlan
 	resultLock := &sync.Mutex{}
 
 	// if there are no steps after the root step, there is a problem
-	if len(plan.RootStep.Then) == 0 {
+	if len(ctx.Plan.RootStep.Then) == 0 {
 		return nil, errors.New("was given empty plan")
 	}
 
 	// the root step could have multiple steps that have to happen
-	for _, step := range plan.RootStep.Then {
+	for _, step := range ctx.Plan.RootStep.Then {
 		stepWg.Add(1)
-		go executeStep(ctx, plan, step, []string{}, resultLock, variables, resultCh, errCh, stepWg)
+		go executeStep(ctx, ctx.Plan, step, []string{}, resultLock, ctx.Variables, resultCh, errCh, stepWg)
 	}
 
 	// the list of errors we have encountered while executing the plan

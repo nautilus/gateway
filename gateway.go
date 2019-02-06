@@ -40,16 +40,15 @@ func (g *Gateway) Execute(requestContext context.Context, query string, variable
 		return nil, err
 	}
 
-	// build up the execution contenxt
-	ctx := &ExecutionContext{
+	// TODO: handle plans of more than one query
+	// execute the plan and return the results
+	return g.executor.Execute(&ExecutionContext{
 		RequestContext:      requestContext,
 		RequestMiddlewares:  g.requestMiddlewares,
 		ResponseMiddlewares: g.responseMiddlewares,
-	}
-
-	// TODO: handle plans of more than one query
-	// execute the plan and return the results
-	return g.executor.Execute(ctx, plan[0], variables)
+		Plan:                plan[0],
+		Variables:           variables,
+	})
 }
 
 // New instantiates a new schema with the required stuffs.
