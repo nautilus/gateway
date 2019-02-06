@@ -745,6 +745,101 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 	assert.True(t, called, "Did not call middleware")
 }
 
+func TestExecutor_responseMiddlewareError(t *testing.T) {
+	// the middleware to test
+	middleware := func(ctx *ExecutionContext, response map[string]interface{}) error {
+		return errors.New("this string")
+	}
+
+	// build a query plan that the executor will follow
+	_, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		ResponseMiddlewares: []ResponseMiddleware{middleware},
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
+						// this is equivalent to
+						// query { values }
+						ParentType: "Query",
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "values",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+								},
+							},
+						},
+						// return a known value we can test against
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"values": []string{
+								"hello",
+								"world",
+							},
+						}},
+					},
+				},
+			},
+		},
+	})
+	if err == nil {
+		t.Errorf("Did not encounter error executing plan.")
+	}
+
+}
+
+func TestExecutor_responseMiddlewareSuccess(t *testing.T) {
+	// the middleware to test
+	middleware := func(ctx *ExecutionContext, response map[string]interface{}) error {
+		// clear the previous value
+		for k := range response {
+			delete(response, k)
+		}
+
+		// set something we can test against
+		response["hello"] = "world"
+
+		// no errors
+		return nil
+	}
+
+	// build a query plan that the executor will follow
+	response, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		ResponseMiddlewares: []ResponseMiddleware{middleware},
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
+						// this is equivalent to
+						// query { values }
+						ParentType: "Query",
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "values",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+								},
+							},
+						},
+						// return a known value we can test against
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"values": []string{
+								"hello",
+								"world",
+							},
+						}},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error executing plan: %s", err.Error())
+		return
+	}
+	// make sure our middleware changed the response
+	assert.Equal(t, map[string]interface{}{"hello": "world"}, response)
+}
+
 func TestExecutor_threadsVariables(t *testing.T) {
 	// the variables we'll be threading through
 	fullVariables := map[string]interface{}{

@@ -136,6 +136,13 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 		return result, errs
 	}
 
+	// we now have to thread the result through the list of response middlewares
+	for _, ware := range ctx.ResponseMiddlewares {
+		if err := ware(ctx, result); err != nil {
+			return nil, err
+		}
+	}
+
 	// we didn't encounter any errors
 	return result, nil
 }
