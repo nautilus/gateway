@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -242,4 +244,134 @@ func TestSchemaConfigurator_withPlanner(t *testing.T) {
 	}
 
 	assert.Equal(t, planner, gateway.planner)
+}
+
+func TestGateway_responseMiddlewareError(t *testing.T) {
+	schemas := []schemaTableRow{
+		{
+			"url1",
+			`
+				type Query {
+					allUsers: [User!]!
+				}
+
+				type User {
+					firstName: String!
+					lastName: String!
+				}
+			`,
+		},
+		{
+			"url2",
+			`
+				type User {
+					lastName: String!
+				}
+			`,
+		},
+	}
+
+	// the list of remote schemas
+	sources := []*graphql.RemoteSchema{}
+
+	for _, source := range schemas {
+		// turn the combo into a remote schema
+		schema, _ := graphql.LoadSchema(source.query)
+
+		// add the schema to list of sources
+		sources = append(sources, &graphql.RemoteSchema{Schema: schema, URL: source.location})
+	}
+
+	// create a new schema with the sources and some configuration
+	gateway, err := New([]*graphql.RemoteSchema{sources[0]},
+		WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{"goodbye": "moon"}, nil
+		})),
+		WithMiddleware(
+			ResponseMiddleware(func(ctx *ExecutionContext, response map[string]interface{}) error {
+				return errors.New("this string")
+			}),
+		))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// build a query plan that the executor will follow
+	_, err = gateway.Execute(context.Background(), `{ allUsers { firstName } }`, map[string]interface{}{})
+	if err == nil {
+		t.Errorf("Did not encounter error executing plan.")
+	}
+}
+
+func TestGateway_responseMiddlewareSuccess(t *testing.T) {
+
+	schemas := []schemaTableRow{
+		{
+			"url1",
+			`
+				type Query {
+					allUsers: [User!]!
+				}
+
+				type User {
+					firstName: String!
+					lastName: String!
+				}
+			`,
+		},
+		{
+			"url2",
+			`
+				type User {
+					lastName: String!
+				}
+			`,
+		},
+	}
+
+	// the list of remote schemas
+	sources := []*graphql.RemoteSchema{}
+
+	for _, source := range schemas {
+		// turn the combo into a remote schema
+		schema, _ := graphql.LoadSchema(source.query)
+
+		// add the schema to list of sources
+		sources = append(sources, &graphql.RemoteSchema{Schema: schema, URL: source.location})
+	}
+
+	// create a new schema with the sources and some configuration
+	gateway, err := New([]*graphql.RemoteSchema{sources[0]},
+		WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{"goodbye": "moon"}, nil
+		})),
+		WithMiddleware(
+			ResponseMiddleware(func(ctx *ExecutionContext, response map[string]interface{}) error {
+				// clear the previous value
+				for k := range response {
+					delete(response, k)
+				}
+
+				// set something we can test against
+				response["hello"] = "world"
+
+				// no errors
+				return nil
+			}),
+		))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// build a query plan that the executor will follow
+	response, err := gateway.Execute(context.Background(), `{ allUsers { firstName } }`, map[string]interface{}{})
+
+	if err != nil {
+		t.Errorf("Encountered error executing plan: %s", err.Error())
+		return
+	}
+	// make sure our middleware changed the response
+	assert.Equal(t, map[string]interface{}{"hello": "world"}, response)
 }

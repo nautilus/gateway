@@ -36,11 +36,10 @@ type queryExecutionResult struct {
 // ExecutionContext is a well-type alternative to context.Context and provides the context
 // for a particular execution.
 type ExecutionContext struct {
-	Plan                *QueryPlan
-	Variables           map[string]interface{}
-	RequestContext      context.Context
-	ResponseMiddlewares []ResponseMiddleware
-	RequestMiddlewares  []graphql.NetworkMiddleware
+	Plan               *QueryPlan
+	Variables          map[string]interface{}
+	RequestContext     context.Context
+	RequestMiddlewares []graphql.NetworkMiddleware
 }
 
 // Execute returns the result of the query plan
@@ -134,13 +133,6 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 
 	if nErrs > 0 {
 		return result, errs
-	}
-
-	// we now have to thread the result through the list of response middlewares
-	for _, ware := range ctx.ResponseMiddlewares {
-		if err := ware(ctx, result); err != nil {
-			return nil, err
-		}
 	}
 
 	// we didn't encounter any errors
