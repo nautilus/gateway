@@ -110,7 +110,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 	// to do it on every execute
 	requestMiddlewares := []graphql.NetworkMiddleware{}
 	// before we do anything that the user tells us to, we have to scrub the fields
-	responseMiddlewares := []ResponseMiddleware{scrubFields}
+	responseMiddlewares := []ResponseMiddleware{scrubInsertionIDs}
 	for _, mware := range gateway.middlewares {
 		switch mware := mware.(type) {
 		case ResponseMiddleware:
