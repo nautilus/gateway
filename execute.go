@@ -15,7 +15,7 @@ import (
 // Executor is responsible for executing a query plan against the remote
 // schemas and returning the result
 type Executor interface {
-	Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
+	Execute(ctx *ExecutionContext, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
 }
 
 // ParallelExecutor executes the given query plan by starting at the root of the plan and
@@ -28,8 +28,21 @@ type queryExecutionResult struct {
 	StripNode      bool
 }
 
+// execution is broken up into two phases:
+// - the first walks down the dependency graph execute the network request
+// - the second strips the id fields from the response and  provides a
+//   place for certain middlewares to fire
+
+// ExecutionContext is a well-type alternative to context.Context and provides the context
+// for a particular execution.
+type ExecutionContext struct {
+	ResponseMiddlewares []ResponseMiddleware
+	RequestMiddlewares  []graphql.NetworkMiddleware
+	RequestContext      context.Context
+}
+
 // Execute returns the result of the query plan
-func (executor *ParallelExecutor) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+func (executor *ParallelExecutor) Execute(ctx *ExecutionContext, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -127,7 +140,7 @@ func (executor *ParallelExecutor) Execute(ctx context.Context, plan *QueryPlan, 
 
 // TODO: ugh... so... many... variables...
 func executeStep(
-	ctx context.Context,
+	ctx *ExecutionContext,
 	plan *QueryPlan,
 	step *QueryPlanStep,
 	insertionPoint []string,
@@ -189,15 +202,15 @@ func executeStep(
 	queryResult := map[string]interface{}{}
 
 	// if we have middlewares
-	if mwares := getCtxRequestMiddlewares(ctx); mwares != nil {
+	if len(ctx.RequestMiddlewares) > 0 {
 		// if the queryer is a network queryer
 		if nQueryer, ok := queryer.(*graphql.NetworkQueryer); ok {
-			queryer = nQueryer.WithMiddlewares(mwares)
+			queryer = nQueryer.WithMiddlewares(ctx.RequestMiddlewares)
 		}
 	}
 
 	// fire the query
-	err := queryer.Query(ctx, &graphql.QueryInput{
+	err := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,

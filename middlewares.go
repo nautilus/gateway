@@ -1,12 +1,19 @@
 package gateway
 
 import (
+	"context"
+
 	"github.com/nautilus/graphql"
 )
 
 // Middleware are things that can modify a gateway normal execution
 type Middleware interface {
 	Middleware()
+}
+
+// ExecutionMiddleware are things that interject in the execution process
+type ExecutionMiddleware interface {
+	ExecutionMiddleware()
 }
 
 // MiddlewareList is a list of Middlewares
@@ -17,3 +24,13 @@ type RequestMiddleware graphql.NetworkMiddleware
 
 // Middleware marks RequestMiddleware as a valid middleware
 func (p RequestMiddleware) Middleware() {}
+
+// ResponseMiddleware is a middleware that can modify the
+// response before it is serialized and sent to the user
+type ResponseMiddleware func(context.Context, map[string]interface{}, map[string]interface{}) error
+
+// Middleware marks ResponseMiddleware as a valid middleware
+func (p ResponseMiddleware) Middleware() {}
+
+// ExecutionMiddleware marks ResponseMiddleware as a valid execution middleware
+func (p ResponseMiddleware) ExecutionMiddleware() {}

@@ -13,12 +13,17 @@ import (
 
 // QueryPlanStep represents a step in the plan required to fulfill a query.
 type QueryPlanStep struct {
-	Queryer             graphql.Queryer
-	ParentType          string
-	ParentID            string
-	SelectionSet        ast.SelectionSet
-	InsertionPoint      []string
-	Then                []*QueryPlanStep
+	// execution meta data
+	InsertionPoint []string
+	Then           []*QueryPlanStep
+
+	// required info to generate the query
+	Queryer      graphql.Queryer
+	ParentType   string
+	ParentID     string
+	SelectionSet ast.SelectionSet
+
+	// pre-generated query stuff
 	QueryDocument       *ast.QueryDocument
 	QueryString         string
 	FragmentDefinitions ast.FragmentDefinitionList
