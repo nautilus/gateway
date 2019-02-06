@@ -36,11 +36,11 @@ type queryExecutionResult struct {
 // ExecutionContext is a well-type alternative to context.Context and provides the context
 // for a particular execution.
 type ExecutionContext struct {
-	ResponseMiddlewares []ResponseMiddleware
-	RequestMiddlewares  []graphql.NetworkMiddleware
-	RequestContext      context.Context
 	Plan                *QueryPlan
 	Variables           map[string]interface{}
+	RequestContext      context.Context
+	ResponseMiddlewares []ResponseMiddleware
+	RequestMiddlewares  []graphql.NetworkMiddleware
 }
 
 // Execute returns the result of the query plan
