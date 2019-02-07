@@ -24,32 +24,46 @@ type Gateway struct {
 	merger      Merger
 	middlewares MiddlewareList
 
+	// group up the list of middlewares at startup to avoid it during execution
+	requestMiddlewares  []graphql.NetworkMiddleware
+	responseMiddlewares []ResponseMiddleware
+
 	// the urls we have to visit to access certain fields
 	fieldURLs FieldURLMap
 }
 
 // Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(ctx context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
+func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	// generate a query plan for the query
 	plan, err := g.planner.Plan(query, g.schema, g.fieldURLs)
 	if err != nil {
 		return nil, err
 	}
 
-	// build up a list of the middlewares that will affect the request
-	requestMiddlewares := []graphql.NetworkMiddleware{}
-	for _, mware := range g.middlewares {
-		if requestMiddleware, ok := mware.(RequestMiddleware); ok {
-			requestMiddlewares = append(requestMiddlewares, graphql.NetworkMiddleware(requestMiddleware))
-		}
+	// build up the execution context
+	ctx := &ExecutionContext{
+		RequestContext:     requestContext,
+		RequestMiddlewares: g.requestMiddlewares,
+		Plan:               plan[0],
+		Variables:          variables,
 	}
-
-	// embed the list of available middlewares in our execution context
-	mCtx := ctxWithRequestMiddlewares(ctx, requestMiddlewares)
 
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	return g.executor.Execute(mCtx, plan[0], variables)
+	result, err := g.executor.Execute(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// now that we have our response, throw it through the list of middlewarse
+	for _, ware := range g.responseMiddlewares {
+		if err := ware(ctx, result); err != nil {
+			return nil, err
+		}
+	}
+
+	// we're done here
+	return result, nil
 }
 
 // New instantiates a new schema with the required stuffs.
@@ -59,7 +73,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		return nil, errors.New("a gateway must have at least one schema")
 	}
 
-	// configure the gateway with any default values before we start doing stuff with it
+	// set any default values before we start doing stuff with it
 	gateway := &Gateway{
 		sources:  sources,
 		planner:  &MinQueriesPlanner{},
@@ -92,9 +106,28 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		return nil, err
 	}
 
+	// the default request middlewares
+	requestMiddlewares := []graphql.NetworkMiddleware{}
+	// before we do anything that the user tells us to, we have to scrub the fields
+	responseMiddlewares := []ResponseMiddleware{scrubInsertionIDs}
+
+	// pull out the middlewares once here so that we don't have
+	// to do it on every execute
+	for _, mware := range gateway.middlewares {
+		switch mware := mware.(type) {
+		case ResponseMiddleware:
+			responseMiddlewares = append(responseMiddlewares, mware)
+		case RequestMiddleware:
+			requestMiddlewares = append(requestMiddlewares, graphql.NetworkMiddleware(mware))
+		default:
+		}
+	}
+
 	// assign the computed values
 	gateway.schema = schema
 	gateway.fieldURLs = urls
+	gateway.requestMiddlewares = requestMiddlewares
+	gateway.responseMiddlewares = responseMiddlewares
 
 	// we're done here
 	return gateway, nil
@@ -223,21 +256,4 @@ func (m FieldURLMap) RegisterURL(parent string, field string, locations ...strin
 
 func (m FieldURLMap) keyFor(parent string, field string) string {
 	return fmt.Sprintf("%s.%s", parent, field)
-}
-
-const requestMiddlewaresCtxKey contextKey = iota
-
-func ctxWithRequestMiddlewares(ctx context.Context, l []graphql.NetworkMiddleware) context.Context {
-	return context.WithValue(ctx, requestMiddlewaresCtxKey, l)
-}
-
-func getCtxRequestMiddlewares(ctx context.Context) []graphql.NetworkMiddleware {
-	// pull the list of middlewares out of context
-	val, ok := ctx.Value(requestMiddlewaresCtxKey).([]graphql.NetworkMiddleware)
-	if !ok {
-		return nil
-	}
-
-	// return the list
-	return val
 }

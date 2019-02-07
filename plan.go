@@ -13,12 +13,17 @@ import (
 
 // QueryPlanStep represents a step in the plan required to fulfill a query.
 type QueryPlanStep struct {
-	Queryer             graphql.Queryer
-	ParentType          string
-	ParentID            string
-	SelectionSet        ast.SelectionSet
-	InsertionPoint      []string
-	Then                []*QueryPlanStep
+	// execution meta data
+	InsertionPoint []string
+	Then           []*QueryPlanStep
+
+	// required info to generate the query
+	Queryer      graphql.Queryer
+	ParentType   string
+	ParentID     string
+	SelectionSet ast.SelectionSet
+
+	// pre-generated query stuff
 	QueryDocument       *ast.QueryDocument
 	QueryString         string
 	FragmentDefinitions ast.FragmentDefinitionList
@@ -30,6 +35,7 @@ type QueryPlan struct {
 	Operation           *ast.OperationDefinition
 	RootStep            *QueryPlanStep
 	FragmentDefinitions ast.FragmentDefinitionList
+	FieldsToScrub       map[string][][]string
 }
 
 type newQueryPlanStepPayload struct {
@@ -62,19 +68,41 @@ type MinQueriesPlanner struct {
 // Plan computes the nested selections that will need to be performed
 func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
 	// the first thing to do is to parse the query
-	parsedQuery, err := gqlparser.LoadQuery(schema, query)
+	parsedQuery, e := gqlparser.LoadQuery(schema, query)
+	if e != nil {
+		return nil, e
+	}
+
+	// generate the plan
+	plans, err := p.generatePlans(parsedQuery, schema, locations)
 	if err != nil {
 		return nil, err
 	}
 
-	// the list of plans that need to be executed simultaneously
+	flatSelection, err := graphql.ApplyFragments(parsedQuery.Operations[0].SelectionSet, parsedQuery.Fragments)
+	if err != nil {
+		return nil, err
+	}
+
+	// add the scrub fields
+	err = p.generateScrubFields(plans, flatSelection)
+	if err != nil {
+		return nil, err
+	}
+
+	// we're done
+	return plans, nil
+}
+
+func (p *MinQueriesPlanner) generatePlans(query *ast.QueryDocument, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
+	// an accumulator
 	plans := []*QueryPlan{}
 
-	for _, operation := range parsedQuery.Operations {
+	for _, operation := range query.Operations {
 		// each operation results in a new query
 		plan := &QueryPlan{
 			Operation:           operation,
-			FragmentDefinitions: parsedQuery.Fragments,
+			FragmentDefinitions: query.Fragments,
 		}
 
 		// add the plan to the top level list
@@ -227,14 +255,14 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 		// wait for either the error channel or done channel
 		select {
-		// we are done
-		case <-doneCh:
-			continue
 		// there was an error
 		case err := <-errCh:
 			// bubble the error up
 			return nil, err
+		// we are done
+		case <-doneCh:
 		}
+
 	}
 
 	// return the final plan
@@ -360,7 +388,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 				}
 
 				log.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
-				// add any possible selections provided by selections
+				// add any possible selections provided by this fields selections
 				subSelection, err := p.extractSelection(&extractSelectionConfig{
 					stepCh:         config.stepCh,
 					stepWg:         config.stepWg,
@@ -404,7 +432,9 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 			// we could have overwritten the definition to fit the local needs of the top level
 			// ie if there is a branch off of one that happens mid-fragment.
 			defn := config.step.FragmentDefinitions.ForName(selection.Name)
+			addDefn := false
 			if defn == nil {
+				addDefn = true
 				defn = config.plan.FragmentDefinitions.ForName(selection.Name)
 			}
 
@@ -427,18 +457,20 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 				return nil, err
 			}
 
-			// if the step has a definition for this fragment
-			if config.step.FragmentDefinitions.ForName(defn.Name) == nil {
+			// if the step does not have a definition for this fragment
+			if addDefn {
 				// we're going to leave a different fragment definition behind for this step
 				config.step.FragmentDefinitions = append(config.step.FragmentDefinitions,
 					&ast.FragmentDefinition{
 						Name:          selection.Name,
 						TypeCondition: defn.TypeCondition,
 						Directives:    defn.Directives,
-						SelectionSet:  subSelection,
 					},
 				)
 			}
+
+			// we need to make sure that this steps fragment definitions always match our expecatations
+			config.step.FragmentDefinitions.ForName(selection.Name).SelectionSet = subSelection
 
 		case *ast.InlineFragment:
 			log.Debug("found an inline fragment. extracting to ", config.insertionPoint, ". Parent insertion", config.insertionPoint)
@@ -553,6 +585,16 @@ FieldLoop:
 		case *ast.Field:
 			log.Debug("Encountered field ", selection.Name)
 
+			field := &ast.Field{
+				Name:             selection.Name,
+				Alias:            selection.Alias,
+				Directives:       selection.Directives,
+				Arguments:        selection.Arguments,
+				Definition:       selection.Definition,
+				ObjectDefinition: selection.ObjectDefinition,
+				SelectionSet:     selection.SelectionSet,
+			}
+
 			// look up the location for this field
 			possibleLocations, err := config.locations.URLFor(config.parentType, selection.Name)
 			if err != nil {
@@ -561,7 +603,7 @@ FieldLoop:
 
 			// if this field can only be found in one location
 			if len(possibleLocations) == 1 {
-				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], selection)
+				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
 				// the field can be found in many locations
 			} else {
 				// look to see if the current location is one of the possible locations
@@ -569,7 +611,7 @@ FieldLoop:
 					// if the location is the same as the parent
 					if location == config.parentLocation {
 						// assign this field to the parents entry
-						locationFields[location] = append(locationFields[location], selection)
+						locationFields[location] = append(locationFields[location], field)
 						// we're done with this field
 						continue FieldLoop
 					}
@@ -577,7 +619,7 @@ FieldLoop:
 
 				// if we got here then this field can be found in multiple services that are not the parent
 				// just use the first one for now
-				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], selection)
+				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
 			}
 
 		case *ast.FragmentSpread:
@@ -603,14 +645,24 @@ FieldLoop:
 				switch fragmentSelection := fragmentSelection.(type) {
 
 				case *ast.Field:
+					field := &ast.Field{
+						Name:             fragmentSelection.Name,
+						Alias:            fragmentSelection.Alias,
+						Directives:       fragmentSelection.Directives,
+						Arguments:        fragmentSelection.Arguments,
+						Definition:       fragmentSelection.Definition,
+						ObjectDefinition: fragmentSelection.ObjectDefinition,
+						SelectionSet:     fragmentSelection.SelectionSet,
+					}
+
 					// look up the location of the field
-					fieldLocations, err := config.locations.URLFor(defn.TypeCondition, fragmentSelection.Name)
+					fieldLocations, err := config.locations.URLFor(defn.TypeCondition, field.Name)
 					if err != nil {
 						return nil, nil, err
 					}
 
 					// add the field to the location
-					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], fragmentSelection)
+					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], field)
 
 				case *ast.FragmentSpread, *ast.InlineFragment:
 					// non-field selections will be handled in the next tick
@@ -677,6 +729,93 @@ FieldLoop:
 	}
 
 	return locationFields, locationFragments, nil
+}
+
+// This plan results in a query that has fields that were not explicitly asked for.
+// In order for the executor to know what to filter out of the final reply,
+// we have to leave behind paths to objects that need to be scrubbed.
+func (p *MinQueriesPlanner) generateScrubFields(plans []*QueryPlan, requestSelection ast.SelectionSet) error {
+	for _, plan := range plans {
+		// the list of fields to scrub in this plan
+		fieldsToScrub := map[string][][]string{"id": [][]string{}}
+
+		// add all of the plans for the next step along with those from this step
+		for _, nextStep := range plan.RootStep.Then {
+			// compute the fields that our children have to add
+			childScrubs, err := p.generateScrubFieldsWalk(nextStep, requestSelection)
+			if err != nil {
+				return err
+			}
+
+			for field, values := range childScrubs {
+				fieldsToScrub[field] = append(fieldsToScrub[field], values...)
+			}
+		}
+
+		plan.FieldsToScrub = fieldsToScrub
+	}
+
+	return nil
+}
+
+func (p *MinQueriesPlanner) generateScrubFieldsWalk(step *QueryPlanStep, selection ast.SelectionSet) (map[string][][]string, error) {
+	// the acumulator of plans
+	acc := map[string][][]string{}
+
+	insertionPoint := step.InsertionPoint
+	targetSelection := selection
+
+	// we need to look if this steps insertion point artificially asked for the id
+	for _, point := range insertionPoint {
+		foundField := false
+
+		// look over the points in the selection
+		for _, field := range graphql.SelectedFields(targetSelection) {
+			// if the field name is what we expected
+			if field.Name == point {
+				// our next selection set is the fields selection set
+				targetSelection = field.SelectionSet
+
+				// we found the field for this point
+				foundField = true
+				break
+			}
+		}
+
+		if !foundField {
+			return nil, fmt.Errorf("error adding scrub fields: could not find field for point %s", point)
+		}
+	}
+
+	// look through the selection for a field named id
+	naturalID := false
+	for _, field := range graphql.SelectedFields(targetSelection) {
+		// if the field is for id
+		if field.Alias == "id" {
+			naturalID = true
+		}
+	}
+
+	// if the id was not natural and we were going to be inserted somewhere
+	if !naturalID && len(insertionPoint) > 0 {
+		// we have to add this insertion point to the list places to scrub
+		acc["id"] = append(acc["id"], insertionPoint)
+	}
+
+	// add all of the plans for the next step along with those from this step
+	for _, nextStep := range step.Then {
+		// compute the fields that our children have to add
+		childScrubs, err := p.generateScrubFieldsWalk(nextStep, selection)
+		if err != nil {
+			return nil, err
+		}
+
+		for id, values := range childScrubs {
+			acc[id] = append(acc[id], values...)
+		}
+	}
+
+	return acc, nil
 }
 
 func coreFieldType(source *ast.Field) *ast.Type {

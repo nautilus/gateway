@@ -15,7 +15,7 @@ import (
 // Executor is responsible for executing a query plan against the remote
 // schemas and returning the result
 type Executor interface {
-	Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
+	Execute(ctx *ExecutionContext) (map[string]interface{}, error)
 }
 
 // ParallelExecutor executes the given query plan by starting at the root of the plan and
@@ -28,8 +28,22 @@ type queryExecutionResult struct {
 	StripNode      bool
 }
 
+// execution is broken up into two phases:
+// - the first walks down the dependency graph execute the network request
+// - the second strips the id fields from the response and  provides a
+//   place for certain middlewares to fire
+
+// ExecutionContext is a well-type alternative to context.Context and provides the context
+// for a particular execution.
+type ExecutionContext struct {
+	Plan               *QueryPlan
+	Variables          map[string]interface{}
+	RequestContext     context.Context
+	RequestMiddlewares []graphql.NetworkMiddleware
+}
+
 // Execute returns the result of the query plan
-func (executor *ParallelExecutor) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -53,14 +67,14 @@ func (executor *ParallelExecutor) Execute(ctx context.Context, plan *QueryPlan, 
 	resultLock := &sync.Mutex{}
 
 	// if there are no steps after the root step, there is a problem
-	if len(plan.RootStep.Then) == 0 {
+	if len(ctx.Plan.RootStep.Then) == 0 {
 		return nil, errors.New("was given empty plan")
 	}
 
 	// the root step could have multiple steps that have to happen
-	for _, step := range plan.RootStep.Then {
+	for _, step := range ctx.Plan.RootStep.Then {
 		stepWg.Add(1)
-		go executeStep(ctx, plan, step, []string{}, resultLock, variables, resultCh, errCh, stepWg)
+		go executeStep(ctx, ctx.Plan, step, []string{}, resultLock, ctx.Variables, resultCh, errCh, stepWg)
 	}
 
 	// the list of errors we have encountered while executing the plan
@@ -127,7 +141,7 @@ func (executor *ParallelExecutor) Execute(ctx context.Context, plan *QueryPlan, 
 
 // TODO: ugh... so... many... variables...
 func executeStep(
-	ctx context.Context,
+	ctx *ExecutionContext,
 	plan *QueryPlan,
 	step *QueryPlanStep,
 	insertionPoint []string,
@@ -189,15 +203,15 @@ func executeStep(
 	queryResult := map[string]interface{}{}
 
 	// if we have middlewares
-	if mwares := getCtxRequestMiddlewares(ctx); mwares != nil {
+	if len(ctx.RequestMiddlewares) > 0 {
 		// if the queryer is a network queryer
 		if nQueryer, ok := queryer.(*graphql.NetworkQueryer); ok {
-			queryer = nQueryer.WithMiddlewares(mwares)
+			queryer = nQueryer.WithMiddlewares(ctx.RequestMiddlewares)
 		}
 	}
 
 	// fire the query
-	err := queryer.Query(ctx, &graphql.QueryInput{
+	err := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,
@@ -623,11 +637,11 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 }
 
 // ExecutorFunc wraps a function to be used as an executor.
-type ExecutorFunc func(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error)
+type ExecutorFunc func(ctx *ExecutionContext) (map[string]interface{}, error)
 
 // Execute invokes and returns the internal function
-func (e ExecutorFunc) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
-	return e(ctx, plan, variables)
+func (e ExecutorFunc) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
+	return e(ctx)
 }
 
 // ErrExecutor always returnes the internal error.
@@ -636,6 +650,6 @@ type ErrExecutor struct {
 }
 
 // Execute returns the internet error
-func (e *ErrExecutor) Execute(ctx context.Context, plan *QueryPlan, variables map[string]interface{}) (map[string]interface{}, error) {
+func (e *ErrExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
 	return nil, e.Error
 }

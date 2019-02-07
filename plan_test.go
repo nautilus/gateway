@@ -736,6 +736,115 @@ func TestPlanQuery_preferParentLocation(t *testing.T) {
 	}
 }
 
+func TestPlanQuery_scrubFields(t *testing.T) {
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			id: ID!
+			firstName: String!
+			favoriteCatSpecies: String!
+			catPhotos: [CatPhoto!]!
+		}
+
+		type CatPhoto {
+			URL: String!
+			owner: User!
+		}
+
+		type Query {
+			allUsers: [User!]!
+		}
+	`)
+
+	// the location of the user service
+	userLocation := "user-location"
+	// the location of the cat service
+	catLocation := "cat-location"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "allUsers", userLocation)
+	locations.RegisterURL("CatPhoto", "owner", userLocation)
+	locations.RegisterURL("User", "firstName", userLocation)
+	locations.RegisterURL("User", "favoriteCatSpecies", catLocation)
+	locations.RegisterURL("User", "catPhotos", catLocation)
+	locations.RegisterURL("User", "id", catLocation, userLocation)
+	locations.RegisterURL("CatPhoto", "URL", catLocation)
+
+	t.Run("Multiple Step Scrubbing", func(t *testing.T) {
+		plans, err := (&MinQueriesPlanner{}).Plan(`
+			{
+				allUsers {
+					catPhotos {
+						owner {
+							firstName
+						}
+					}
+				}
+			}
+		`, schema, locations)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// each transition between step requires an id field. None of them were requested so we should have two
+		// places where we want to scrub it
+		assert.Equal(t, map[string][][]string{
+			"id": [][]string{
+				{"allUsers"},
+				{"allUsers", "catPhotos"},
+			},
+		}, plans[0].FieldsToScrub)
+	})
+
+	t.Run("Single Step no Scrubbing", func(t *testing.T) {
+		plans, err := (&MinQueriesPlanner{}).Plan(`
+			{
+				allUsers {
+					firstName
+				}
+			}
+		`, schema, locations)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// each transition between step requires an id field. None of them were requested so we should have two
+		// places where we want to scrub it
+		assert.Equal(t, map[string][][]string{
+			"id": [][]string{},
+		}, plans[0].FieldsToScrub)
+	})
+
+	t.Run("Existing id", func(t *testing.T) {
+		plans, err := (&MinQueriesPlanner{}).Plan(`
+			{
+				allUsers {
+					id
+					catPhotos {
+						owner {
+							firstName
+						}
+					}
+				}
+			}
+		`, schema, locations)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// each transition between step requires an id field. None of them were requested so we should have two
+		// places where we want to scrub it
+		assert.Equal(t, map[string][][]string{
+			"id": [][]string{
+				{"allUsers", "catPhotos"},
+			},
+		}, plans[0].FieldsToScrub)
+	})
+}
+
 func TestPlanQuery_groupSiblings(t *testing.T) {
 	schema, _ := graphql.LoadSchema(`
 		type User {
@@ -974,7 +1083,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	// the definition for QueryFragment should have 1 selections
 	queryFragmentDefn := firstStep.FragmentDefinitions.ForName("QueryFragment")
 	if !assert.NotNil(t, queryFragmentDefn, "Could not find QueryFragment definition") ||
-		!assert.Len(t, queryFragmentDefn.SelectionSet, 1) {
+		!assert.Len(t, queryFragmentDefn.SelectionSet, 1, "Fragment Definition has incorrect number of selections") {
 		return
 	}
 	queryFragmentSelection, ok := queryFragmentDefn.SelectionSet[0].(*ast.Field)
@@ -983,7 +1092,9 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 
 	assert.Equal(t, "user", queryFragmentSelection.Name)
-	assert.Equal(t, ast.SelectionSet{&ast.Field{Name: "id"}}, queryFragmentSelection.SelectionSet)
+	if !assert.Len(t, queryFragmentSelection.SelectionSet, 1) || !assert.Equal(t, "id", queryFragmentSelection.SelectionSet[0].(*ast.Field).Name) {
+		return
+	}
 
 	// check the second step
 	secondStep := firstStep.Then[0]
@@ -1012,6 +1123,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 	// make sure that the definition has 2 selections: a field and a fragment spread
 	if !assert.Len(t, defn.SelectionSet, 2, "QueryFragment in the second step had the wrong definition") {
+		fmt.Println(log.FormatSelectionSet(defn.SelectionSet))
 		return
 	}
 

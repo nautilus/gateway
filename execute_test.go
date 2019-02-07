@@ -24,32 +24,34 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func TestExecutor_plansOfOne(t *testing.T) {
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
-		RootStep: &QueryPlanStep{
-			Then: []*QueryPlanStep{
-				{
-					// this is equivalent to
-					// query { values }
-					ParentType: "Query",
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "values",
-							Definition: &ast.FieldDefinition{
-								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
+						// this is equivalent to
+						// query { values }
+						ParentType: "Query",
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "values",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+								},
 							},
 						},
+						// return a known value we can test against
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"values": []string{
+								"hello",
+								"world",
+							},
+						}},
 					},
-					// return a known value we can test against
-					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
-						"values": []string{
-							"hello",
-							"world",
-						},
-					}},
 				},
 			},
 		},
-	}, map[string]interface{}{})
+	})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 	}
@@ -76,72 +78,75 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 	// }
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
-		RootStep: &QueryPlanStep{
-			Then: []*QueryPlanStep{
-				{
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
 
-					// this is equivalent to
-					// query { user }
-					ParentType:     "Query",
-					InsertionPoint: []string{},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "user",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("User", &ast.Position{}),
-							},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "firstName",
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("String", &ast.Position{}),
-									},
+						// this is equivalent to
+						// query { user }
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "user",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("User", &ast.Position{}),
 								},
-							},
-						},
-					},
-					// return a known value we can test against
-					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
-						"user": map[string]interface{}{
-							"id":        "1",
-							"firstName": "hello",
-						},
-					}},
-					// then we have to ask for the users favorite cat photo and its url
-					Then: []*QueryPlanStep{
-						{
-							ParentType:     "User",
-							InsertionPoint: []string{"user"},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "favoriteCatPhoto",
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("User", &ast.Position{}),
-									},
-									SelectionSet: ast.SelectionSet{
-										&ast.Field{
-											Name: "url",
-											Definition: &ast.FieldDefinition{
-												Type: ast.NamedType("String", &ast.Position{}),
-											},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "firstName",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("String", &ast.Position{}),
 										},
 									},
 								},
 							},
-							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
-								"node": map[string]interface{}{
-									"favoriteCatPhoto": map[string]interface{}{
-										"url": "hello world",
+						},
+						// return a known value we can test against
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"user": map[string]interface{}{
+								"id":        "1",
+								"firstName": "hello",
+							},
+						}},
+						// then we have to ask for the users favorite cat photo and its url
+						Then: []*QueryPlanStep{
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"user"},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "favoriteCatPhoto",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("User", &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "url",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
 									},
 								},
-							}},
+								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+									"node": map[string]interface{}{
+										"favoriteCatPhoto": map[string]interface{}{
+											"url": "hello world",
+										},
+									},
+								}},
+							},
 						},
 					},
 				},
 			},
 		},
-	}, map[string]interface{}{})
+	})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 		return
@@ -168,49 +173,52 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 	// }
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
-		RootStep: &QueryPlanStep{
-			Then: []*QueryPlanStep{
-				{ // this is equivalent to
-					// query { user }
-					ParentType:     "Query",
-					InsertionPoint: []string{},
-					// return a known value we can test against
-					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{}},
-					// then we have to ask for the users favorite cat photo and its url
-					Then: []*QueryPlanStep{
-						{
-							ParentType:     "Query",
-							InsertionPoint: []string{},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "user",
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("User", &ast.Position{}),
-									},
-									SelectionSet: ast.SelectionSet{
-										&ast.Field{
-											Name: "firstName",
-											Definition: &ast.FieldDefinition{
-												Type: ast.NamedType("String", &ast.Position{}),
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{ // this is equivalent to
+						// query { user }
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						// return a known value we can test against
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{}},
+						// then we have to ask for the users favorite cat photo and its url
+						Then: []*QueryPlanStep{
+							{
+								ParentType:     "Query",
+								InsertionPoint: []string{},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "user",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("User", &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "firstName",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
 											},
 										},
 									},
 								},
+								// return a known value we can test against
+								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+									"user": map[string]interface{}{
+										"id":        "1",
+										"firstName": "hello",
+									},
+								}},
 							},
-							// return a known value we can test against
-							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
-								"user": map[string]interface{}{
-									"id":        "1",
-									"firstName": "hello",
-								},
-							}},
 						},
 					},
 				},
 			},
 		},
-	}, map[string]interface{}{})
+	})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 		return
@@ -247,147 +255,150 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 	followerName := "John"
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
-		RootStep: &QueryPlanStep{
-			Then: []*QueryPlanStep{
-				{
-					ParentType:     "Query",
-					InsertionPoint: []string{},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "users",
-							Definition: &ast.FieldDefinition{
-								Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
-							},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "firstName",
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("String", &ast.Position{}),
-									},
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "users",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
 								},
-								&ast.Field{
-									Name: "friends",
-									Definition: &ast.FieldDefinition{
-										Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "firstName",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("String", &ast.Position{}),
+										},
 									},
-									SelectionSet: ast.SelectionSet{
-										&ast.Field{
-											Definition: &ast.FieldDefinition{
-												Type: ast.NamedType("String", &ast.Position{}),
+									&ast.Field{
+										Name: "friends",
+										Definition: &ast.FieldDefinition{
+											Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+												Name: "firstName",
 											},
-											Name: "firstName",
 										},
 									},
 								},
 							},
 						},
-					},
-					// planner will actually leave behind a queryer that hits service A
-					// for testing we can just return a known value
-					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
-						"users": []interface{}{
-							map[string]interface{}{
-								"firstName": "hello",
-								"friends": []interface{}{
-									map[string]interface{}{
-										"firstName": "John",
-										"id":        "1",
-									},
-									map[string]interface{}{
-										"firstName": "Jacob",
-										"id":        "2",
-									},
-								},
-							},
-							map[string]interface{}{
-								"firstName": "goodbye",
-								"friends": []interface{}{
-									map[string]interface{}{
-										"firstName": "Jingleheymer",
-										"id":        "3",
-									},
-									map[string]interface{}{
-										"firstName": "Schmidt",
-										"id":        "4",
-									},
-								},
-							},
-						},
-					}},
-					// then we have to ask for the users photo gallery
-					Then: []*QueryPlanStep{
-						// a query to satisfy User.photoGallery
-						{
-							ParentType:     "User",
-							InsertionPoint: []string{"users", "friends"},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "photoGallery",
-									Definition: &ast.FieldDefinition{
-										Type: ast.ListType(ast.NamedType("CatPhoto", &ast.Position{}), &ast.Position{}),
-									},
-									SelectionSet: ast.SelectionSet{
-										&ast.Field{
-											Name: "url",
-											Definition: &ast.FieldDefinition{
-												Type: ast.NamedType("String", &ast.Position{}),
-											},
-										},
-										&ast.Field{
-											Name: "followers",
-											Definition: &ast.FieldDefinition{
-												Type: ast.NamedType("User", &ast.Position{}),
-											},
-											SelectionSet: ast.SelectionSet{},
-										},
-									},
-								},
-							},
-							// planner will actually leave behind a queryer that hits service B
-							// for testing we can just return a known value
-							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
-								"node": map[string]interface{}{
-									"photoGallery": []interface{}{
+						// planner will actually leave behind a queryer that hits service A
+						// for testing we can just return a known value
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"users": []interface{}{
+								map[string]interface{}{
+									"firstName": "hello",
+									"friends": []interface{}{
 										map[string]interface{}{
-											"url": photoGalleryURL,
-											"followers": []interface{}{
-												map[string]interface{}{
-													"id": "1",
+											"firstName": "John",
+											"id":        "1",
+										},
+										map[string]interface{}{
+											"firstName": "Jacob",
+											"id":        "2",
+										},
+									},
+								},
+								map[string]interface{}{
+									"firstName": "goodbye",
+									"friends": []interface{}{
+										map[string]interface{}{
+											"firstName": "Jingleheymer",
+											"id":        "3",
+										},
+										map[string]interface{}{
+											"firstName": "Schmidt",
+											"id":        "4",
+										},
+									},
+								},
+							},
+						}},
+						// then we have to ask for the users photo gallery
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.photoGallery
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"users", "friends"},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "photoGallery",
+										Definition: &ast.FieldDefinition{
+											Type: ast.ListType(ast.NamedType("CatPhoto", &ast.Position{}), &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "url",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
 												},
+											},
+											&ast.Field{
+												Name: "followers",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("User", &ast.Position{}),
+												},
+												SelectionSet: ast.SelectionSet{},
 											},
 										},
 									},
 								},
-							}},
-							Then: []*QueryPlanStep{
-								// a query to satisfy User.firstName
-								{
-									ParentType:     "User",
-									InsertionPoint: []string{"users", "friends", "photoGallery", "followers"},
-									SelectionSet: ast.SelectionSet{
-										&ast.Field{
-											Name: "firstName",
-											Definition: &ast.FieldDefinition{
-												Type: ast.NamedType("String", &ast.Position{}),
+								// planner will actually leave behind a queryer that hits service B
+								// for testing we can just return a known value
+								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+									"node": map[string]interface{}{
+										"photoGallery": []interface{}{
+											map[string]interface{}{
+												"url": photoGalleryURL,
+												"followers": []interface{}{
+													map[string]interface{}{
+														"id": "1",
+													},
+												},
 											},
 										},
 									},
-									// planner will actually leave behind a queryer that hits service B
-									// for testing we can just return a known value
-									Queryer: graphql.QueryerFunc(
-										func(input *graphql.QueryInput) (interface{}, error) {
-											// make sure that we got the right variable inputs
-											assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
-
-											// return the payload
-											return map[string]interface{}{
-												"node": map[string]interface{}{
-													"firstName": followerName,
+								}},
+								Then: []*QueryPlanStep{
+									// a query to satisfy User.firstName
+									{
+										ParentType:     "User",
+										InsertionPoint: []string{"users", "friends", "photoGallery", "followers"},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "firstName",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
 												},
-											}, nil
+											},
 										},
-									),
+										// planner will actually leave behind a queryer that hits service B
+										// for testing we can just return a known value
+										Queryer: graphql.QueryerFunc(
+											func(input *graphql.QueryInput) (interface{}, error) {
+												// make sure that we got the right variable inputs
+												assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+
+												// return the payload
+												return map[string]interface{}{
+													"node": map[string]interface{}{
+														"firstName": followerName,
+													},
+												}, nil
+											},
+										),
+									},
 								},
 							},
 						},
@@ -395,7 +406,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 				},
 			},
 		},
-	}, map[string]interface{}{})
+	})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 		return
@@ -483,50 +494,53 @@ func TestExecutor_multipleErrors(t *testing.T) {
 	// an executor should return a list of every error that it encounters while executing the plan
 
 	// build a query plan that the executor will follow
-	_, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
-		RootStep: &QueryPlanStep{
-			Then: []*QueryPlanStep{
-				{
-					// this is equivalent to
-					// query { values }
-					ParentType: "Query",
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "values",
-							Definition: &ast.FieldDefinition{
-								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+	_, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
+						// this is equivalent to
+						// query { values }
+						ParentType: "Query",
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "values",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+								},
 							},
 						},
+						// return a known value we can test against
+						Queryer: graphql.QueryerFunc(
+							func(input *graphql.QueryInput) (interface{}, error) {
+								return map[string]interface{}{"data": map[string]interface{}{}}, errors.New("message")
+							},
+						),
 					},
-					// return a known value we can test against
-					Queryer: graphql.QueryerFunc(
-						func(input *graphql.QueryInput) (interface{}, error) {
-							return map[string]interface{}{"data": map[string]interface{}{}}, errors.New("message")
-						},
-					),
-				},
-				{
-					// this is equivalent to
-					// query { values }
-					ParentType: "Query",
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "values",
-							Definition: &ast.FieldDefinition{
-								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+					{
+						// this is equivalent to
+						// query { values }
+						ParentType: "Query",
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "values",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+								},
 							},
 						},
+						// return a known value we can test against
+						Queryer: graphql.QueryerFunc(
+							func(input *graphql.QueryInput) (interface{}, error) {
+								return map[string]interface{}{"data": map[string]interface{}{}}, graphql.ErrorList{errors.New("message"), errors.New("message")}
+							},
+						),
 					},
-					// return a known value we can test against
-					Queryer: graphql.QueryerFunc(
-						func(input *graphql.QueryInput) (interface{}, error) {
-							return map[string]interface{}{"data": map[string]interface{}{}}, graphql.ErrorList{errors.New("message"), errors.New("message")}
-						},
-					),
 				},
 			},
 		},
-	}, map[string]interface{}{})
+	})
 	if err == nil {
 		t.Errorf("Did not encounter error executing plan")
 		return
@@ -556,81 +570,84 @@ func TestExecutor_includeIf(t *testing.T) {
 	// }
 
 	// build a query plan that the executor will follow
-	result, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
-		RootStep: &QueryPlanStep{
-			Then: []*QueryPlanStep{
-				{
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
 
-					// this is equivalent to
-					// query { user }
-					ParentType:     "Query",
-					InsertionPoint: []string{},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "user",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("User", &ast.Position{}),
-							},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "firstName",
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("String", &ast.Position{}),
+						// this is equivalent to
+						// query { user }
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "user",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("User", &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "firstName",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("String", &ast.Position{}),
+										},
 									},
 								},
-							},
-							Directives: ast.DirectiveList{
-								&ast.Directive{
-									Name: "include",
-									Arguments: ast.ArgumentList{
-										&ast.Argument{
-											Name: "if",
-											Value: &ast.Value{
-												Kind: ast.BooleanValue,
-												Raw:  "true",
+								Directives: ast.DirectiveList{
+									&ast.Directive{
+										Name: "include",
+										Arguments: ast.ArgumentList{
+											&ast.Argument{
+												Name: "if",
+												Value: &ast.Value{
+													Kind: ast.BooleanValue,
+													Raw:  "true",
+												},
 											},
 										},
 									},
 								},
 							},
 						},
-					},
-					// return a known value we can test against
-					Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{}},
-					// then we have to ask for the users favorite cat photo and its url
-					Then: []*QueryPlanStep{
-						{
-							ParentType:     "User",
-							InsertionPoint: []string{"user"},
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "favoriteCatPhoto",
-									Definition: &ast.FieldDefinition{
-										Type: ast.NamedType("User", &ast.Position{}),
-									},
-									SelectionSet: ast.SelectionSet{
-										&ast.Field{
-											Name: "url",
-											Definition: &ast.FieldDefinition{
-												Type: ast.NamedType("String", &ast.Position{}),
+						// return a known value we can test against
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{}},
+						// then we have to ask for the users favorite cat photo and its url
+						Then: []*QueryPlanStep{
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"user"},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "favoriteCatPhoto",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("User", &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "url",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
 											},
 										},
 									},
 								},
-							},
-							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
-								"node": map[string]interface{}{
-									"favoriteCatPhoto": map[string]interface{}{
-										"url": "hello world",
+								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+									"node": map[string]interface{}{
+										"favoriteCatPhoto": map[string]interface{}{
+											"url": "hello world",
+										},
 									},
-								},
-							}},
+								}},
+							},
 						},
 					},
 				},
 			},
 		},
-	}, map[string]interface{}{})
+	})
 	if err != nil {
 		t.Errorf("Encountered error executing plan: %v", err.Error())
 		return
@@ -757,51 +774,55 @@ func TestExecutor_threadsVariables(t *testing.T) {
 	}
 
 	// build a query plan that the executor will follow
-	_, err := (&ParallelExecutor{}).Execute(context.Background(), &QueryPlan{
-		Operation: &ast.OperationDefinition{
-			Operation:           ast.Query,
-			VariableDefinitions: fullVariableDefs,
-		},
-		RootStep: &QueryPlanStep{
-			Then: []*QueryPlanStep{
-				{
-					// this is equivalent to
-					// query { values }
-					ParentType: "Query",
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Name: "values",
-							Definition: &ast.FieldDefinition{
-								Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+	_, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Variables:      fullVariables,
+		Plan: &QueryPlan{
+			Operation: &ast.OperationDefinition{
+				Operation:           ast.Query,
+				VariableDefinitions: fullVariableDefs,
+			},
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
+						// this is equivalent to
+						// query { values }
+						ParentType: "Query",
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "values",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("String", &ast.Position{}), &ast.Position{}),
+								},
 							},
 						},
-					},
-					QueryDocument: &ast.QueryDocument{
-						Operations: ast.OperationList{
-							{
-								Operation:           "Query",
-								VariableDefinitions: ast.VariableDefinitionList{fullVariableDefs[0]},
+						QueryDocument: &ast.QueryDocument{
+							Operations: ast.OperationList{
+								{
+									Operation:           "Query",
+									VariableDefinitions: ast.VariableDefinitionList{fullVariableDefs[0]},
+								},
 							},
 						},
-					},
-					QueryString: `hello`,
-					Variables:   Set{"hello": true},
-					// return a known value we can test against
-					Queryer: graphql.QueryerFunc(
-						func(input *graphql.QueryInput) (interface{}, error) {
-							// make sure that we got the right variable inputs
-							assert.Equal(t, map[string]interface{}{"hello": "world"}, input.Variables)
-							// and definitions
-							assert.Equal(t, ast.VariableDefinitionList{fullVariableDefs[0]}, input.QueryDocument.Operations[0].VariableDefinitions)
-							assert.Equal(t, "hello", input.Query)
+						QueryString: `hello`,
+						Variables:   Set{"hello": true},
+						// return a known value we can test against
+						Queryer: graphql.QueryerFunc(
+							func(input *graphql.QueryInput) (interface{}, error) {
+								// make sure that we got the right variable inputs
+								assert.Equal(t, map[string]interface{}{"hello": "world"}, input.Variables)
+								// and definitions
+								assert.Equal(t, ast.VariableDefinitionList{fullVariableDefs[0]}, input.QueryDocument.Operations[0].VariableDefinitions)
+								assert.Equal(t, "hello", input.Query)
 
-							return map[string]interface{}{"values": []string{"world"}}, nil
-						},
-					),
+								return map[string]interface{}{"values": []string{"world"}}, nil
+							},
+						),
+					},
 				},
 			},
 		},
-	}, fullVariables)
+	})
 	if err != nil {
 		t.Error(err.Error())
 	}
