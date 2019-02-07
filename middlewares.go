@@ -1,6 +1,9 @@
 package gateway
 
 import (
+	"errors"
+	"sync"
+
 	"github.com/nautilus/graphql"
 )
 
@@ -36,5 +39,37 @@ func (p ResponseMiddleware) ExecutionMiddleware() {}
 // scrubInsertionIDs removes the fields from the final response that the user did not
 // explicitly ask for
 func scrubInsertionIDs(ctx *ExecutionContext, response map[string]interface{}) error {
+	lock := sync.Mutex{}
+
+	// there are many fields to scrub
+	for field, locations := range ctx.Plan.FieldsToScrub {
+		for _, location := range locations {
+			// look for the insertion points in the response for the field
+			insertionPoints, err := executorFindInsertionPoints(&lock, location, ctx.Plan.Operation.SelectionSet, response, [][]string{})
+			if err != nil {
+				return err
+			}
+
+			// each insertion point needs to be cleaned up
+			for _, point := range insertionPoints {
+				// extract the obj at that point
+				value, err := executorExtractValue(response, &lock, point)
+				if err != nil {
+					return err
+				}
+
+				// it has to be an obj
+				obj, ok := value.(map[string]interface{})
+				if !ok {
+					return errors.New("Can not scrub field from non object")
+				}
+
+				// delete the field we're supposed to
+				delete(obj, field)
+			}
+		}
+	}
+
+	// the first thing we have to do is flatten all of the fragments into a single
 	return nil
 }

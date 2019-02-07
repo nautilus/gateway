@@ -747,8 +747,8 @@ func (p *MinQueriesPlanner) generateScrubFields(plans []*QueryPlan, requestSelec
 				return err
 			}
 
-			for id, values := range childScrubs {
-				fieldsToScrub[id] = append(fieldsToScrub[id], values...)
+			for field, values := range childScrubs {
+				fieldsToScrub[field] = append(fieldsToScrub[field], values...)
 			}
 		}
 

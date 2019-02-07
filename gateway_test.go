@@ -201,7 +201,18 @@ func TestGateway(t *testing.T) {
 				&QueryPlan{
 					FieldsToScrub: map[string][][]string{
 						"id": {
-							{"hello"},
+							{"allUsers"},
+						},
+					},
+					Operation: &ast.OperationDefinition{
+						Operation: ast.Query,
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "allUsers",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+								},
+							},
 						},
 					},
 					RootStep: &QueryPlanStep{
