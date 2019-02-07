@@ -37,7 +37,7 @@ arguments to pass the executable, run `./gateway --help`.
 While the executable is good for getting started quickly, it isn't sufficient for
 most production usecases. Unfortunately, there is currently no story to plug in custom
 authentication/authorization logic or other extensions when running a gateway with the
-cli. If being able to run a custom gateway with the cli is something that interests you,
+cli. If being able to run you're own gateway with the cli is something that interests you,
 please open in an issue! For now, these common situations require building your own executable.
 
 The core object of the gateway is the `Gateway` struct exported by the module at
