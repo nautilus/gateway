@@ -170,3 +170,23 @@ handling the queries. Authentication and Authorization should be modeled as a sp
 case of above.
 
 See the [auth example](./examples/auth) for more information.
+
+### Modifying the response
+
+There are some situations (error logging for example) that require hooking into the 
+execution process after a response has been generated. To do this, define a 
+`gateway.ResponseMiddleware` and pass it to the gateway constructor:
+
+```golang
+
+logResponse := gateway.ResponseMiddleware(func(ctx *gateway.ExecutionContext, response map[string]interface{}) error {
+	// you can also modify the response directly if you wanted
+	fmt.Println(response)
+	
+	return nil
+})
+
+// ... somewhere else ...
+
+gateway.New(..., gateway.withMiddleware(logResponse))
+```
