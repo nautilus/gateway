@@ -198,8 +198,12 @@ func TestGateway(t *testing.T) {
 		// values that have ids
 		gateway, err := New(sources, WithPlanner(&MockPlanner{
 			Plans: []*QueryPlan{
-
 				&QueryPlan{
+					FieldsToScrub: map[string][][]string{
+						"id": {
+							{"hello"},
+						},
+					},
 					RootStep: &QueryPlanStep{
 						Then: []*QueryPlanStep{
 							{

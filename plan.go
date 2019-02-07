@@ -35,6 +35,7 @@ type QueryPlan struct {
 	Operation           *ast.OperationDefinition
 	RootStep            *QueryPlanStep
 	FragmentDefinitions ast.FragmentDefinitionList
+	FieldsToScrub       map[string][][]string
 }
 
 type newQueryPlanStepPayload struct {
@@ -67,19 +68,36 @@ type MinQueriesPlanner struct {
 // Plan computes the nested selections that will need to be performed
 func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
 	// the first thing to do is to parse the query
-	parsedQuery, err := gqlparser.LoadQuery(schema, query)
+	parsedQuery, e := gqlparser.LoadQuery(schema, query)
+	if e != nil {
+		return nil, e
+	}
+
+	// generate the plan
+	plans, err := p.generatePlan(parsedQuery, schema, locations)
 	if err != nil {
 		return nil, err
 	}
 
-	// the list of plans that need to be executed simultaneously
+	// add the scrub fields
+	err = p.generateScrubFields(plans, parsedQuery.Fragments)
+	if err != nil {
+		return nil, err
+	}
+
+	// we're done
+	return plans, nil
+}
+
+func (p *MinQueriesPlanner) generatePlan(query *ast.QueryDocument, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
+	// an accumulator
 	plans := []*QueryPlan{}
 
-	for _, operation := range parsedQuery.Operations {
+	for _, operation := range query.Operations {
 		// each operation results in a new query
 		plan := &QueryPlan{
 			Operation:           operation,
-			FragmentDefinitions: parsedQuery.Fragments,
+			FragmentDefinitions: query.Fragments,
 		}
 
 		// add the plan to the top level list
@@ -232,14 +250,14 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 
 		// wait for either the error channel or done channel
 		select {
-		// we are done
-		case <-doneCh:
-			continue
 		// there was an error
 		case err := <-errCh:
 			// bubble the error up
 			return nil, err
+		// we are done
+		case <-doneCh:
 		}
+
 	}
 
 	// return the final plan
@@ -682,6 +700,86 @@ FieldLoop:
 	}
 
 	return locationFields, locationFragments, nil
+}
+
+// This plan results in a query that has fields that were not explicitly asked for.
+// In order for the executor to know what to filter out of the final reply,
+// we have to leave behind paths to objects that need to be scrubbed.
+func (p *MinQueriesPlanner) generateScrubFields(plans []*QueryPlan, fragments ast.FragmentDefinitionList) error {
+	for _, plan := range plans {
+		flatSel, err := graphql.ApplyFragments(plan.Operation.SelectionSet, fragments)
+		if err != nil {
+			return err
+		}
+
+		// the list of fields to scrub in this plan
+		fieldsToScrub := map[string][][]string{"id": [][]string{}}
+
+		// add all of the plans for the next step along with those from this step
+		for _, nextStep := range plan.RootStep.Then {
+			// compute the fields that our children have to add
+			childScrubs, err := p.generateScrubFieldsWalk(nextStep, flatSel)
+			if err != nil {
+				return err
+			}
+
+			for id, values := range childScrubs {
+				fieldsToScrub[id] = append(fieldsToScrub[id], values...)
+			}
+		}
+
+		plan.FieldsToScrub = fieldsToScrub
+	}
+
+	return nil
+}
+
+func (p *MinQueriesPlanner) generateScrubFieldsWalk(step *QueryPlanStep, selection ast.SelectionSet) (map[string][][]string, error) {
+	// the acumulator of plans
+	acc := map[string][][]string{}
+
+	insertionPoint := step.InsertionPoint
+	targetSelection := selection
+
+	// we need to look if this steps insertion point artificially asked for the id
+	for _, point := range insertionPoint {
+		foundField := false
+
+		// look over the points in the selection
+		for _, field := range graphql.SelectedFields(targetSelection) {
+			// if the field name is what we expected
+			if field.Name == point {
+				// we found the field for this point
+				foundField = true
+
+				// our next selection set is the fields
+				targetSelection = field.SelectionSet
+
+				break
+			}
+		}
+
+		if !foundField {
+			return nil, fmt.Errorf("could not find field for point %s", point)
+		}
+	}
+
+	// look through the selection for a field named id
+	naturalID := false
+	for _, field := range graphql.SelectedFields(targetSelection) {
+		// if the field is for id
+		if field.Alias == "id" {
+			naturalID = true
+		}
+	}
+
+	// if the id was not natural and we were going to be inserted somewhere
+	if !naturalID && len(insertionPoint) > 0 {
+		// we have to add this insertion point to the list places to scrub
+		acc["id"] = append(acc["id"], insertionPoint)
+	}
+
+	return acc, nil
 }
 
 func coreFieldType(source *ast.Field) *ast.Type {
