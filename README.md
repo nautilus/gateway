@@ -14,6 +14,7 @@ motivation read [this post](https://medium.com/@aaivazis/beyond-schema-delegatio
    1. [Integrating with an HTTP server](#integrating-with-an-http-server)
    1. [Modifying Service Requests](#modifying-service-requests)
    1. [Authentication](#authentication-and-authorization)
+1. [Versioning](#versioning)
 1. [Examples](./examples)
    1. [Hello World](./examples/hello)
    1. [Authentication and Authorization](./examples/auth)
@@ -190,3 +191,8 @@ logResponse := gateway.ResponseMiddleware(func(ctx *gateway.ExecutionContext, re
 
 gateway.New(..., gateway.withMiddleware(logResponse))
 ```
+
+## Versioning
+
+This project is built as a go module and follows the practices outlined in the [spec](https://github.com/golang/go/wiki/Modules). Please consider all APIs experimental and subject 
+to change until v1 has been released at which point semantic versioning will be strictly followed.
