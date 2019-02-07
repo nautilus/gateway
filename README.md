@@ -126,6 +126,8 @@ addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
 gateway.New(..., gateway.withMiddleware(addHeader))
 ```
 
+#### Forwarding headers
+
 If you wanted to do something more complicated like pull something out of the incoming
 network request (its IP for example) and add it to the outbound requests, you would
 write it in 2 parts.
