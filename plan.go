@@ -469,6 +469,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 				)
 			}
 
+			// we need to make sure that this steps fragment definitions always match our expecatations
 			config.step.FragmentDefinitions.ForName(selection.Name).SelectionSet = subSelection
 
 		case *ast.InlineFragment:

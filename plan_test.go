@@ -739,6 +739,7 @@ func TestPlanQuery_preferParentLocation(t *testing.T) {
 func TestPlanQuery_scrubFields(t *testing.T) {
 	schema, _ := graphql.LoadSchema(`
 		type User {
+			id: ID!
 			firstName: String!
 			favoriteCatSpecies: String!
 			catPhotos: [CatPhoto!]!
@@ -766,6 +767,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 	locations.RegisterURL("User", "firstName", userLocation)
 	locations.RegisterURL("User", "favoriteCatSpecies", catLocation)
 	locations.RegisterURL("User", "catPhotos", catLocation)
+	locations.RegisterURL("User", "id", catLocation, userLocation)
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
 
 	t.Run("Multiple Step Scrubbing", func(t *testing.T) {
@@ -812,6 +814,33 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 		// places where we want to scrub it
 		assert.Equal(t, map[string][][]string{
 			"id": [][]string{},
+		}, plans[0].FieldsToScrub)
+	})
+
+	t.Run("Existing id", func(t *testing.T) {
+		plans, err := (&MinQueriesPlanner{}).Plan(`
+			{
+				allUsers {
+					id
+					catPhotos {
+						owner {
+							firstName
+						}
+					}
+				}
+			}
+		`, schema, locations)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// each transition between step requires an id field. None of them were requested so we should have two
+		// places where we want to scrub it
+		assert.Equal(t, map[string][][]string{
+			"id": [][]string{
+				{"allUsers", "catPhotos"},
+			},
 		}, plans[0].FieldsToScrub)
 	})
 }
