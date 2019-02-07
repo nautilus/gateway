@@ -1063,7 +1063,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 
 	assert.Equal(t, "user", queryFragmentSelection.Name)
-	if !assert.Equal(t, "id", queryFragmentSelection.SelectionSet[0].(*ast.Field).Name) {
+	if !assert.Len(t, queryFragmentSelection.SelectionSet, 1) || !assert.Equal(t, "id", queryFragmentSelection.SelectionSet[0].(*ast.Field).Name) {
 		return
 	}
 
@@ -1094,6 +1094,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 	// make sure that the definition has 2 selections: a field and a fragment spread
 	if !assert.Len(t, defn.SelectionSet, 2, "QueryFragment in the second step had the wrong definition") {
+		fmt.Println(log.FormatSelectionSet(defn.SelectionSet))
 		return
 	}
 
