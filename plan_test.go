@@ -1054,7 +1054,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	// the definition for QueryFragment should have 1 selections
 	queryFragmentDefn := firstStep.FragmentDefinitions.ForName("QueryFragment")
 	if !assert.NotNil(t, queryFragmentDefn, "Could not find QueryFragment definition") ||
-		!assert.Len(t, queryFragmentDefn.SelectionSet, 1) {
+		!assert.Len(t, queryFragmentDefn.SelectionSet, 1, "Fragment Definition has incorrect number of selections") {
 		return
 	}
 	queryFragmentSelection, ok := queryFragmentDefn.SelectionSet[0].(*ast.Field)
@@ -1063,7 +1063,9 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 
 	assert.Equal(t, "user", queryFragmentSelection.Name)
-	assert.Equal(t, ast.SelectionSet{&ast.Field{Name: "id", SelectionSet: ast.SelectionSet{}}}, queryFragmentSelection.SelectionSet)
+	if !assert.Equal(t, "id", queryFragmentSelection.SelectionSet[0].(*ast.Field).Name) {
+		return
+	}
 
 	// check the second step
 	secondStep := firstStep.Then[0]

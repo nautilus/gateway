@@ -73,14 +73,19 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 		return nil, e
 	}
 
+	flatSelection, err := graphql.ApplyFragments(parsedQuery.Operations[0].SelectionSet, parsedQuery.Fragments)
+	if err != nil {
+		return nil, err
+	}
+
 	// generate the plan
-	plans, err := p.generatePlan(parsedQuery, schema, locations)
+	plans, err := p.generatePlans(parsedQuery, schema, locations)
 	if err != nil {
 		return nil, err
 	}
 
 	// add the scrub fields
-	err = p.generateScrubFields(plans, parsedQuery.Fragments)
+	err = p.generateScrubFields(plans, flatSelection)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +94,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 	return plans, nil
 }
 
-func (p *MinQueriesPlanner) generatePlan(query *ast.QueryDocument, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) generatePlans(query *ast.QueryDocument, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
 	// an accumulator
 	plans := []*QueryPlan{}
 
@@ -362,6 +367,17 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 	for _, selection := range currentLocationFields {
 		switch selection := selection.(type) {
 		case *ast.Field:
+			// we don't want to modify the incoming field so we have to make a copy of the selected field to put in
+			// the step
+			field := &ast.Field{
+				Name:             selection.Name,
+				Alias:            selection.Alias,
+				Directives:       selection.Directives,
+				Arguments:        selection.Arguments,
+				Definition:       selection.Definition,
+				ObjectDefinition: selection.ObjectDefinition,
+				SelectionSet:     selection.SelectionSet,
+			}
 			// if the targetField has a selection, it cannot be added naively to the parent. We first have to
 			// modify its selection set to only include fields that are at the same location as the parent.
 			if len(selection.SelectionSet) > 0 {
@@ -393,7 +409,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 					plan:           config.plan,
 
 					parentType:     coreFieldType(selection).Name(),
-					selection:      selection.SelectionSet,
+					selection:      field.SelectionSet,
 					insertionPoint: insertionPoint,
 					wrapper:        wrapper,
 				})
@@ -404,7 +420,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 				log.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, selection.Name, subSelection))
 
 				// overwrite the selection set for this selection
-				selection.SelectionSet = subSelection
+				field.SelectionSet = subSelection
 			} else {
 				log.Debug("found a scalar")
 			}
@@ -416,7 +432,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 			}
 
 			// add it to the list
-			finalSelection = append(finalSelection, selection)
+			finalSelection = append(finalSelection, field)
 
 		case *ast.FragmentSpread:
 			// we have to walk down the fragments definition and keep adding to the selection sets and fragment definitions
@@ -705,20 +721,15 @@ FieldLoop:
 // This plan results in a query that has fields that were not explicitly asked for.
 // In order for the executor to know what to filter out of the final reply,
 // we have to leave behind paths to objects that need to be scrubbed.
-func (p *MinQueriesPlanner) generateScrubFields(plans []*QueryPlan, fragments ast.FragmentDefinitionList) error {
+func (p *MinQueriesPlanner) generateScrubFields(plans []*QueryPlan, requestSelection ast.SelectionSet) error {
 	for _, plan := range plans {
-		flatSel, err := graphql.ApplyFragments(plan.Operation.SelectionSet, fragments)
-		if err != nil {
-			return err
-		}
-
 		// the list of fields to scrub in this plan
 		fieldsToScrub := map[string][][]string{"id": [][]string{}}
 
 		// add all of the plans for the next step along with those from this step
 		for _, nextStep := range plan.RootStep.Then {
 			// compute the fields that our children have to add
-			childScrubs, err := p.generateScrubFieldsWalk(nextStep, flatSel)
+			childScrubs, err := p.generateScrubFieldsWalk(nextStep, requestSelection)
 			if err != nil {
 				return err
 			}
@@ -749,18 +760,17 @@ func (p *MinQueriesPlanner) generateScrubFieldsWalk(step *QueryPlanStep, selecti
 		for _, field := range graphql.SelectedFields(targetSelection) {
 			// if the field name is what we expected
 			if field.Name == point {
-				// we found the field for this point
-				foundField = true
-
-				// our next selection set is the fields
+				// our next selection set is the fields selection set
 				targetSelection = field.SelectionSet
 
+				// we found the field for this point
+				foundField = true
 				break
 			}
 		}
 
 		if !foundField {
-			return nil, fmt.Errorf("could not find field for point %s", point)
+			return nil, fmt.Errorf("error adding scrub fields: could not find field for point %s", point)
 		}
 	}
 
@@ -777,6 +787,19 @@ func (p *MinQueriesPlanner) generateScrubFieldsWalk(step *QueryPlanStep, selecti
 	if !naturalID && len(insertionPoint) > 0 {
 		// we have to add this insertion point to the list places to scrub
 		acc["id"] = append(acc["id"], insertionPoint)
+	}
+
+	// add all of the plans for the next step along with those from this step
+	for _, nextStep := range step.Then {
+		// compute the fields that our children have to add
+		childScrubs, err := p.generateScrubFieldsWalk(nextStep, selection)
+		if err != nil {
+			return nil, err
+		}
+
+		for id, values := range childScrubs {
+			acc[id] = append(acc[id], values...)
+		}
 	}
 
 	return acc, nil
