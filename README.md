@@ -4,8 +4,7 @@
 
 A standalone service designed to consolidate your graphql APIs into one endpoint.
 
-For a more detailed description of this project's
-motivation read [this post](https://medium.com/@aaivazis/beyond-schema-delegation-e3430a942fdd). For a guide to getting started read [this post](https://medium.com/@aaivazis/a-guide-to-schema-federation-part-1-995b639ac035)
+For a guide to getting started read [this post](https://medium.com/@aaivazis/a-guide-to-schema-federation-part-1-995b639ac035)
 
 ## Table of Contents
 
