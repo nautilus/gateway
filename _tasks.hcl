@@ -29,12 +29,12 @@ task "test:coverage" {
 
 task "build" {
     description = "Build executable in all supported architectures"
-    command     = "gox -os=\"linux darwin windows\" -arch=\"amd64\" -output=\"bin/gateway_{{.OS}}_{{.Arch}}\" -verbose ./cmd/..."
+    command     =  "gox -os=\"linux darwin windows\" -arch=amd64 -output=bin/gateway_{{.OS}}_{{.Arch}} -verbose ./cmd/..."
 }
 
 task "deploy" {
     description = "Push the built artifacts to the release. assumes its running in CI"
-    command     = "ghr -t $GITHUB_TOKEN  -u \"nautilus\" -r \"gateway\" -delete $TRAVIS_TAG ./bin"
+    command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway -delete $TRAVIS_TAG ./bin"
 }
 
 variables {
