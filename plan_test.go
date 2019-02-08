@@ -906,6 +906,65 @@ func TestPlanQuery_groupSiblings(t *testing.T) {
 	}
 }
 
+func TestPlanQuery_nodeField(t *testing.T) {
+	// the query to test
+	// query {
+	//     node(id: $id) {
+	//     		... on User {
+	//				firstName
+	//				lastName
+	//    		}
+	//     }
+	// }
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "node", "url1", "url2")
+	locations.RegisterURL("User", "firstName", "url1")
+	locations.RegisterURL("User", "lastName", "url2")
+
+	// load the query we're going to query
+	schema, err := graphql.LoadSchema(`
+		interface Node {
+			id: ID!
+		}
+
+		type User implements Node {
+			id: ID!
+			firstName: String!
+			lastName: String!
+		}
+
+		type Query {
+			node(id: ID!): Node
+		}
+	`)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	// plan the query
+	plans, err := (&MinQueriesPlanner{}).Plan(`
+		query($id: ID!) {
+			node(id: $id) {
+				... on User {
+					firstName
+					lastName
+				}
+			}
+		}
+	`, schema, locations)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// we should return only one plan
+	if !assert.Len(t, plans, 1) {
+		return
+	}
+}
+
 func TestPlanQuery_stepVariables(t *testing.T) {
 	// the query to test
 	// query($id: ID!, $category: String!) {

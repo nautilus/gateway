@@ -7,7 +7,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
-	github.com/nautilus/graphql v0.0.0-20190206230122-a60d56409fd3
+	github.com/nautilus/graphql v0.0.0-20190208193207-6bb377f3952a
 	github.com/opentracing/opentracing-go v1.0.2 // indirect
 	github.com/sirupsen/logrus v1.3.0
 	github.com/spf13/cobra v0.0.3
@@ -17,6 +17,6 @@ require (
 	golang.org/x/crypto v0.0.0-20190130090550-b01c7a725664 // indirect
 	golang.org/x/net v0.0.0-20190125091013-d26f9f9a57f3
 	golang.org/x/sys v0.0.0-20190130150945-aca44879d564 // indirect
-	golang.org/x/tools v0.0.0-20190206221403-44bcb96178d3 // indirect
+	golang.org/x/tools v0.0.0-20190208185513-a3f91d6be4f3 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 )
