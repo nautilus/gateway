@@ -20,7 +20,7 @@ The general flow goes something like:
 - The other services [uses the header value](https://github.com/nautilus/gateway/blob/master/examples/auth/todo.go#L89) to perform whatever user-specific logic is
   required.
   
-- The current user can query for their User record with the viewer gateway field (coming soon)
+- The current user can query for their User record with the [viewer gateway field]() (coming soon)
 
 Keep in mind that this demo should not be taken as an example of a secure
 authorization system. Its purpose is just to illustrate how one can pass
