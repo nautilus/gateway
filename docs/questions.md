@@ -4,4 +4,4 @@ Does it make sense to share the resolution of certain fields?
     - use mutations as events of an application?
   - for fields on the generic object types
     - seems like "shared state" and could be indication of a bad domain separation
-    - it has to be the case for `id` 
+    - it has to be the case for `id` but that could be a necessary exception
