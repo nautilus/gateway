@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func schemaTestLoadQuery(query string, target interface{}) error {
+func schemaTestLoadQuery(query string, target interface{}, variables map[string]interface{}) error {
 	schema, _ := graphql.LoadSchema(`
 		type User {
 			firstName: String!
@@ -42,7 +42,7 @@ func schemaTestLoadQuery(query string, target interface{}) error {
 	}
 
 	// executing the introspection query should return a full description of the schema
-	response, err := gateway.Execute(context.Background(), query, map[string]interface{}{})
+	response, err := gateway.Execute(context.Background(), query, variables)
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func TestSchemaIntrospection_query(t *testing.T) {
 	result := &graphql.IntrospectionQueryResult{}
 
 	// a place to hold the response of the query
-	err := schemaTestLoadQuery(graphql.IntrospectionQuery, result)
+	err := schemaTestLoadQuery(graphql.IntrospectionQuery, result, map[string]interface{}{})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -189,7 +189,7 @@ func TestSchemaIntrospection_lookUpType(t *testing.T) {
 	`
 
 	// a place to hold the response of the query
-	err := schemaTestLoadQuery(query, result)
+	err := schemaTestLoadQuery(query, result, map[string]interface{}{})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -215,11 +215,73 @@ func TestSchemaIntrospection_missingType(t *testing.T) {
 	`
 
 	// a place to hold the response of the query
-	err := schemaTestLoadQuery(query, result)
+	err := schemaTestLoadQuery(query, result, map[string]interface{}{})
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
 	assert.Nil(t, result.Type)
+}
+
+func TestSchema_resolveNodeInlineID(t *testing.T) {
+	type Result struct {
+		Node struct {
+			ID string `json:"id"`
+		} `json:"node"`
+	}
+
+	// a place to hold the response of the query
+	result := &Result{}
+
+	query := `
+		{
+			node(id: "my-id") {
+				id
+			}
+		}
+	`
+
+	// a place to hold the response of the query
+	err := schemaTestLoadQuery(query, result, map[string]interface{}{})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	assert.Equal(t, &Result{Node: struct {
+		ID string `json:"id"`
+	}{ID: "my-id"}}, result)
+}
+
+func TestSchema_resolveNodeIDFromArg(t *testing.T) {
+	type Result struct {
+		Node struct {
+			ID string `json:"id"`
+		} `json:"node"`
+	}
+
+	// a place to hold the response of the query
+	result := &Result{}
+
+	query := `
+		query($id: ID!){
+			node(id: $id) {
+				id
+			}
+		}
+	`
+
+	// a place to hold the response of the query
+	err := schemaTestLoadQuery(query, result, map[string]interface{}{
+		"id": "my-id",
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	assert.Equal(t, &Result{Node: struct {
+		ID string `json:"id"`
+	}{ID: "my-id"}}, result)
 }
