@@ -606,19 +606,22 @@ FieldLoop:
 				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
 				// the field can be found in many locations
 			} else {
-				// look to see if the current location is one of the possible locations
-				for _, location := range possibleLocations {
-					// if the location is the same as the parent
-					if location == config.parentLocation {
-						// assign this field to the parents entry
-						locationFields[location] = append(locationFields[location], field)
-						// we're done with this field
-						continue FieldLoop
+				// locations to prioritize first
+				for _, priority := range []string{config.parentLocation, internalSchemaLocation} {
+					// look to see if the current location is one of the possible locations
+					for _, location := range possibleLocations {
+						// if the location is the same as the parent
+						if location == priority {
+							// assign this field to the parents entry
+							locationFields[priority] = append(locationFields[priority], field)
+							// we're done with this field
+							continue FieldLoop
+						}
 					}
 				}
 
-				// if we got here then this field can be found in multiple services that are not the parent
-				// just use the first one for now
+				// if we got here then this field can be found in multiple services and none of the top priority locations.
+				// for now, just use the first one
 				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
 			}
 

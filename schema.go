@@ -39,10 +39,31 @@ func (q *SchemaQueryer) Query(ctx context.Context, input *graphql.QueryInput, re
 	}
 
 	for _, field := range graphql.SelectedFields(querySelection) {
-		if field.Name == "__schema" {
+		switch field.Name {
+		case "node":
+			// the only thing we need to do when resolving the node type is return an object with the id we were given
+			// from the arguments
+
+			// grab the argument specifying the ID
+			id := field.Arguments.ForName("id")
+
+			// the value for the id argument can come in a few different ways
+			switch id.Value.Kind {
+			case ast.StringValue:
+				// the argument is an ID type so use the raw value
+				result[field.Alias] = map[string]interface{}{
+					"id": id.Value.Raw,
+				}
+			case ast.Variable:
+				// the argument is a variable so we have to look up the value there
+				result[field.Alias] = map[string]interface{}{
+					"id": input.Variables["id"],
+				}
+			}
+
+		case "__schema":
 			result[field.Alias] = q.introspectSchema(introspectionSchema, field.SelectionSet)
-		}
-		if field.Name == "__type" {
+		case "__type":
 			// there is a name argument to look up the type
 			name := field.Arguments.ForName("name").Value.Raw
 
@@ -281,8 +302,12 @@ func (q *SchemaQueryer) introspectDirectiveSlice(directives []introspection.Dire
 func init() {
 	// load the internal
 	schema, err := graphql.LoadSchema(`
+		interface Node {
+			id: ID!
+		}
+
 		type Query {
-			_apiVersion: String
+			node(id: ID!): Node
 		}
 	`)
 	if schema == nil {
