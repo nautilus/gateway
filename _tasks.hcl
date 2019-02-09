@@ -29,7 +29,9 @@ task "test:coverage" {
 
 task "build" {
     description = "Build executable in all supported architectures"
-    command     =  "gox -os=\"linux darwin windows\" -arch=amd64 -output=bin/gateway_{{.OS}}_{{.Arch}} -verbose ./cmd/..."
+    command     =  <<EOF
+        gox -os="linux darwin windows" -arch=amd64 -output="bin/gateway_{{.OS}}_{{.Arch}}" -verbose ./cmd/...
+    EOF
 }
 
 task "deploy" {
@@ -42,5 +44,6 @@ variables {
 }
 
 config {
+    // have to change the template delimiters to support gox
     delimiters = ["{%", "%}"]
 }

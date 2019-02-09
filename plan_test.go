@@ -919,9 +919,9 @@ func TestPlanQuery_nodeField(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "node", "url1", "url2")
 	locations.RegisterURL("User", "firstName", "url1")
 	locations.RegisterURL("User", "lastName", "url2")
+	locations.RegisterURL("Query", "node", "url1", "url2", internalSchemaLocation)
 
 	// load the query we're going to query
 	schema, err := graphql.LoadSchema(`
@@ -963,6 +963,76 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	if !assert.Len(t, plans, 1) {
 		return
 	}
+
+	// this plan should have 1 step that should hit the internal API
+	if !assert.Len(t, plans[0].RootStep.Then, 1, "incorrect number of steps in plan") ||
+		!assert.IsType(t, &SchemaQueryer{}, plans[0].RootStep.Then[0].Queryer, "first step does not go to the internal API") {
+		return
+	}
+	internalStep := plans[0].RootStep.Then[0]
+
+	// the step should have 2 after it
+	if !assert.Len(t, internalStep.Then, 2) {
+		return
+	}
+
+	// grab the 2 steps
+	var url1Step *QueryPlanStep
+	var url2Step *QueryPlanStep
+	for _, step := range internalStep.Then {
+		if queryer, ok := step.Queryer.(*graphql.NetworkQueryer); ok && queryer.URL == "url1" {
+			url1Step = step
+		} else {
+			url2Step = step
+		}
+	}
+	if !assert.NotNil(t, url1Step) || !assert.NotNil(t, url2Step) {
+		return
+	}
+
+	t.Run("Url1 Step", func(t *testing.T) {
+		// the url1 step should have Node as the parent type
+		assert.Equal(t, "Node", url1Step.ParentType)
+		// there should be one selection set
+		if !assert.Len(t, url1Step.SelectionSet, 1) {
+			return
+		}
+
+		// it should be an inline fragment on User
+		inlineFragment, ok := url1Step.SelectionSet[0].(*ast.InlineFragment)
+		if !assert.True(t, ok) {
+			return
+		}
+		assert.Equal(t, "User", inlineFragment.TypeCondition)
+
+		// with one selection set: firstName
+		if !assert.Len(t, inlineFragment.SelectionSet, 1) {
+			return
+		}
+		assert.Equal(t, "firstName", graphql.SelectedFields(inlineFragment.SelectionSet)[0].Name)
+	})
+
+	t.Run("Url2 Step", func(t *testing.T) {
+		// the url1 step should have Node as the parent type
+		assert.Equal(t, "Node", url2Step.ParentType)
+		// there should be one selection set
+		if !assert.Len(t, url2Step.SelectionSet, 1) {
+			return
+		}
+
+		// it should be an inline fragment on User
+		inlineFragment, ok := url2Step.SelectionSet[0].(*ast.InlineFragment)
+		if !assert.True(t, ok) {
+			return
+		}
+		assert.Equal(t, "User", inlineFragment.TypeCondition)
+
+		// with one selection set: firstName
+		if !assert.Len(t, inlineFragment.SelectionSet, 1) {
+			return
+		}
+		assert.Equal(t, "lastName", graphql.SelectedFields(inlineFragment.SelectionSet)[0].Name)
+	})
 }
 
 func TestPlanQuery_stepVariables(t *testing.T) {

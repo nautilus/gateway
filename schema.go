@@ -281,8 +281,12 @@ func (q *SchemaQueryer) introspectDirectiveSlice(directives []introspection.Dire
 func init() {
 	// load the internal
 	schema, err := graphql.LoadSchema(`
+		interface Node {
+			id: ID!
+		}
+
 		type Query {
-			_apiVersion: String
+			node(id: ID!): Node
 		}
 	`)
 	if schema == nil {
