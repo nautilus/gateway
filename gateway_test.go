@@ -307,8 +307,8 @@ func TestGateway(t *testing.T) {
 					Type: ast.NamedType("ID", &ast.Position{}),
 				},
 			},
-			Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
-				return args["id"].(string), nil
+			Resolver: func(ctx context.Context, args ast.ArgumentList) (string, error) {
+				return args.ForName("id").Value.Raw, nil
 			},
 		}
 

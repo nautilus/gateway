@@ -25,7 +25,7 @@ type QueryField struct {
 	Name      string
 	Type      *ast.Type
 	Arguments ast.ArgumentDefinitionList
-	Resolver  func(context.Context, map[string]interface{}) (string, error)
+	Resolver  func(context.Context, ast.ArgumentList) (string, error)
 }
 
 // Query takes a query definition and writes the result to the receiver
@@ -44,27 +44,6 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 
 	for _, field := range graphql.SelectedFields(querySelection) {
 		switch field.Name {
-		case "node":
-			// the only thing we need to do when resolving the node type is return an object with the id we were given
-			// from the arguments
-
-			// grab the argument specifying the ID
-			id := field.Arguments.ForName("id")
-
-			// the value for the id argument can come in a few different ways
-			switch id.Value.Kind {
-			case ast.StringValue:
-				// the argument is an ID type so use the raw value
-				result[field.Alias] = map[string]interface{}{
-					"id": id.Value.Raw,
-				}
-			case ast.Variable:
-				// the argument is a variable so we have to look up the value there
-				result[field.Alias] = map[string]interface{}{
-					"id": input.Variables["id"],
-				}
-			}
-
 		case "__schema":
 			result[field.Alias] = g.introspectSchema(introspectionSchema, field.SelectionSet)
 		case "__type":
@@ -86,6 +65,21 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 			} else {
 				// we found the type so introspect it
 				result[field.Alias] = g.introspectType(introspectedType, field.SelectionSet)
+			}
+		// to get this far and not be one of the above means that the field is a query field
+		default:
+			// look for the right field
+			for _, qField := range g.queryFields {
+				if field.Name == qField.Name {
+					// find the id of the entity
+					id, err := qField.Resolver(ctx, field.Arguments)
+					if err != nil {
+						return err
+					}
+
+					// assign the id to the response
+					result[field.Alias] = map[string]interface{}{"id": id}
+				}
 			}
 		}
 	}

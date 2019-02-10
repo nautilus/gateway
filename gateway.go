@@ -98,10 +98,11 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 
 	// set any default values before we start doing stuff with it
 	gateway := &Gateway{
-		sources:  sources,
-		planner:  &MinQueriesPlanner{},
-		executor: &ParallelExecutor{},
-		merger:   MergerFunc(mergeSchemas),
+		sources:     sources,
+		planner:     &MinQueriesPlanner{},
+		executor:    &ParallelExecutor{},
+		merger:      MergerFunc(mergeSchemas),
+		queryFields: []*QueryField{nodeField},
 	}
 
 	// pass the gateway through any configurators
@@ -161,6 +162,20 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 
 	// we're done here
 	return gateway, nil
+}
+
+var nodeField = &QueryField{
+	Name: "node",
+	Type: ast.NamedType("Node", &ast.Position{}),
+	Arguments: ast.ArgumentDefinitionList{
+		&ast.ArgumentDefinition{
+			Name: "id",
+			Type: ast.NonNullNamedType("ID", &ast.Position{}),
+		},
+	},
+	Resolver: func(ctx context.Context, args ast.ArgumentList) (string, error) {
+		return args.ForName("id").Value.Raw, nil
+	},
 }
 
 // Configurator is a function to be passed to New that configures the
