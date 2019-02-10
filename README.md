@@ -209,7 +209,7 @@ import (
 viewerField := &gateway.QueryField{
 	Name: "viewer",
 	Type: ast.NamedType("User", &ast.Position{}),
-	Resolver: func(ctx context.Context, args variables map[string]interface{}) (string, error) {
+	Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
 		// for now just return the value in context
 		return ctx.Value("user-id").(string), nil
 	},
