@@ -178,7 +178,7 @@ case of above.
 
 See the [auth example](./examples/auth) for more information.
 
-### Modifying the response
+### Modifying the Response
 
 There are some situations (error logging for example) that require hooking into the
 execution process after a response has been generated. To do this, define a
@@ -199,7 +199,7 @@ gateway.New(..., gateway.WithMiddlewares(logResponse))
 
 ```
 
-### Gateway fields
+### Gateway Fields
 
 There are some situations where it makes sense to have fields that resolve at the gateway layer.
 One common example is the `viewer` field that resolves to the `User` type representing the
