@@ -306,8 +306,8 @@ func TestGateway(t *testing.T) {
 					Type: ast.NamedType("ID", &ast.Position{}),
 				},
 			},
-			Resolver: func(ctx context.Context, args ast.ArgumentList) (string, error) {
-				return args.ForName("id").Value.Raw, nil
+			Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+				return args["id"].(string), nil
 			},
 		}
 
@@ -371,7 +371,7 @@ func TestGateway(t *testing.T) {
 		}
 
 		// make sure the result of the queryer matches exepctations
-		assert.Equal(t, map[string]interface{}{"id": "1"}, res)
+		assert.Equal(t, map[string]interface{}{"viewer": map[string]interface{}{"id": "1"}}, res)
 	})
 }
 

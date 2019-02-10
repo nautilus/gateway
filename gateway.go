@@ -168,20 +168,6 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 	return gateway, nil
 }
 
-var nodeField = &QueryField{
-	Name: "node",
-	Type: ast.NamedType("Node", &ast.Position{}),
-	Arguments: ast.ArgumentDefinitionList{
-		&ast.ArgumentDefinition{
-			Name: "id",
-			Type: ast.NonNullNamedType("ID", &ast.Position{}),
-		},
-	},
-	Resolver: func(ctx context.Context, args ast.ArgumentList) (string, error) {
-		return args.ForName("id").Value.Raw, nil
-	},
-}
-
 // Configurator is a function to be passed to New that configures the
 // resulting schema
 type Configurator func(*Gateway)
@@ -219,6 +205,21 @@ func WithQueryFields(fields ...*QueryField) Configurator {
 	return func(g *Gateway) {
 		g.queryFields = append(g.queryFields, fields...)
 	}
+}
+
+var nodeField = &QueryField{
+	Name: "node",
+	Type: ast.NamedType("Node", &ast.Position{}),
+	Arguments: ast.ArgumentDefinitionList{
+		&ast.ArgumentDefinition{
+			Name: "id",
+			Type: ast.NonNullNamedType("ID", &ast.Position{}),
+		},
+	},
+	Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+		// pass it to the user
+		return args["id"].(string), nil
+	},
 }
 
 func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap {

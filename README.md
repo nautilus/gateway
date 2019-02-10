@@ -192,12 +192,12 @@ gateway.New(..., gateway.WithMiddlewares(logResponse))
 
 ```
 
-### Special fields
+### Gateway fields
 
 There are some situations where it makes sense to have fields that resolve at the gateway layer.
 One common example is the `viewer` field that resolves to the `User` type representing the
 current user. This can be achieved by adding a custom field to the gateway whose resolver returns
-the id:
+the id of the entity.
 
 ```golang
 import (
@@ -208,7 +208,8 @@ import (
 viewerField := &gateway.QueryField{
 	Name: "viewer",
 	Type: ast.NamedType("User", &ast.Position{}),
-	Resolver: func(ctx context.Context, args ast.ArgumentList) (string, error) {
+	Resolver: func(ctx context.Context, args ast.ArgumentList, variables map[string]interface{}) (string, error) {
+		// for now just return the value in context
 		return context.value("user-id").(string), nil
 	},
 }
@@ -216,6 +217,29 @@ viewerField := &gateway.QueryField{
 // ... somewhere else ...
 
 gateway.New(..., gateway.withFields(viewerField))
+```
+
+#### Field Arguments
+
+Grabbing the value of a particular argument should be done through a method on the second argument:
+
+```golang
+// this field is equivalent to
+// 		myField(myArg: String!): User
+argField := &gateway.QueryField{
+	Name: "myField",
+	Type: ast.NamedType("User", &ast.Position{}),
+	Arguments: ast.ArgumentDefinitionList{
+		&ast.ArgumentDefinition{
+			Name: "id",
+			Type: ast.NonNullNamedType("ID", &ast.Position{}),
+		},
+	},
+	Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+		// we know its a string
+		return args["myArg"].(string), nil
+	},
+}
 ```
 
 ## Versioning

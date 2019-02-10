@@ -25,7 +25,7 @@ type QueryField struct {
 	Name      string
 	Type      *ast.Type
 	Arguments ast.ArgumentDefinitionList
-	Resolver  func(context.Context, ast.ArgumentList) (string, error)
+	Resolver  func(context.Context, map[string]interface{}) (string, error)
 }
 
 // Query takes a query definition and writes the result to the receiver
@@ -68,11 +68,25 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 			}
 		// to get this far and not be one of the above means that the field is a query field
 		default:
+
 			// look for the right field
 			for _, qField := range g.queryFields {
 				if field.Name == qField.Name {
+					// consolidate the arguments in something that's easy to use
+					args := map[string]interface{}{}
+					for _, arg := range field.Arguments {
+						// resolve the value of the argument
+						value, err := arg.Value.Value(input.Variables)
+						if err != nil {
+							return err
+						}
+
+						// save it fo rlater
+						args[arg.Name] = value
+					}
+
 					// find the id of the entity
-					id, err := qField.Resolver(ctx, field.Arguments)
+					id, err := qField.Resolver(ctx, args)
 					if err != nil {
 						return err
 					}

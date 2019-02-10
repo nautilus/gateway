@@ -36,7 +36,7 @@ task "build" {
 
 task "deploy" {
     description = "Push the built artifacts to the release. assumes its running in CI"
-    command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway -delete $TRAVIS_TAG ./bin"
+    command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway $TRAVIS_TAG ./bin"
 }
 
 variables {
