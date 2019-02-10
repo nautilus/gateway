@@ -13,6 +13,7 @@ For a guide to getting started read [this post](https://medium.com/@aaivazis/a-g
    1. [Integrating with an HTTP server](#integrating-with-an-http-server)
    1. [Modifying Service Requests](#modifying-service-requests)
    1. [Authentication](#authentication-and-authorization)
+   1. [Gateway fields](#gateway-fields)
 1. [Versioning](#versioning)
 1. [Examples](./examples)
    1. [Hello World](./examples/hello)
