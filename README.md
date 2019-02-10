@@ -220,29 +220,6 @@ viewerField := &gateway.QueryField{
 gateway.New(..., gateway.withFields(viewerField))
 ```
 
-#### Field Arguments
-
-Grabbing the value of a particular argument should be done through a method on the second argument:
-
-```golang
-// this field is equivalent to
-// 		myField(myArg: String!): User
-argField := &gateway.QueryField{
-	Name: "myField",
-	Type: ast.NamedType("User", &ast.Position{}),
-	Arguments: ast.ArgumentDefinitionList{
-		&ast.ArgumentDefinition{
-			Name: "id",
-			Type: ast.NonNullNamedType("ID", &ast.Position{}),
-		},
-	},
-	Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
-		// we know its a string
-		return args["myArg"].(string), nil
-	},
-}
-```
-
 ## Versioning
 
 This project is built as a go module and follows the practices outlined in the [spec](https://github.com/golang/go/wiki/Modules). Please consider all APIs experimental and subject
