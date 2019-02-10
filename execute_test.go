@@ -741,7 +741,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 	}
 
 	// create a gateway with the Middleware
-	gateway, err := New([]*graphql.RemoteSchema{remoteSchema}, WithMiddleware(middleware), WithPlanner(planner))
+	gateway, err := New([]*graphql.RemoteSchema{remoteSchema}, WithMiddlewares(middleware), WithPlanner(planner))
 	if err != nil {
 		t.Error(err.Error())
 		return

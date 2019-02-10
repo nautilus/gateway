@@ -23,6 +23,7 @@ type Gateway struct {
 	executor    Executor
 	merger      Merger
 	middlewares MiddlewareList
+	queryFields []*QueryField
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -158,10 +159,17 @@ func WithMerger(m Merger) Configurator {
 	}
 }
 
-// WithMiddleware returns a Configurator that adds middlewares to the gateway
-func WithMiddleware(middlewares ...Middleware) Configurator {
+// WithMiddlewares returns a Configurator that adds middlewares to the gateway
+func WithMiddlewares(middlewares ...Middleware) Configurator {
 	return func(g *Gateway) {
 		g.middlewares = append(g.middlewares, middlewares...)
+	}
+}
+
+// WithQueryFields returns a Configurator that adds the given query fields to the gateway
+func WithQueryFields(fields ...*QueryField) Configurator {
+	return func(g *Gateway) {
+		g.queryFields = append(g.queryFields, fields...)
 	}
 }
 

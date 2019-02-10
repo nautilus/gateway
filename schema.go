@@ -24,6 +24,15 @@ type SchemaQueryer struct {
 	Schema *ast.Schema
 }
 
+// QueryField is a hook to add gateway-level fields to a gateway. Limited to only being able to resolve
+// an id of an already existing type in order to keep business logic out of the gateway.
+type QueryField struct {
+	Name      string
+	Type      *ast.Type
+	Arguments ast.ArgumentDefinitionList
+	Resolver  func(context.Context, map[string]interface{}) (string, error)
+}
+
 // Query takes a query definition and writes the result to the receiver
 func (q *SchemaQueryer) Query(ctx context.Context, input *graphql.QueryInput, receiver interface{}) error {
 	// a place to store the result

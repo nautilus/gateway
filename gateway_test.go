@@ -26,6 +26,7 @@ func TestGateway(t *testing.T) {
 				}
 
 				type User {
+					id: ID!
 					firstName: String!
 					lastName: String!
 				}
@@ -130,7 +131,7 @@ func TestGateway(t *testing.T) {
 			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
 				return map[string]interface{}{"goodbye": "moon"}, nil
 			})),
-			WithMiddleware(
+			WithMiddlewares(
 				ResponseMiddleware(func(ctx *ExecutionContext, response map[string]interface{}) error {
 					return errors.New("this string")
 				}),
@@ -153,7 +154,7 @@ func TestGateway(t *testing.T) {
 			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
 				return map[string]interface{}{"goodbye": "moon"}, nil
 			})),
-			WithMiddleware(
+			WithMiddlewares(
 				ResponseMiddleware(func(ctx *ExecutionContext, response map[string]interface{}) error {
 					// clear the previous value
 					for k := range response {
@@ -293,6 +294,43 @@ func TestGateway(t *testing.T) {
 				},
 			},
 		}, res)
+	})
+
+	t.Run("Gateway fields", func(t *testing.T) {
+		// define a gateway field
+		viewerField := &QueryField{
+			Name: "viewer",
+			Type: ast.NamedType("User", &ast.Position{}),
+			Arguments: ast.ArgumentDefinitionList{
+				&ast.ArgumentDefinition{
+					Name: "id",
+					Type: ast.NamedType("ID", &ast.Position{}),
+				},
+			},
+			Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+				return args["id"].(string), nil
+			},
+		}
+
+		// create a gateway with the viewer field
+		gateway, err := New(sources, WithQueryFields(viewerField))
+
+		// execute the query
+		query := `
+			{
+				viewer(id: "1") {
+					id
+				}
+			}
+		`
+		res, err := gateway.Execute(context.Background(), query, map[string]interface{}{"id": "1"})
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// make sure we got the result we expected
+		assert.Equal(t, map[string]interface{}{"id": "1"}, res)
 	})
 }
 
