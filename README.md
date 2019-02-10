@@ -144,6 +144,12 @@ func withIP(handler http.HandlerFunc) http.HandlerFunc {
 		))
 	})
 }
+
+// somewhere else
+
+
+// add the playground endpoint to the router
+http.HandleFunc("/graphql", withIP(gw.PlaygroundHandler))
 ```
 
 Then, you would define a middleware similar to above that takes the value out of context
