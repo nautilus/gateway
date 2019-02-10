@@ -123,7 +123,7 @@ addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
 
 // ... somewhere else ...
 
-gateway.New(..., gateway.withMiddleware(addHeader))
+gateway.New(..., gateway.WithMiddlewares(addHeader))
 ```
 
 #### Forwarding headers
@@ -159,7 +159,7 @@ addHeader := gateway.RequestMiddleware(func(r *http.Request) error {
 
 // ... somewhere else ...
 
-gateway.New(..., gateway.withMiddleware(addHeader))
+gateway.New(..., gateway.WithMiddlewares(addHeader))
 ```
 
 #### Authentication and Authorization
@@ -173,8 +173,8 @@ See the [auth example](./examples/auth) for more information.
 
 ### Modifying the response
 
-There are some situations (error logging for example) that require hooking into the 
-execution process after a response has been generated. To do this, define a 
+There are some situations (error logging for example) that require hooking into the
+execution process after a response has been generated. To do this, define a
 `gateway.ResponseMiddleware` and pass it to the gateway constructor:
 
 ```golang
@@ -182,16 +182,67 @@ execution process after a response has been generated. To do this, define a
 logResponse := gateway.ResponseMiddleware(func(ctx *gateway.ExecutionContext, response map[string]interface{}) error {
 	// you can also modify the response directly if you wanted
 	fmt.Println(response)
-	
+
 	return nil
 })
 
 // ... somewhere else ...
 
-gateway.New(..., gateway.withMiddleware(logResponse))
+gateway.New(..., gateway.WithMiddlewares(logResponse))
+
+```
+
+### Gateway fields
+
+There are some situations where it makes sense to have fields that resolve at the gateway layer.
+One common example is the `viewer` field that resolves to the `User` type representing the
+current user. This can be achieved by adding a custom field to the gateway whose resolver returns
+the id of the entity.
+
+```golang
+import (
+	// ...
+	"github.com/vektah/gqlparser/ast"
+)
+
+viewerField := &gateway.QueryField{
+	Name: "viewer",
+	Type: ast.NamedType("User", &ast.Position{}),
+	Resolver: func(ctx context.Context, args ast.ArgumentList, variables map[string]interface{}) (string, error) {
+		// for now just return the value in context
+		return context.value("user-id").(string), nil
+	},
+}
+
+// ... somewhere else ...
+
+gateway.New(..., gateway.withFields(viewerField))
+```
+
+#### Field Arguments
+
+Grabbing the value of a particular argument should be done through a method on the second argument:
+
+```golang
+// this field is equivalent to
+// 		myField(myArg: String!): User
+argField := &gateway.QueryField{
+	Name: "myField",
+	Type: ast.NamedType("User", &ast.Position{}),
+	Arguments: ast.ArgumentDefinitionList{
+		&ast.ArgumentDefinition{
+			Name: "id",
+			Type: ast.NonNullNamedType("ID", &ast.Position{}),
+		},
+	},
+	Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+		// we know its a string
+		return args["myArg"].(string), nil
+	},
+}
 ```
 
 ## Versioning
 
-This project is built as a go module and follows the practices outlined in the [spec](https://github.com/golang/go/wiki/Modules). Please consider all APIs experimental and subject 
+This project is built as a go module and follows the practices outlined in the [spec](https://github.com/golang/go/wiki/Modules). Please consider all APIs experimental and subject
 to change until v1 has been released at which point semantic versioning will be strictly followed.

@@ -23,6 +23,7 @@ type Gateway struct {
 	executor    Executor
 	merger      Merger
 	middlewares MiddlewareList
+	queryFields []*QueryField
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -32,10 +33,19 @@ type Gateway struct {
 	fieldURLs FieldURLMap
 }
 
+func (g *Gateway) plan(ctx *PlanningContext) ([]*QueryPlan, error) {
+	return g.planner.Plan(ctx)
+}
+
 // Execute takes a query string, executes it, and returns the response
 func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	// generate a query plan for the query
-	plan, err := g.planner.Plan(query, g.schema, g.fieldURLs)
+	plan, err := g.plan(&PlanningContext{
+		Query:     query,
+		Schema:    g.schema,
+		Gateway:   g,
+		Locations: g.fieldURLs,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +76,23 @@ func (g *Gateway) Execute(requestContext context.Context, query string, variable
 	return result, nil
 }
 
+func (g *Gateway) internalSchema() *ast.Schema {
+	// we start off with the internal schema
+	schema := internalSchema
+
+	// then we have to add any query fields we have
+	for _, field := range g.queryFields {
+		schema.Query.Fields = append(schema.Query.Fields, &ast.FieldDefinition{
+			Name:      field.Name,
+			Type:      field.Type,
+			Arguments: field.Arguments,
+		})
+	}
+
+	// we're done
+	return schema
+}
+
 // New instantiates a new schema with the required stuffs.
 func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, error) {
 	// if there are no source schemas
@@ -75,10 +102,11 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 
 	// set any default values before we start doing stuff with it
 	gateway := &Gateway{
-		sources:  sources,
-		planner:  &MinQueriesPlanner{},
-		executor: &ParallelExecutor{},
-		merger:   MergerFunc(mergeSchemas),
+		sources:     sources,
+		planner:     &MinQueriesPlanner{},
+		executor:    &ParallelExecutor{},
+		merger:      MergerFunc(mergeSchemas),
+		queryFields: []*QueryField{nodeField},
 	}
 
 	// pass the gateway through any configurators
@@ -86,10 +114,17 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		config(gateway)
 	}
 
+	internal := gateway.internalSchema()
 	// find the field URLs before we merge schemas. We need to make sure to include
 	// the fields defined by the gateway's internal schema
 	urls := fieldURLs(sources, true).Concat(
-		fieldURLs([]*graphql.RemoteSchema{internalSchema}, false),
+		fieldURLs([]*graphql.RemoteSchema{
+			&graphql.RemoteSchema{
+				URL:    internalSchemaLocation,
+				Schema: internal,
+			}},
+			false,
+		),
 	)
 
 	// grab the schemas within each source
@@ -97,7 +132,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 	for _, source := range sources {
 		sourceSchemas = append(sourceSchemas, source.Schema)
 	}
-	sourceSchemas = append(sourceSchemas, internalSchema.Schema)
+	sourceSchemas = append(sourceSchemas, internal)
 
 	// merge them into one
 	schema, err := gateway.merger.Merge(sourceSchemas)
@@ -158,11 +193,33 @@ func WithMerger(m Merger) Configurator {
 	}
 }
 
-// WithMiddleware returns a Configurator that adds middlewares to the gateway
-func WithMiddleware(middlewares ...Middleware) Configurator {
+// WithMiddlewares returns a Configurator that adds middlewares to the gateway
+func WithMiddlewares(middlewares ...Middleware) Configurator {
 	return func(g *Gateway) {
 		g.middlewares = append(g.middlewares, middlewares...)
 	}
+}
+
+// WithQueryFields returns a Configurator that adds the given query fields to the gateway
+func WithQueryFields(fields ...*QueryField) Configurator {
+	return func(g *Gateway) {
+		g.queryFields = append(g.queryFields, fields...)
+	}
+}
+
+var nodeField = &QueryField{
+	Name: "node",
+	Type: ast.NamedType("Node", &ast.Position{}),
+	Arguments: ast.ArgumentDefinitionList{
+		&ast.ArgumentDefinition{
+			Name: "id",
+			Type: ast.NonNullNamedType("ID", &ast.Position{}),
+		},
+	},
+	Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+		// pass it to the user
+		return args["id"].(string), nil
+	},
 }
 
 func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap {

@@ -13,24 +13,28 @@ import (
 
 // internalSchema is a graphql schema that exists at the gateway level and is merged with the
 // other schemas that the gateway wraps.
-var internalSchema *graphql.RemoteSchema
+var internalSchema *ast.Schema
 
 // internalSchemaLocation is the location that functions should take to identify a remote schema
 // that points to the gateway's internal schema.
 const internalSchemaLocation = "🎉"
 
-// SchemaQueryer is a queryer that knows how to resolve a query according to a particular schema
-type SchemaQueryer struct {
-	Schema *ast.Schema
+// QueryField is a hook to add gateway-level fields to a gateway. Limited to only being able to resolve
+// an id of an already existing type in order to keep business logic out of the gateway.
+type QueryField struct {
+	Name      string
+	Type      *ast.Type
+	Arguments ast.ArgumentDefinitionList
+	Resolver  func(context.Context, map[string]interface{}) (string, error)
 }
 
 // Query takes a query definition and writes the result to the receiver
-func (q *SchemaQueryer) Query(ctx context.Context, input *graphql.QueryInput, receiver interface{}) error {
+func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver interface{}) error {
 	// a place to store the result
 	result := map[string]interface{}{}
 
 	// wrap the schema in something capable of introspection
-	introspectionSchema := introspection.WrapSchema(q.Schema)
+	introspectionSchema := introspection.WrapSchema(g.schema)
 
 	// for local stuff we don't care about fragment directives
 	querySelection, err := graphql.ApplyFragments(input.QueryDocument.Operations[0].SelectionSet, input.QueryDocument.Fragments)
@@ -40,29 +44,8 @@ func (q *SchemaQueryer) Query(ctx context.Context, input *graphql.QueryInput, re
 
 	for _, field := range graphql.SelectedFields(querySelection) {
 		switch field.Name {
-		case "node":
-			// the only thing we need to do when resolving the node type is return an object with the id we were given
-			// from the arguments
-
-			// grab the argument specifying the ID
-			id := field.Arguments.ForName("id")
-
-			// the value for the id argument can come in a few different ways
-			switch id.Value.Kind {
-			case ast.StringValue:
-				// the argument is an ID type so use the raw value
-				result[field.Alias] = map[string]interface{}{
-					"id": id.Value.Raw,
-				}
-			case ast.Variable:
-				// the argument is a variable so we have to look up the value there
-				result[field.Alias] = map[string]interface{}{
-					"id": input.Variables["id"],
-				}
-			}
-
 		case "__schema":
-			result[field.Alias] = q.introspectSchema(introspectionSchema, field.SelectionSet)
+			result[field.Alias] = g.introspectSchema(introspectionSchema, field.SelectionSet)
 		case "__type":
 			// there is a name argument to look up the type
 			name := field.Arguments.ForName("name").Value.Raw
@@ -81,7 +64,36 @@ func (q *SchemaQueryer) Query(ctx context.Context, input *graphql.QueryInput, re
 				result[field.Alias] = nil
 			} else {
 				// we found the type so introspect it
-				result[field.Alias] = q.introspectType(introspectedType, field.SelectionSet)
+				result[field.Alias] = g.introspectType(introspectedType, field.SelectionSet)
+			}
+		// to get this far and not be one of the above means that the field is a query field
+		default:
+
+			// look for the right field
+			for _, qField := range g.queryFields {
+				if field.Name == qField.Name {
+					// consolidate the arguments in something that's easy to use
+					args := map[string]interface{}{}
+					for _, arg := range field.Arguments {
+						// resolve the value of the argument
+						value, err := arg.Value.Value(input.Variables)
+						if err != nil {
+							return err
+						}
+
+						// save it fo rlater
+						args[arg.Name] = value
+					}
+
+					// find the id of the entity
+					id, err := qField.Resolver(ctx, args)
+					if err != nil {
+						return err
+					}
+
+					// assign the id to the response
+					result[field.Alias] = map[string]interface{}{"id": id}
+				}
 			}
 		}
 	}
@@ -103,29 +115,29 @@ func (q *SchemaQueryer) Query(ctx context.Context, input *graphql.QueryInput, re
 	return nil
 }
 
-func (q *SchemaQueryer) introspectSchema(schema *introspection.Schema, selectionSet ast.SelectionSet) map[string]interface{} {
+func (g *Gateway) introspectSchema(schema *introspection.Schema, selectionSet ast.SelectionSet) map[string]interface{} {
 	// a place to store the result
 	result := map[string]interface{}{}
 
 	for _, field := range graphql.SelectedFields(selectionSet) {
 		switch field.Alias {
 		case "types":
-			result[field.Alias] = q.introspectTypeSlice(schema.Types(), field.SelectionSet)
+			result[field.Alias] = g.introspectTypeSlice(schema.Types(), field.SelectionSet)
 		case "queryType":
-			result[field.Alias] = q.introspectType(schema.QueryType(), field.SelectionSet)
+			result[field.Alias] = g.introspectType(schema.QueryType(), field.SelectionSet)
 		case "mutationType":
-			result[field.Alias] = q.introspectType(schema.MutationType(), field.SelectionSet)
+			result[field.Alias] = g.introspectType(schema.MutationType(), field.SelectionSet)
 		case "subscriptionType":
-			result[field.Alias] = q.introspectType(schema.SubscriptionType(), field.SelectionSet)
+			result[field.Alias] = g.introspectType(schema.SubscriptionType(), field.SelectionSet)
 		case "directives":
-			result[field.Alias] = q.introspectDirectiveSlice(schema.Directives(), field.SelectionSet)
+			result[field.Alias] = g.introspectDirectiveSlice(schema.Directives(), field.SelectionSet)
 		}
 	}
 
 	return result
 }
 
-func (q *SchemaQueryer) introspectType(schemaType *introspection.Type, selectionSet ast.SelectionSet) map[string]interface{} {
+func (g *Gateway) introspectType(schemaType *introspection.Type, selectionSet ast.SelectionSet) map[string]interface{} {
 	if schemaType == nil {
 		return nil
 	}
@@ -148,23 +160,23 @@ func (q *SchemaQueryer) introspectType(schemaType *introspection.Type, selection
 		case "description":
 			result[field.Alias] = schemaType.Description()
 		case "fields":
-			result[field.Alias] = q.introspectFieldSlice(schemaType.Fields(includeDeprecated), field.SelectionSet)
+			result[field.Alias] = g.introspectFieldSlice(schemaType.Fields(includeDeprecated), field.SelectionSet)
 		case "interfaces":
-			result[field.Alias] = q.introspectTypeSlice(schemaType.Interfaces(), field.SelectionSet)
+			result[field.Alias] = g.introspectTypeSlice(schemaType.Interfaces(), field.SelectionSet)
 		case "possibleTypes":
-			result[field.Alias] = q.introspectTypeSlice(schemaType.PossibleTypes(), field.SelectionSet)
+			result[field.Alias] = g.introspectTypeSlice(schemaType.PossibleTypes(), field.SelectionSet)
 		case "enumValues":
-			result[field.Alias] = q.introspectEnumValueSlice(schemaType.EnumValues(includeDeprecated), field.SelectionSet)
+			result[field.Alias] = g.introspectEnumValueSlice(schemaType.EnumValues(includeDeprecated), field.SelectionSet)
 		case "inputFields":
-			result[field.Alias] = q.introspectInputValueSlice(schemaType.InputFields(), field.SelectionSet)
+			result[field.Alias] = g.introspectInputValueSlice(schemaType.InputFields(), field.SelectionSet)
 		case "ofType":
-			result[field.Alias] = q.introspectType(schemaType.OfType(), field.SelectionSet)
+			result[field.Alias] = g.introspectType(schemaType.OfType(), field.SelectionSet)
 		}
 	}
 	return result
 }
 
-func (q *SchemaQueryer) introspectField(fieldDef introspection.Field, selectionSet ast.SelectionSet) map[string]interface{} {
+func (g *Gateway) introspectField(fieldDef introspection.Field, selectionSet ast.SelectionSet) map[string]interface{} {
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -175,9 +187,9 @@ func (q *SchemaQueryer) introspectField(fieldDef introspection.Field, selectionS
 		case "description":
 			result[field.Alias] = fieldDef.Description
 		case "args":
-			result[field.Alias] = q.introspectInputValueSlice(fieldDef.Args, field.SelectionSet)
+			result[field.Alias] = g.introspectInputValueSlice(fieldDef.Args, field.SelectionSet)
 		case "type":
-			result[field.Alias] = q.introspectType(fieldDef.Type, field.SelectionSet)
+			result[field.Alias] = g.introspectType(fieldDef.Type, field.SelectionSet)
 		case "isDeprecated":
 			result[field.Alias] = fieldDef.IsDeprecated()
 		case "deprecationReason":
@@ -187,7 +199,7 @@ func (q *SchemaQueryer) introspectField(fieldDef introspection.Field, selectionS
 	return result
 }
 
-func (q *SchemaQueryer) introspectEnumValue(definition *introspection.EnumValue, selectionSet ast.SelectionSet) map[string]interface{} {
+func (g *Gateway) introspectEnumValue(definition *introspection.EnumValue, selectionSet ast.SelectionSet) map[string]interface{} {
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -207,7 +219,7 @@ func (q *SchemaQueryer) introspectEnumValue(definition *introspection.EnumValue,
 	return result
 }
 
-func (q *SchemaQueryer) introspectDirective(directive introspection.Directive, selectionSet ast.SelectionSet) map[string]interface{} {
+func (g *Gateway) introspectDirective(directive introspection.Directive, selectionSet ast.SelectionSet) map[string]interface{} {
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -218,7 +230,7 @@ func (q *SchemaQueryer) introspectDirective(directive introspection.Directive, s
 		case "description":
 			result[field.Alias] = directive.Description
 		case "args":
-			result[field.Alias] = q.introspectInputValueSlice(directive.Args, field.SelectionSet)
+			result[field.Alias] = g.introspectInputValueSlice(directive.Args, field.SelectionSet)
 		case "locations":
 			result[field.Alias] = directive.Locations
 		}
@@ -226,7 +238,7 @@ func (q *SchemaQueryer) introspectDirective(directive introspection.Directive, s
 	return result
 }
 
-func (q *SchemaQueryer) introspectInputValue(iv *introspection.InputValue, selectionSet ast.SelectionSet) map[string]interface{} {
+func (g *Gateway) introspectInputValue(iv *introspection.InputValue, selectionSet ast.SelectionSet) map[string]interface{} {
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -237,63 +249,63 @@ func (q *SchemaQueryer) introspectInputValue(iv *introspection.InputValue, selec
 		case "description":
 			result[field.Alias] = iv.Description
 		case "type":
-			result[field.Alias] = q.introspectType(iv.Type, field.SelectionSet)
+			result[field.Alias] = g.introspectType(iv.Type, field.SelectionSet)
 		}
 	}
 
 	return result
 }
 
-func (q *SchemaQueryer) introspectInputValueSlice(values []introspection.InputValue, selectionSet ast.SelectionSet) []map[string]interface{} {
+func (g *Gateway) introspectInputValueSlice(values []introspection.InputValue, selectionSet ast.SelectionSet) []map[string]interface{} {
 	result := []map[string]interface{}{}
 
 	// each type in the schema
 	for _, field := range values {
-		result = append(result, q.introspectInputValue(&field, selectionSet))
+		result = append(result, g.introspectInputValue(&field, selectionSet))
 	}
 
 	return result
 }
 
-func (q *SchemaQueryer) introspectFieldSlice(fields []introspection.Field, selectionSet ast.SelectionSet) []map[string]interface{} {
+func (g *Gateway) introspectFieldSlice(fields []introspection.Field, selectionSet ast.SelectionSet) []map[string]interface{} {
 	result := []map[string]interface{}{}
 
 	// each type in the schema
 	for _, field := range fields {
-		result = append(result, q.introspectField(field, selectionSet))
+		result = append(result, g.introspectField(field, selectionSet))
 	}
 
 	return result
 }
 
-func (q *SchemaQueryer) introspectEnumValueSlice(values []introspection.EnumValue, selectionSet ast.SelectionSet) []map[string]interface{} {
+func (g *Gateway) introspectEnumValueSlice(values []introspection.EnumValue, selectionSet ast.SelectionSet) []map[string]interface{} {
 	result := []map[string]interface{}{}
 
 	// each type in the schema
 	for _, enumValue := range values {
-		result = append(result, q.introspectEnumValue(&enumValue, selectionSet))
+		result = append(result, g.introspectEnumValue(&enumValue, selectionSet))
 	}
 
 	return result
 }
 
-func (q *SchemaQueryer) introspectTypeSlice(types []introspection.Type, selectionSet ast.SelectionSet) []map[string]interface{} {
+func (g *Gateway) introspectTypeSlice(types []introspection.Type, selectionSet ast.SelectionSet) []map[string]interface{} {
 	result := []map[string]interface{}{}
 
 	// each type in the schema
 	for _, field := range types {
-		result = append(result, q.introspectType(&field, selectionSet))
+		result = append(result, g.introspectType(&field, selectionSet))
 	}
 
 	return result
 }
 
-func (q *SchemaQueryer) introspectDirectiveSlice(directives []introspection.Directive, selectionSet ast.SelectionSet) []map[string]interface{} {
+func (g *Gateway) introspectDirectiveSlice(directives []introspection.Directive, selectionSet ast.SelectionSet) []map[string]interface{} {
 	result := []map[string]interface{}{}
 
 	// each type in the schema
 	for _, directive := range directives {
-		result = append(result, q.introspectDirective(directive, selectionSet))
+		result = append(result, g.introspectDirective(directive, selectionSet))
 	}
 
 	return result
@@ -314,8 +326,5 @@ func init() {
 		panic(fmt.Sprintf("Syntax error in schema string: %s", err.Error()))
 	}
 
-	internalSchema = &graphql.RemoteSchema{
-		URL:    internalSchemaLocation,
-		Schema: schema,
-	}
+	internalSchema = schema
 }

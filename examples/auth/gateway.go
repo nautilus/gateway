@@ -55,7 +55,7 @@ func main() {
 	}
 
 	// create the gateway instance
-	gw, err := gateway.New(schemas, gateway.WithMiddleware(forwardUserID))
+	gw, err := gateway.New(schemas, gateway.WithMiddlewares(forwardUserID))
 	if err != nil {
 		panic(err)
 	}
