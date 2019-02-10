@@ -7,6 +7,7 @@ import (
 
 	"github.com/nautilus/gateway"
 	"github.com/nautilus/graphql"
+	"github.com/vektah/gqlparser/ast"
 )
 
 // the first thing we need to define is a middleware for our handler
@@ -44,6 +45,17 @@ var forwardUserID = gateway.RequestMiddleware(func(r *http.Request) error {
 	return nil
 })
 
+// we can also define a field at the root of the API in order to resolve fields
+// for the current user
+var viewerField = &gateway.QueryField{
+	Name: "viewer",
+	Type: ast.NamedType("User", &ast.Position{}),
+	Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+		// for now just return the value in context
+		return ctx.Value("user-id").(string), nil
+	},
+}
+
 func main() {
 	// introspect the apis
 	schemas, err := graphql.IntrospectRemoteSchemas(
@@ -55,7 +67,7 @@ func main() {
 	}
 
 	// create the gateway instance
-	gw, err := gateway.New(schemas, gateway.WithMiddlewares(forwardUserID))
+	gw, err := gateway.New(schemas, gateway.WithMiddlewares(forwardUserID), gateway.WithQueryFields(viewerField))
 	if err != nil {
 		panic(err)
 	}
