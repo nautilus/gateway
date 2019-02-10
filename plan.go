@@ -748,7 +748,7 @@ FieldLoop:
 func (p *MinQueriesPlanner) generateScrubFields(plans []*QueryPlan, requestSelection ast.SelectionSet) error {
 	for _, plan := range plans {
 		// the list of fields to scrub in this plan
-		fieldsToScrub := map[string][][]string{"id": [][]string{}}
+		fieldsToScrub := map[string][][]string{"id": {}}
 
 		// add all of the plans for the next step along with those from this step
 		for _, nextStep := range plan.RootStep.Then {

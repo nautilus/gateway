@@ -119,7 +119,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 	// the fields defined by the gateway's internal schema
 	urls := fieldURLs(sources, true).Concat(
 		fieldURLs([]*graphql.RemoteSchema{
-			&graphql.RemoteSchema{
+			{
 				URL:    internalSchemaLocation,
 				Schema: internal,
 			}},

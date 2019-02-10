@@ -825,7 +825,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 		// each transition between step requires an id field. None of them were requested so we should have two
 		// places where we want to scrub it
 		assert.Equal(t, map[string][][]string{
-			"id": [][]string{
+			"id": {
 				{"allUsers"},
 				{"allUsers", "catPhotos"},
 			},
@@ -852,7 +852,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 		// each transition between step requires an id field. None of them were requested so we should have two
 		// places where we want to scrub it
 		assert.Equal(t, map[string][][]string{
-			"id": [][]string{},
+			"id": {},
 		}, plans[0].FieldsToScrub)
 	})
 
@@ -881,7 +881,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 		// each transition between step requires an id field. None of them were requested so we should have two
 		// places where we want to scrub it
 		assert.Equal(t, map[string][][]string{
-			"id": [][]string{
+			"id": {
 				{"allUsers", "catPhotos"},
 			},
 		}, plans[0].FieldsToScrub)
