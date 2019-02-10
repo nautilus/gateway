@@ -36,7 +36,12 @@ type Gateway struct {
 // Execute takes a query string, executes it, and returns the response
 func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	// generate a query plan for the query
-	plan, err := g.planner.Plan(query, g.schema, g.fieldURLs)
+	plan, err := g.planner.Plan(&PlanningContext{
+		Query:     query,
+		Schema:    g.schema,
+		Gateway:   g,
+		Locations: g.fieldURLs,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -67,6 +72,23 @@ func (g *Gateway) Execute(requestContext context.Context, query string, variable
 	return result, nil
 }
 
+func (g *Gateway) internalSchema() *ast.Schema {
+	// we start off with the internal schema
+	schema := internalSchema
+
+	// then we have to add any query fields we have
+	for _, field := range g.queryFields {
+		schema.Query.Fields = append(schema.Query.Fields, &ast.FieldDefinition{
+			Name:      field.Name,
+			Type:      field.Type,
+			Arguments: field.Arguments,
+		})
+	}
+
+	// we're done
+	return schema
+}
+
 // New instantiates a new schema with the required stuffs.
 func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, error) {
 	// if there are no source schemas
@@ -87,10 +109,17 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		config(gateway)
 	}
 
+	internal := gateway.internalSchema()
 	// find the field URLs before we merge schemas. We need to make sure to include
 	// the fields defined by the gateway's internal schema
 	urls := fieldURLs(sources, true).Concat(
-		fieldURLs([]*graphql.RemoteSchema{internalSchema}, false),
+		fieldURLs([]*graphql.RemoteSchema{
+			&graphql.RemoteSchema{
+				URL:    internalSchemaLocation,
+				Schema: internal,
+			}},
+			false,
+		),
 	)
 
 	// grab the schemas within each source
@@ -98,7 +127,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 	for _, source := range sources {
 		sourceSchemas = append(sourceSchemas, source.Schema)
 	}
-	sourceSchemas = append(sourceSchemas, internalSchema.Schema)
+	sourceSchemas = append(sourceSchemas, internal)
 
 	// merge them into one
 	schema, err := gateway.merger.Merge(sourceSchemas)

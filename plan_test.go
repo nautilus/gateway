@@ -24,11 +24,11 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		{
-			foo
-		}
-	`, schema, locations)
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query:     "{ foo }",
+		Schema:    schema,
+		Locations: locations,
+	})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -71,15 +71,19 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		query MyQuery {
-			...Foo
-		}
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query MyQuery {
+				...Foo
+			}
 
-		fragment Foo on Query {
-			foo
-		}
-	`, schema, locations)
+			fragment Foo on Query {
+				foo
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+	})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -146,16 +150,21 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		query MyQuery {
-			...Foo
-		}
+	plans, err := (&MinQueriesPlanner{}).Plan(
+		&PlanningContext{
+			Query: `
+				query MyQuery {
+					...Foo
+				}
 
-		fragment Foo on Query {
-			foo
-			bar
-		}
-	`, schema, locations)
+				fragment Foo on Query {
+					foo
+					bar
+				}
+			`,
+			Schema:    schema,
+			Locations: locations,
+		})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -229,14 +238,19 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		query MyQuery {
-			... on Query {
-				foo
-				bar
-			}
-		}
-	`, schema, locations)
+	plans, err := (&MinQueriesPlanner{}).Plan(
+		&PlanningContext{
+			Query: `
+				query MyQuery {
+					... on Query {
+						foo
+						bar
+					}
+				}
+			`,
+			Schema:    schema,
+			Locations: locations,
+		})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -315,16 +329,21 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 		}
 	`)
 
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		query MyQuery {
-			... on Query {
-				... on Query {
-					foo
+	plans, err := (&MinQueriesPlanner{}).Plan(
+		&PlanningContext{
+			Query: `
+				query MyQuery {
+					... on Query {
+						... on Query {
+							foo
+						}
+						bar
+					}
 				}
-				bar
-			}
-		}
-	`, schema, locations)
+			`,
+			Schema:    schema,
+			Locations: locations,
+		})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -445,19 +464,23 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	selections, err := (&MinQueriesPlanner{}).Plan(`
-		{
-			allUsers {
-				firstName
-				friends {
+	selections, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			{
+				allUsers {
 					firstName
 					friends {
 						firstName
+						friends {
+							firstName
+						}
 					}
 				}
 			}
-		}
-	`, schema, locations)
+		`,
+		Schema:    schema,
+		Locations: locations,
+	})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -553,19 +576,23 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
 	locations.RegisterURL("CatPhoto", "owner", userLocation)
 
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		{
-			allUsers {
-				firstName
-				catPhotos {
-					URL
-					owner {
-						firstName
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			{
+				allUsers {
+					firstName
+					catPhotos {
+						URL
+						owner {
+							firstName
+						}
 					}
 				}
 			}
-		}
-	`, schema, locations)
+		`,
+		Schema:    schema,
+		Locations: locations,
+	})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -708,13 +735,17 @@ func TestPlanQuery_preferParentLocation(t *testing.T) {
 	locations.RegisterURL("User", "id", catLocation)
 	locations.RegisterURL("User", "id", userLocation)
 
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		{
-			allUsers {
-				id
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			{
+				allUsers {
+					id
+				}
 			}
-		}
-	`, schema, locations)
+		`,
+		Schema:    schema,
+		Locations: locations,
+	})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -771,17 +802,21 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
 
 	t.Run("Multiple Step Scrubbing", func(t *testing.T) {
-		plans, err := (&MinQueriesPlanner{}).Plan(`
-			{
-				allUsers {
-					catPhotos {
-						owner {
-							firstName
+		plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+			Query: `
+				{
+					allUsers {
+						catPhotos {
+							owner {
+								firstName
+							}
 						}
 					}
 				}
-			}
-		`, schema, locations)
+			`,
+			Schema:    schema,
+			Locations: locations,
+		})
 		if err != nil {
 			t.Error(err.Error())
 			return
@@ -798,13 +833,17 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 	})
 
 	t.Run("Single Step no Scrubbing", func(t *testing.T) {
-		plans, err := (&MinQueriesPlanner{}).Plan(`
-			{
-				allUsers {
-					firstName
-				}
-			}
-		`, schema, locations)
+		plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+			Query: `
+					{
+						allUsers {
+							firstName
+						}
+					}
+			`,
+			Schema:    schema,
+			Locations: locations,
+		})
 		if err != nil {
 			t.Error(err.Error())
 			return
@@ -818,18 +857,22 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 	})
 
 	t.Run("Existing id", func(t *testing.T) {
-		plans, err := (&MinQueriesPlanner{}).Plan(`
-			{
-				allUsers {
-					id
-					catPhotos {
-						owner {
-							firstName
+		plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+			Query: `
+				{
+					allUsers {
+						id
+						catPhotos {
+							owner {
+								firstName
+							}
 						}
 					}
 				}
-			}
-		`, schema, locations)
+			`,
+			Schema:    schema,
+			Locations: locations,
+		})
 		if err != nil {
 			t.Error(err.Error())
 			return
@@ -873,16 +916,20 @@ func TestPlanQuery_groupSiblings(t *testing.T) {
 	locations.RegisterURL("User", "catPhotos", catLocation)
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
 
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		{
-			allUsers {
-				favoriteCatSpecies
-				catPhotos {
-					URL
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			{
+				allUsers {
+					favoriteCatSpecies
+					catPhotos {
+						URL
+					}
 				}
 			}
-		}
-	`, schema, locations)
+		`,
+		Schema:    schema,
+		Locations: locations,
+	})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -944,16 +991,20 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	}
 
 	// plan the query
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		query($id: ID!) {
-			node(id: $id) {
-				... on User {
-					firstName
-					lastName
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query($id: ID!) {
+				node(id: $id) {
+					... on User {
+						firstName
+						lastName
+					}
 				}
 			}
-		}
-	`, schema, locations)
+		`,
+		Schema:    schema,
+		Locations: locations,
+	})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -966,7 +1017,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 
 	// this plan should have 1 step that should hit the internal API
 	if !assert.Len(t, plans[0].RootStep.Then, 1, "incorrect number of steps in plan") ||
-		!assert.IsType(t, &SchemaQueryer{}, plans[0].RootStep.Then[0].Queryer, "first step does not go to the internal API") {
+		!assert.IsType(t, &Gateway{}, plans[0].RootStep.Then[0].Queryer, "first step does not go to the internal API") {
 		return
 	}
 	internalStep := plans[0].RootStep.Then[0]
@@ -1069,15 +1120,19 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	`)
 
 	// compute the plan for a query that just hits one service
-	plans, err := (&MinQueriesPlanner{}).Plan(`
-		query($id: ID!, $category: String!) {
-			user(id: $id) {
-				favoriteCatPhoto(category: $category, owner:$id) {
-					URL
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query($id: ID!, $category: String!) {
+				user(id: $id) {
+					favoriteCatPhoto(category: $category, owner:$id) {
+						URL
+					}
 				}
 			}
-		}
-	`, schema, locations)
+		`,
+		Schema:    schema,
+		Locations: locations,
+	})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -1134,7 +1189,8 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 		}
 	`)
 
-	plans, err := (&MinQueriesPlanner{}).Plan(`
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
 		query MyQuery {
 			...QueryFragment
 		}
@@ -1149,7 +1205,10 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 		fragment UserInfo on User {
 			lastName
 		}
-	`, schema, locations)
+	`,
+		Schema:    schema,
+		Locations: locations,
+	})
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over

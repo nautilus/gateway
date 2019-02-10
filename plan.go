@@ -52,7 +52,7 @@ type newQueryPlanStepPayload struct {
 // QueryPlanner is responsible for taking a string with a graphql query and returns
 // the steps to fulfill it
 type QueryPlanner interface {
-	Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error)
+	Plan(*PlanningContext) ([]*QueryPlan, error)
 }
 
 // Planner is meant to be embedded in other QueryPlanners to share configuration
@@ -65,16 +65,24 @@ type MinQueriesPlanner struct {
 	Planner
 }
 
+// PlanningContext is the input struct to the Plan method
+type PlanningContext struct {
+	Query     string
+	Schema    *ast.Schema
+	Locations FieldURLMap
+	Gateway   *Gateway
+}
+
 // Plan computes the nested selections that will need to be performed
-func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) ([]*QueryPlan, error) {
 	// the first thing to do is to parse the query
-	parsedQuery, e := gqlparser.LoadQuery(schema, query)
+	parsedQuery, e := gqlparser.LoadQuery(ctx.Schema, ctx.Query)
 	if e != nil {
 		return nil, e
 	}
 
 	// generate the plan
-	plans, err := p.generatePlans(parsedQuery, schema, locations)
+	plans, err := p.generatePlans(ctx, parsedQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +102,7 @@ func (p *MinQueriesPlanner) Plan(query string, schema *ast.Schema, locations Fie
 	return plans, nil
 }
 
-func (p *MinQueriesPlanner) generatePlans(query *ast.QueryDocument, schema *ast.Schema, locations FieldURLMap) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.QueryDocument) ([]*QueryPlan, error) {
 	// an accumulator
 	plans := []*QueryPlan{}
 
@@ -150,7 +158,7 @@ func (p *MinQueriesPlanner) generatePlans(query *ast.QueryDocument, schema *ast.
 				select {
 				case payload := <-newSteps:
 					step := &QueryPlanStep{
-						Queryer:             p.GetQueryer(payload.Location, schema),
+						Queryer:             p.GetQueryer(ctx, payload.Location),
 						ParentType:          payload.ParentType,
 						SelectionSet:        ast.SelectionSet{},
 						InsertionPoint:      payload.InsertionPoint,
@@ -185,7 +193,7 @@ func (p *MinQueriesPlanner) generatePlans(query *ast.QueryDocument, schema *ast.
 					newSelection, err := p.extractSelection(&extractSelectionConfig{
 						stepCh:         stepCh,
 						stepWg:         stepWg,
-						locations:      locations,
+						locations:      ctx.Locations,
 						parentLocation: payload.Location,
 						parentType:     step.ParentType,
 						selection:      payload.SelectionSet,
@@ -847,10 +855,10 @@ func (set Set) Has(k string) bool {
 }
 
 // GetQueryer returns the queryer that should be used to resolve the plan
-func (p *Planner) GetQueryer(url string, schema *ast.Schema) graphql.Queryer {
+func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 	// if we are looking to query the local schema
 	if url == internalSchemaLocation {
-		return &SchemaQueryer{Schema: schema}
+		return ctx.Gateway
 	}
 
 	// if there is a queryer factory defined
@@ -937,7 +945,7 @@ type MockErrPlanner struct {
 	Err error
 }
 
-func (p *MockErrPlanner) Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error) {
+func (p *MockErrPlanner) Plan(*PlanningContext) ([]*QueryPlan, error) {
 	return nil, p.Err
 }
 
@@ -946,6 +954,6 @@ type MockPlanner struct {
 	Plans []*QueryPlan
 }
 
-func (p *MockPlanner) Plan(string, *ast.Schema, FieldURLMap) ([]*QueryPlan, error) {
+func (p *MockPlanner) Plan(*PlanningContext) ([]*QueryPlan, error) {
 	return p.Plans, nil
 }
