@@ -26,7 +26,6 @@ func TestGateway(t *testing.T) {
 				}
 
 				type User {
-					id: ID!
 					firstName: String!
 					lastName: String!
 				}
@@ -317,19 +316,61 @@ func TestGateway(t *testing.T) {
 
 		// execute the query
 		query := `
-			{
-				viewer(id: "1") {
-					id
+			query($id: ID!){
+				viewer(id: $id) {
+					firstName
 				}
 			}
 		`
-		res, err := gateway.Execute(context.Background(), query, map[string]interface{}{"id": "1"})
+		plans, err := gateway.plan(&PlanningContext{
+			Query:     query,
+			Locations: gateway.fieldURLs,
+			Schema:    gateway.schema,
+			Gateway:   gateway,
+		})
 		if err != nil {
 			t.Error(err.Error())
 			return
 		}
 
-		// make sure we got the result we expected
+		if !assert.Len(t, plans[0].RootStep.Then, 1) {
+			return
+		}
+
+		// invoke the first step
+		res := map[string]interface{}{}
+		err = plans[0].RootStep.Then[0].Queryer.Query(context.Background(), &graphql.QueryInput{
+			Query: query,
+			QueryDocument: &ast.QueryDocument{
+				Operations: ast.OperationList{
+					{
+						Operation: "Query",
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Alias: "viewer",
+								Name:  "viewer",
+								Arguments: ast.ArgumentList{
+									&ast.Argument{
+										Name: "id",
+										Value: &ast.Value{
+											Kind: ast.Variable,
+											Raw:  "id",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Variables: map[string]interface{}{"id": "1"},
+		}, &res)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// make sure the result of the queryer matches exepctations
 		assert.Equal(t, map[string]interface{}{"id": "1"}, res)
 	})
 }

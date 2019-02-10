@@ -208,12 +208,8 @@ import (
 viewerField := &gateway.QueryField{
 	Name: "viewer",
 	Type: ast.NamedType("User", &ast.Position{}),
-	Resolver: func(context context.Context, args map[string]interface{}) (string, error) {
-		// grab the current user from the request context
-		userID := context.value("user-id").(string)
-
-		// return the appropriate user entity
-		return userID
+	Resolver: func(ctx context.Context, args ast.ArgumentList) (string, error) {
+		return context.value("user-id").(string), nil
 	},
 }
 

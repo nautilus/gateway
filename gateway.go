@@ -33,10 +33,14 @@ type Gateway struct {
 	fieldURLs FieldURLMap
 }
 
+func (g *Gateway) plan(ctx *PlanningContext) ([]*QueryPlan, error) {
+	return g.planner.Plan(ctx)
+}
+
 // Execute takes a query string, executes it, and returns the response
 func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	// generate a query plan for the query
-	plan, err := g.planner.Plan(&PlanningContext{
+	plan, err := g.plan(&PlanningContext{
 		Query:     query,
 		Schema:    g.schema,
 		Gateway:   g,
