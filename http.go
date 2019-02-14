@@ -46,7 +46,9 @@ func writeErrors(err error, w http.ResponseWriter) {
 
 // GraphQLHandler returns a http.HandlerFunc that should be used as the
 // primary endpoint for the gateway API. The endpoint will respond
-// to queries on both GET and POST requests.
+// to queries on both GET and POST requests. POST requests can either be
+// a single object with { query, variables, operationName } or a list
+// of that object.
 func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// a place to store query params
 	payload := QueryPOSTBody{}

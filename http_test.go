@@ -1,7 +1,9 @@
 package gateway
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
+	"github.com/vektah/gqlparser/ast"
 )
 
 func TestGraphQLHandler_postMissingQuery(t *testing.T) {
@@ -191,6 +194,82 @@ func TestPlaygroundHandler_postRequest(t *testing.T) {
 
 	// make sure we got an error code
 	assert.Equal(t, http.StatusOK, response.StatusCode)
+}
+
+func TestPlaygroundHandler_postRequestList(t *testing.T) {
+	// and some schemas that the gateway wraps
+	schema, err := graphql.LoadSchema(`
+		type User {
+			id: ID!
+		}
+
+		type Query {
+			allUsers: [User!]!
+		}
+	`)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// some fields to query
+	aField := &QueryField{
+		Name: "a",
+		Type: ast.NamedType("User", &ast.Position{}),
+		Resolver: func(ctx context.Context, arguments map[string]interface{}) (string, error) {
+			return "a", nil
+		},
+	}
+	bField := &QueryField{
+		Name: "b",
+		Type: ast.NamedType("User", &ast.Position{}),
+		Resolver: func(ctx context.Context, arguments map[string]interface{}) (string, error) {
+			return "b", nil
+		},
+	}
+
+	// instantiate the gateway
+	gw, err := New([]*graphql.RemoteSchema{{URL: "url1", Schema: schema}}, WithQueryFields(aField, bField))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// we need to send a list of two queries ({ a } and { b }) and make sure they resolve in the right order
+
+	// the incoming request
+	request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`
+		[
+			{
+				"query": "{ a }"
+			},
+			{
+				"query": "{ b }"
+			}
+		]
+	`))
+	// a recorder so we can check what the handler responded with
+	responseRecorder := httptest.NewRecorder()
+
+	// call the http hander
+	gw.PlaygroundHandler(responseRecorder, request)
+	// get the response from the handler
+	response := responseRecorder.Result()
+
+	// make sure we got a successful response
+	if !assert.Equal(t, http.StatusOK, response.StatusCode) {
+		return
+	}
+
+	// read the body
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	fmt.Println(body)
+
 }
 
 func TestPlaygroundHandler_getRequest(t *testing.T) {
