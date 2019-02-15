@@ -279,6 +279,18 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 	if !assert.Len(t, result, 2) {
 		return
 	}
+
+	// make sure there were no errors in the first query
+	if firstQuery := result[0]; assert.Nil(t, firstQuery["errors"]) {
+		// make sure it has the right id
+		assert.Equal(t, map[string]interface{}{"a": map[string]interface{}{"id": "a"}}, firstQuery["data"])
+	}
+
+	// make sure there were no errors in the second query
+	if secondQuery := result[1]; assert.Nil(t, secondQuery["errors"]) {
+		// make sure it has the right id
+		assert.Equal(t, map[string]interface{}{"b": map[string]interface{}{"id": "b"}}, secondQuery["data"])
+	}
 }
 
 func TestPlaygroundHandler_getRequest(t *testing.T) {

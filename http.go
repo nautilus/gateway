@@ -138,7 +138,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// the status code to report
 	statusCode := http.StatusOK
 
-	for i, operation := range operations {
+	for _, operation := range operations {
 		// the result of the operation
 		result := map[string]interface{}{}
 
@@ -158,8 +158,6 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 
 		// add this result to the list
 		results = append(results, map[string]interface{}{"data": result})
-		fmt.Println(i, results)
-
 	}
 
 	// the final result depends on whether we are executing in batch mode or not
