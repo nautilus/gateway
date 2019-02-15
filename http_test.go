@@ -2,8 +2,8 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -204,7 +204,7 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 		}
 
 		type Query {
-			allUsers: [User!]!
+			allUsers: [User!]! 
 		}
 	`)
 	if err != nil {
@@ -241,10 +241,10 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 	request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`
 		[
 			{
-				"query": "{ a }"
+				"query": "{ a { id } }"
 			},
 			{
-				"query": "{ b }"
+				"query": "{ b { id } }"
 			}
 		]
 	`))
@@ -268,8 +268,17 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 		return
 	}
 
-	fmt.Println(body)
+	result := []map[string]interface{}{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
 
+	// we should have gotten 2 responses
+	if !assert.Len(t, result, 2) {
+		return
+	}
 }
 
 func TestPlaygroundHandler_getRequest(t *testing.T) {

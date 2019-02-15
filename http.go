@@ -138,7 +138,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// the status code to report
 	statusCode := http.StatusOK
 
-	for _, operation := range operations {
+	for i, operation := range operations {
 		// the result of the operation
 		result := map[string]interface{}{}
 
@@ -153,10 +153,12 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		result, err := g.Execute(r.Context(), operation.Query, operation.Variables)
 		if err != nil {
 			results = append(results, formatErrors(map[string]interface{}{}, err))
+			continue
 		}
 
 		// add this result to the list
 		results = append(results, map[string]interface{}{"data": result})
+		fmt.Println(i, results)
 
 	}
 
