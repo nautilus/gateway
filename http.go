@@ -17,7 +17,7 @@ type QueryPOSTBody struct {
 	OperationName string                 `json:"operationName"`
 }
 
-func writeErrors(err error, w http.ResponseWriter) {
+func formatErrors(data map[string]interface{}, err error) map[string]interface{} {
 	// the final list of formatted errors
 	var errList graphql.ErrorList
 
@@ -32,34 +32,36 @@ func writeErrors(err error, w http.ResponseWriter) {
 		}
 	}
 
-	response, err := json.Marshal(map[string]interface{}{
+	return map[string]interface{}{
+		"data":   data,
 		"errors": errList,
-	})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeErrors(err, w)
-		return
 	}
-
-	w.Write(response)
 }
 
 // GraphQLHandler returns a http.HandlerFunc that should be used as the
 // primary endpoint for the gateway API. The endpoint will respond
-// to queries on both GET and POST requests.
+// to queries on both GET and POST requests. POST requests can either be
+// a single object with { query, variables, operationName } or a list
+// of that object.
 func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
-	// a place to store query params
-	payload := QueryPOSTBody{}
+	// this handler can handle multiple operations sent in the same query. Internally,
+	// it modules a single operation as a list of one.
+	operations := []*QueryPOSTBody{}
 
 	// the error we have encountered when extracting query input
 	var payloadErr error
+	// make our lives easier. track if we're in batch mode
+	batchMode := false
 
 	// if we got a GET request
 	if r.Method == http.MethodGet {
 		parameters := r.URL.Query()
 		// get the query parameter
 		if query, ok := parameters["query"]; ok {
-			payload.Query = query[0]
+			// build a query obj
+			query := &QueryPOSTBody{
+				Query: query[0],
+			}
 
 			// include operationName
 			if variableInput, ok := parameters["variables"]; ok {
@@ -71,13 +73,17 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// assign the variables to the payload
-				payload.Variables = variables
+				query.Variables = variables
 			}
 
 			// include operationName
 			if operationName, ok := parameters["operationName"]; ok {
-				payload.OperationName = operationName[0]
+				query.OperationName = operationName[0]
 			}
+
+			// add the query to the list of operations
+			operations = append(operations, query)
+
 		} else {
 			// there was no query parameter
 			payloadErr = errors.New("must include query as parameter")
@@ -90,43 +96,91 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			payloadErr = fmt.Errorf("encountered error reading body: %s", err.Error())
 		}
 
-		err = json.Unmarshal(body, &payload)
-		if err != nil {
-			payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
+		// there are two possible options for receiving information from a post request
+		// the first is that the user provides an object in the form of { query, variables, operationName }
+		// the second option is a list of that object
+
+		singleQuery := &QueryPOSTBody{}
+		// if we were given a single object
+		if err = json.Unmarshal(body, &singleQuery); err == nil {
+			// add it to the list of operations
+			operations = append(operations, singleQuery)
+			// we weren't given an object
+		} else {
+			// but we could have been given a list
+			batch := []*QueryPOSTBody{}
+
+			if err = json.Unmarshal(body, &batch); err != nil {
+				payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
+			} else {
+				operations = batch
+			}
+
+			// we're in batch mode
+			batchMode = true
 		}
 	}
 
 	// if there was an error retrieving the payload
 	if payloadErr != nil {
+		// stringify the response
+		response, _ := json.Marshal(formatErrors(map[string]interface{}{}, payloadErr))
+
+		// send the error to the user
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		writeErrors(payloadErr, w)
+		w.Write(response)
 		return
 	}
 
-	// if we dont have a query
-	if payload.Query == "" {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		writeErrors(errors.New("could not find a query in request payload"), w)
-		return
+	// we have to respond to each operation in the right order
+	results := []map[string]interface{}{}
+
+	// the status code to report
+	statusCode := http.StatusOK
+
+	for _, operation := range operations {
+		// the result of the operation
+		result := map[string]interface{}{}
+
+		// the result of the operation
+		if operation.Query == "" {
+			statusCode = http.StatusUnprocessableEntity
+			results = append(results, formatErrors(map[string]interface{}{}, errors.New("could not find query body")))
+			continue
+		}
+
+		// fire the query with the request context passed through to execution
+		result, err := g.Execute(r.Context(), operation.Query, operation.Variables)
+		if err != nil {
+			results = append(results, formatErrors(map[string]interface{}{}, err))
+			continue
+		}
+
+		// add this result to the list
+		results = append(results, map[string]interface{}{"data": result})
 	}
 
-	// fire the query with the request context passed through to execution
-	result, err := g.Execute(r.Context(), payload.Query, payload.Variables)
+	// the final result depends on whether we are executing in batch mode or not
+	var finalResponse interface{}
+	if batchMode {
+		finalResponse = results
+	} else {
+		finalResponse = results[0]
+	}
+
+	// serialized the response
+	response, err := json.Marshal(finalResponse)
 	if err != nil {
-		writeErrors(err, w)
-		return
-	}
-
-	response, err := json.Marshal(map[string]interface{}{
-		"data": result,
-	})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeErrors(err, w)
-		return
+		// if we couldn't serialize the response then we're in internal error territory
+		statusCode = http.StatusInternalServerError
+		response, err = json.Marshal(formatErrors(map[string]interface{}{}, err))
+		if err != nil {
+			response, _ = json.Marshal(formatErrors(map[string]interface{}{}, err))
+		}
 	}
 
 	// send the result to the user
+	w.WriteHeader(statusCode)
 	fmt.Fprint(w, string(response))
 }
 
