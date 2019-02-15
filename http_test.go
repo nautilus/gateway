@@ -202,10 +202,6 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 		type User {
 			id: ID!
 		}
-
-		type Query {
-			allUsers: [User!]! 
-		}
 	`)
 	if err != nil {
 		t.Error(err.Error())

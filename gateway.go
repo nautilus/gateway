@@ -158,6 +158,12 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		}
 	}
 
+	// we should be able to ask for the id under a gateway field without going to another service
+	// that requires that the gateway knows that it is a place it can get the `id`
+	for _, field := range gateway.queryFields {
+		urls.RegisterURL(field.Type.Name(), "id", internalSchemaLocation)
+	}
+
 	// assign the computed values
 	gateway.schema = schema
 	gateway.fieldURLs = urls
