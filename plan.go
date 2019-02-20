@@ -55,17 +55,28 @@ type QueryPlanner interface {
 	Plan(*PlanningContext) ([]*QueryPlan, error)
 }
 
+// PlannerWithQueryerFactory is an interface for planners with configurable queryer factories
+type PlannerWithQueryerFactory interface {
+	WithQueryerFactory(*QueryerFactory) QueryPlanner
+}
+
 // QueryerFactory is a function that returns the queryer to use depending on the context
 type QueryerFactory func(ctx *PlanningContext, url string) graphql.Queryer
 
 // Planner is meant to be embedded in other QueryPlanners to share configuration
 type Planner struct {
-	QueryerFactory QueryerFactory
+	QueryerFactory *QueryerFactory
 }
 
 // MinQueriesPlanner does the most basic level of query planning
 type MinQueriesPlanner struct {
 	Planner
+}
+
+// WithQueryerFactory returns a version of the planner with the factory set
+func (p *MinQueriesPlanner) WithQueryerFactory(factory *QueryerFactory) QueryPlanner {
+	p.Planner.QueryerFactory = factory
+	return p
 }
 
 // PlanningContext is the input struct to the Plan method
@@ -867,7 +878,7 @@ func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 	// if there is a queryer factory defined
 	if p.QueryerFactory != nil {
 		// use the factory
-		return p.QueryerFactory(ctx, url)
+		return (*p.QueryerFactory)(ctx, url)
 	}
 
 	// otherwise return a network queryer

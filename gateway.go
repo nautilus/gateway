@@ -22,7 +22,7 @@ type Gateway struct {
 	merger         Merger
 	middlewares    MiddlewareList
 	queryFields    []*QueryField
-	queryerFactory QueryerFactory
+	queryerFactory *QueryerFactory
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -169,6 +169,14 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 	gateway.requestMiddlewares = requestMiddlewares
 	gateway.responseMiddlewares = responseMiddlewares
 
+	// if we have a queryer factory to assign
+	if gateway.queryerFactory != nil {
+		// if the planner can accept the factory
+		if planner, ok := gateway.planner.(PlannerWithQueryerFactory); ok {
+			gateway.planner = planner.WithQueryerFactory(gateway.queryerFactory)
+		}
+	}
+
 	// we're done here
 	return gateway, nil
 }
@@ -214,7 +222,7 @@ func WithQueryFields(fields ...*QueryField) Option {
 
 // WithQueryerFactory returns an Option that changes the queryer used by the planner
 // when generating plans that interact with remote services.
-func WithQueryerFactory(factory QueryerFactory) Option {
+func WithQueryerFactory(factory *QueryerFactory) Option {
 	return func(g *Gateway) {
 		g.queryerFactory = factory
 	}
