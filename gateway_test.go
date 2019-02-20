@@ -111,7 +111,7 @@ func TestGateway(t *testing.T) {
 		}
 	})
 
-	t.Run("Configurator WithPlanner", func(t *testing.T) {
+	t.Run("WithPlanner", func(t *testing.T) {
 		// the planner we will assign
 		planner := &MockPlanner{}
 
