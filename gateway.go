@@ -11,8 +11,6 @@ import (
 	"github.com/nautilus/graphql"
 )
 
-type contextKey int
-
 // Gateway is the top level entry for interacting with a gateway. It is responsible for merging a list of
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan

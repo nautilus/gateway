@@ -868,7 +868,7 @@ func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 	}
 
 	// otherwise return a network queryer
-	return graphql.NewNetworkQueryer(url)
+	return graphql.NewSingleRequestQueryer(url)
 }
 
 func plannerBuildQuery(parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList) *ast.QueryDocument {

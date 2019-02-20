@@ -46,8 +46,8 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	rootField := graphql.SelectedFields(root.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
-	queryer := root.Queryer.(*graphql.NetworkQueryer)
-	assert.Equal(t, location, queryer.URL)
+	queryer := root.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, location, queryer.URL())
 
 	// we need to be asking for Query.foo
 	assert.Equal(t, rootField.Name, "foo")
@@ -363,10 +363,10 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 	// find the steps
 	for _, step := range steps {
 		// look at the queryer to figure out where the request is going
-		if queryer, ok := step.Queryer.(*graphql.NetworkQueryer); ok {
-			if queryer.URL == loc1 {
+		if queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer); ok {
+			if queryer.URL() == loc1 {
 				loc1Step = step
-			} else if queryer.URL == loc2 {
+			} else if queryer.URL() == loc2 {
 				loc2Step = step
 			}
 		} else {
@@ -500,8 +500,8 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	rootField := graphql.SelectedFields(rootStep.SelectionSet)[0]
 
 	// make sure that the first step is pointed at the right place
-	queryer := rootStep.Queryer.(*graphql.NetworkQueryer)
-	assert.Equal(t, location, queryer.URL)
+	queryer := rootStep.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, location, queryer.URL())
 
 	// we need to be asking for allUsers
 	assert.Equal(t, rootField.Name, "allUsers")
@@ -617,8 +617,8 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	}
 	firstField := graphql.SelectedFields(firstStep.SelectionSet)[0]
 	// it is resolved against the user service
-	queryer := firstStep.Queryer.(*graphql.NetworkQueryer)
-	assert.Equal(t, userLocation, queryer.URL)
+	queryer := firstStep.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, userLocation, queryer.URL())
 
 	// make sure it is for allUsers
 	assert.Equal(t, "allUsers", firstField.Name)
@@ -655,8 +655,8 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "User", secondStep.ParentType)
 	// we should be going to the catePhoto servie
-	queryer = secondStep.Queryer.(*graphql.NetworkQueryer)
-	assert.Equal(t, catLocation, queryer.URL)
+	queryer = secondStep.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, catLocation, queryer.URL())
 	// we should only want one field selected
 	if len(secondStep.SelectionSet) != 1 {
 		t.Errorf("Did not have the right number of subfields of User.catPhotos: %v", len(secondStep.SelectionSet))
@@ -687,8 +687,8 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// make sure we are grabbing values off of User since we asked for User.catPhotos
 	assert.Equal(t, "CatPhoto", thirdStep.ParentType)
 	// we should be going to the catePhoto service
-	queryer = thirdStep.Queryer.(*graphql.NetworkQueryer)
-	assert.Equal(t, userLocation, queryer.URL)
+	queryer = thirdStep.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, userLocation, queryer.URL())
 	// make sure we will insert the step in the right place
 	assert.Equal(t, []string{"allUsers", "catPhotos"}, thirdStep.InsertionPoint)
 
@@ -1031,7 +1031,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	var url1Step *QueryPlanStep
 	var url2Step *QueryPlanStep
 	for _, step := range internalStep.Then {
-		if queryer, ok := step.Queryer.(*graphql.NetworkQueryer); ok && queryer.URL == "url1" {
+		if queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer); ok && queryer.URL() == "url1" {
 			url1Step = step
 		} else {
 			url2Step = step

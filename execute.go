@@ -204,8 +204,9 @@ func executeStep(
 
 	// if we have middlewares
 	if len(ctx.RequestMiddlewares) > 0 {
+		// TODO: change this to QueryerWithMiddlewares
 		// if the queryer is a network queryer
-		if nQueryer, ok := queryer.(*graphql.NetworkQueryer); ok {
+		if nQueryer, ok := queryer.(*graphql.SingleRequestQueryer); ok {
 			queryer = nQueryer.WithMiddlewares(ctx.RequestMiddlewares)
 		}
 	}

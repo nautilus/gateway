@@ -729,10 +729,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 							},
 							QueryString: `hello`,
 							// return a known value we can test against
-							Queryer: &graphql.NetworkQueryer{
-								URL:    "hello",
-								Client: httpClient,
-							},
+							Queryer: graphql.NewSingleRequestQueryer("hello").WithHTTPClient(httpClient),
 						},
 					},
 				},
