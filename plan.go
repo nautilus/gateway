@@ -57,7 +57,7 @@ type QueryPlanner interface {
 
 // Planner is meant to be embedded in other QueryPlanners to share configuration
 type Planner struct {
-	QueryerFactory func(url string) graphql.Queryer
+	QueryerFactory func(ctx *PlanningContext, url string) graphql.Queryer
 }
 
 // MinQueriesPlanner does the most basic level of query planning
@@ -864,7 +864,7 @@ func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 	// if there is a queryer factory defined
 	if p.QueryerFactory != nil {
 		// use the factory
-		return p.QueryerFactory(url)
+		return p.QueryerFactory(ctx, url)
 	}
 
 	// otherwise return a network queryer
