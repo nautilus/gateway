@@ -15,13 +15,14 @@ import (
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
 type Gateway struct {
-	sources     []*graphql.RemoteSchema
-	schema      *ast.Schema
-	planner     QueryPlanner
-	executor    Executor
-	merger      Merger
-	middlewares MiddlewareList
-	queryFields []*QueryField
+	sources        []*graphql.RemoteSchema
+	schema         *ast.Schema
+	planner        QueryPlanner
+	executor       Executor
+	merger         Merger
+	middlewares    MiddlewareList
+	queryFields    []*QueryField
+	queryerFactory QueryerFactory
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -176,38 +177,46 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 // resulting schema
 type Option func(*Gateway)
 
-// WithPlanner returns a Option that sets the planner of the gateway
+// WithPlanner returns an Option that sets the planner of the gateway
 func WithPlanner(p QueryPlanner) Option {
 	return func(g *Gateway) {
 		g.planner = p
 	}
 }
 
-// WithExecutor returns a Option that sets the executor of the gateway
+// WithExecutor returns an Option that sets the executor of the gateway
 func WithExecutor(e Executor) Option {
 	return func(g *Gateway) {
 		g.executor = e
 	}
 }
 
-// WithMerger returns a Option that sets the merger of the gateway
+// WithMerger returns an Option that sets the merger of the gateway
 func WithMerger(m Merger) Option {
 	return func(g *Gateway) {
 		g.merger = m
 	}
 }
 
-// WithMiddlewares returns a Option that adds middlewares to the gateway
+// WithMiddlewares returns an Option that adds middlewares to the gateway
 func WithMiddlewares(middlewares ...Middleware) Option {
 	return func(g *Gateway) {
 		g.middlewares = append(g.middlewares, middlewares...)
 	}
 }
 
-// WithQueryFields returns a Option that adds the given query fields to the gateway
+// WithQueryFields returns an Option that adds the given query fields to the gateway
 func WithQueryFields(fields ...*QueryField) Option {
 	return func(g *Gateway) {
 		g.queryFields = append(g.queryFields, fields...)
+	}
+}
+
+// WithQueryerFactory returns an Option that changes the queryer used by the planner
+// when generating plans that interact with remote services.
+func WithQueryerFactory(factory QueryerFactory) Option {
+	return func(g *Gateway) {
+		g.queryerFactory = factory
 	}
 }
 
