@@ -113,6 +113,14 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 		config(gateway)
 	}
 
+	// if we have a queryer factory to assign
+	if gateway.queryerFactory != nil {
+		// if the planner can accept the factory
+		if planner, ok := gateway.planner.(PlannerWithQueryerFactory); ok {
+			gateway.planner = planner.WithQueryerFactory(gateway.queryerFactory)
+		}
+	}
+
 	internal := gateway.internalSchema()
 	// find the field URLs before we merge schemas. We need to make sure to include
 	// the fields defined by the gateway's internal schema
@@ -168,14 +176,6 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 	gateway.fieldURLs = urls
 	gateway.requestMiddlewares = requestMiddlewares
 	gateway.responseMiddlewares = responseMiddlewares
-
-	// if we have a queryer factory to assign
-	if gateway.queryerFactory != nil {
-		// if the planner can accept the factory
-		if planner, ok := gateway.planner.(PlannerWithQueryerFactory); ok {
-			gateway.planner = planner.WithQueryerFactory(gateway.queryerFactory)
-		}
-	}
 
 	// we're done here
 	return gateway, nil
