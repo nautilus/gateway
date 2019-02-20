@@ -55,14 +55,29 @@ type QueryPlanner interface {
 	Plan(*PlanningContext) ([]*QueryPlan, error)
 }
 
+// PlannerWithQueryerFactory is an interface for planners with configurable queryer factories
+type PlannerWithQueryerFactory interface {
+	WithQueryerFactory(*QueryerFactory) QueryPlanner
+}
+
+// QueryerFactory is a function that returns the queryer to use depending on the context
+type QueryerFactory func(ctx *PlanningContext, url string) graphql.Queryer
+
 // Planner is meant to be embedded in other QueryPlanners to share configuration
 type Planner struct {
-	QueryerFactory func(url string) graphql.Queryer
+	QueryerFactory *QueryerFactory
+	queryerCache   map[string]graphql.Queryer
 }
 
 // MinQueriesPlanner does the most basic level of query planning
 type MinQueriesPlanner struct {
 	Planner
+}
+
+// WithQueryerFactory returns a version of the planner with the factory set
+func (p *MinQueriesPlanner) WithQueryerFactory(factory *QueryerFactory) QueryPlanner {
+	p.Planner.QueryerFactory = factory
+	return p
 }
 
 // PlanningContext is the input struct to the Plan method
@@ -864,11 +879,11 @@ func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 	// if there is a queryer factory defined
 	if p.QueryerFactory != nil {
 		// use the factory
-		return p.QueryerFactory(url)
+		return (*p.QueryerFactory)(ctx, url)
 	}
 
-	// otherwise return a network queryer
-	return graphql.NewNetworkQueryer(url)
+	// return the queryer for the url
+	return graphql.NewSingleRequestQueryer(url)
 }
 
 func plannerBuildQuery(parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList) *ast.QueryDocument {

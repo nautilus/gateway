@@ -10,6 +10,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/gorilla/websocket v1.4.0 h1:WDFjx/TMzVgy9VdMMQi2K2Emtwi2QcUQsztZ/zLaH/Q=
 github.com/gorilla/websocket v1.4.0/go.mod h1:E7qHFY5m1UJ88s3WnNqhKjPHQ0heANvMoAMk2YaljkQ=
+github.com/graph-gophers/dataloader v5.0.0+incompatible h1:R+yjsbrNq1Mo3aPG+Z/EKYrXrXXUNJHOgbRt+U6jOug=
+github.com/graph-gophers/dataloader v5.0.0+incompatible/go.mod h1:jk4jk0c5ZISbKaMe8WsVopGB5/15GvGHMdMdPtwlRp4=
 github.com/graph-gophers/graphql-go v0.0.0-20190108123631-d5b7dc6be53b h1:hrePtAgLPsHHKUv6l9EDI+QSH5cjPIYYzoIsIWfZ6qY=
 github.com/graph-gophers/graphql-go v0.0.0-20190108123631-d5b7dc6be53b/go.mod h1:aRnZGurV3LlZ1Y+ygyx1mAV6OUfq+nu6OgpJ6jKgZ3g=
 github.com/graphql-go/graphql v0.7.7 h1:nwEsJGwPq9N6cElOO+NYyoWuELAQZ4GuJks0Rlco5og=
@@ -30,6 +32,10 @@ github.com/nautilus/graphql v0.0.0-20190206230122-a60d56409fd3 h1:Ck8Xk1aJF/M7ms
 github.com/nautilus/graphql v0.0.0-20190206230122-a60d56409fd3/go.mod h1:aw58+1WuROPKYEN337vjRRaH9LfiiJKu6RwwFuF1wzw=
 github.com/nautilus/graphql v0.0.0-20190208193207-6bb377f3952a h1:7sDoVtsm6RWyGTlJyoIMxC1uVIUgBgscUVcCslus1y8=
 github.com/nautilus/graphql v0.0.0-20190208193207-6bb377f3952a/go.mod h1:aw58+1WuROPKYEN337vjRRaH9LfiiJKu6RwwFuF1wzw=
+github.com/nautilus/graphql v0.0.0-20190220052332-1ec821cfd939 h1:dIhr36omlDy2IMlwbEDSQj6aEWR5BzQq8hmrY0UgGZc=
+github.com/nautilus/graphql v0.0.0-20190220052332-1ec821cfd939/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
+github.com/nautilus/graphql v0.0.0-20190220053332-42ac2d2a1f98 h1:xz+MM8U50sjgNR1qjvh7iO4SH9zF3+fbL/kZtEjtces=
+github.com/nautilus/graphql v0.0.0-20190220053332-42ac2d2a1f98/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
 github.com/opentracing/opentracing-go v1.0.2 h1:3jA2P6O1F9UOrWVpwrIo17pu01KWvNWg4X946/Y5Zwg=
 github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
@@ -54,6 +60,8 @@ golang.org/x/crypto v0.0.0-20190130090550-b01c7a725664 h1:YbZJ76lQ1BqNhVe7dKTSB6
 golang.org/x/crypto v0.0.0-20190130090550-b01c7a725664/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
 golang.org/x/net v0.0.0-20190125091013-d26f9f9a57f3 h1:ulvT7fqt0yHWzpJwI57MezWnYDVpCAYBVuYst/L+fAY=
 golang.org/x/net v0.0.0-20190125091013-d26f9f9a57f3/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+golang.org/x/net v0.0.0-20190213061140-3a22650c66bd h1:HuTn7WObtcDo9uEEU7rEqL0jYthdXAmZ6PP+meazmaU=
+golang.org/x/net v0.0.0-20190213061140-3a22650c66bd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/sys v0.0.0-20180905080454-ebe1bf3edb33 h1:I6FyU15t786LL7oL/hn43zqTuEGr4PN7F4XJ1p4E3Y8=
 golang.org/x/sys v0.0.0-20180905080454-ebe1bf3edb33/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190130150945-aca44879d564 h1:o6ENHFwwr1TZ9CUPQcfo1HGvLP1OPsPOTB7xCIOPNmU=

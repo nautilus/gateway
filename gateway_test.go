@@ -81,7 +81,7 @@ func TestGateway(t *testing.T) {
 		}
 	})
 
-	t.Run("Variadic Configuration", func(t *testing.T) {
+	t.Run("Options", func(t *testing.T) {
 		// create a new schema with the sources and some configuration
 		gateway, err := New([]*graphql.RemoteSchema{sources[0]}, func(schema *Gateway) {
 			schema.sources = append(schema.sources, sources[1])
@@ -94,6 +94,37 @@ func TestGateway(t *testing.T) {
 
 		// make sure that the schema has both sources
 		assert.Len(t, gateway.sources, 2)
+	})
+
+	t.Run("WithPlanner", func(t *testing.T) {
+		// the planner we will assign
+		planner := &MockPlanner{}
+
+		gateway, err := New(sources, WithPlanner(planner))
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		assert.Equal(t, planner, gateway.planner)
+	})
+
+	t.Run("WithQueryerFactory", func(t *testing.T) {
+		// the planner we will assign
+		planner := &MinQueriesPlanner{}
+
+		factory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
+			return ctx.Gateway
+		})
+
+		// instantiate the gateway
+		gateway, err := New(sources, WithPlanner(planner), WithQueryerFactory(&factory))
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		assert.Equal(t, &factory, gateway.planner.(*MinQueriesPlanner).QueryerFactory)
 	})
 
 	t.Run("fieldURLs ignore introspection", func(t *testing.T) {
@@ -109,19 +140,6 @@ func TestGateway(t *testing.T) {
 			t.Error("Encountered introspection value Query.__schema")
 			return
 		}
-	})
-
-	t.Run("Configurator WithPlanner", func(t *testing.T) {
-		// the planner we will assign
-		planner := &MockPlanner{}
-
-		gateway, err := New(sources, WithPlanner(planner))
-		if err != nil {
-			t.Error(err.Error())
-			return
-		}
-
-		assert.Equal(t, planner, gateway.planner)
 	})
 
 	t.Run("Response Middleware Error", func(t *testing.T) {

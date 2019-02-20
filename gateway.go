@@ -11,19 +11,18 @@ import (
 	"github.com/nautilus/graphql"
 )
 
-type contextKey int
-
 // Gateway is the top level entry for interacting with a gateway. It is responsible for merging a list of
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
 type Gateway struct {
-	sources     []*graphql.RemoteSchema
-	schema      *ast.Schema
-	planner     QueryPlanner
-	executor    Executor
-	merger      Merger
-	middlewares MiddlewareList
-	queryFields []*QueryField
+	sources        []*graphql.RemoteSchema
+	schema         *ast.Schema
+	planner        QueryPlanner
+	executor       Executor
+	merger         Merger
+	middlewares    MiddlewareList
+	queryFields    []*QueryField
+	queryerFactory *QueryerFactory
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -94,7 +93,7 @@ func (g *Gateway) internalSchema() *ast.Schema {
 }
 
 // New instantiates a new schema with the required stuffs.
-func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, error) {
+func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 	// if there are no source schemas
 	if len(sources) == 0 {
 		return nil, errors.New("a gateway must have at least one schema")
@@ -109,9 +108,17 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 		queryFields: []*QueryField{nodeField},
 	}
 
-	// pass the gateway through any configurators
+	// pass the gateway through any Options
 	for _, config := range configs {
 		config(gateway)
+	}
+
+	// if we have a queryer factory to assign
+	if gateway.queryerFactory != nil {
+		// if the planner can accept the factory
+		if planner, ok := gateway.planner.(PlannerWithQueryerFactory); ok {
+			gateway.planner = planner.WithQueryerFactory(gateway.queryerFactory)
+		}
 	}
 
 	internal := gateway.internalSchema()
@@ -174,42 +181,50 @@ func New(sources []*graphql.RemoteSchema, configs ...Configurator) (*Gateway, er
 	return gateway, nil
 }
 
-// Configurator is a function to be passed to New that configures the
+// Option is a function to be passed to New that configures the
 // resulting schema
-type Configurator func(*Gateway)
+type Option func(*Gateway)
 
-// WithPlanner returns a Configurator that sets the planner of the gateway
-func WithPlanner(p QueryPlanner) Configurator {
+// WithPlanner returns an Option that sets the planner of the gateway
+func WithPlanner(p QueryPlanner) Option {
 	return func(g *Gateway) {
 		g.planner = p
 	}
 }
 
-// WithExecutor returns a Configurator that sets the executor of the gateway
-func WithExecutor(e Executor) Configurator {
+// WithExecutor returns an Option that sets the executor of the gateway
+func WithExecutor(e Executor) Option {
 	return func(g *Gateway) {
 		g.executor = e
 	}
 }
 
-// WithMerger returns a Configurator that sets the merger of the gateway
-func WithMerger(m Merger) Configurator {
+// WithMerger returns an Option that sets the merger of the gateway
+func WithMerger(m Merger) Option {
 	return func(g *Gateway) {
 		g.merger = m
 	}
 }
 
-// WithMiddlewares returns a Configurator that adds middlewares to the gateway
-func WithMiddlewares(middlewares ...Middleware) Configurator {
+// WithMiddlewares returns an Option that adds middlewares to the gateway
+func WithMiddlewares(middlewares ...Middleware) Option {
 	return func(g *Gateway) {
 		g.middlewares = append(g.middlewares, middlewares...)
 	}
 }
 
-// WithQueryFields returns a Configurator that adds the given query fields to the gateway
-func WithQueryFields(fields ...*QueryField) Configurator {
+// WithQueryFields returns an Option that adds the given query fields to the gateway
+func WithQueryFields(fields ...*QueryField) Option {
 	return func(g *Gateway) {
 		g.queryFields = append(g.queryFields, fields...)
+	}
+}
+
+// WithQueryerFactory returns an Option that changes the queryer used by the planner
+// when generating plans that interact with remote services.
+func WithQueryerFactory(factory *QueryerFactory) Option {
+	return func(g *Gateway) {
+		g.queryerFactory = factory
 	}
 }
 
