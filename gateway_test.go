@@ -183,6 +183,16 @@ func TestGateway(t *testing.T) {
 		assert.Equal(t, map[string]interface{}{"hello": "world"}, response)
 	})
 
+	t.Run("bundles requests by default", func(t *testing.T) {
+		// instantiate the gateway
+		gateway, err := New(sources, WithQueryFactory())
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+	})
+
 	t.Run("filter out automatically inserted ids", func(t *testing.T) {
 		// the query we're going to fire. Query.allUsers comes from service one. User.lastName
 		// from service two.

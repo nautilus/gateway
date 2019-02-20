@@ -55,9 +55,12 @@ type QueryPlanner interface {
 	Plan(*PlanningContext) ([]*QueryPlan, error)
 }
 
+// QueryFactory is a function that returns the queryer to use depending on the context
+type QueryFactory func(ctx *PlanningContext, url string) graphql.Queryer
+
 // Planner is meant to be embedded in other QueryPlanners to share configuration
 type Planner struct {
-	QueryerFactory func(ctx *PlanningContext, url string) graphql.Queryer
+	QueryerFactory QueryFactory
 }
 
 // MinQueriesPlanner does the most basic level of query planning
