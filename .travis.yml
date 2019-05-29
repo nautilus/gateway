@@ -4,7 +4,7 @@ sudo: required
 # setup language
 language: go
 go:
-  - "1.11"
+  - "1.12"
 
 install:
   # download our task runner
