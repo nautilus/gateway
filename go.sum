@@ -36,6 +36,8 @@ github.com/nautilus/graphql v0.0.0-20190220052332-1ec821cfd939 h1:dIhr36omlDy2IM
 github.com/nautilus/graphql v0.0.0-20190220052332-1ec821cfd939/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
 github.com/nautilus/graphql v0.0.0-20190220053332-42ac2d2a1f98 h1:xz+MM8U50sjgNR1qjvh7iO4SH9zF3+fbL/kZtEjtces=
 github.com/nautilus/graphql v0.0.0-20190220053332-42ac2d2a1f98/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
+github.com/nautilus/graphql v0.0.1 h1:TI0EfcqGvHVfPU/BjGYasFfjvMunPusmT3jn9m3AugY=
+github.com/nautilus/graphql v0.0.1/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
 github.com/opentracing/opentracing-go v1.0.2 h1:3jA2P6O1F9UOrWVpwrIo17pu01KWvNWg4X946/Y5Zwg=
 github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
