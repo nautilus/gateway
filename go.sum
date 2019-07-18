@@ -24,6 +24,9 @@ github.com/konsorten/go-windows-terminal-sequences v1.0.1 h1:mweAR1A6xJ3oS2pRaGi
 github.com/konsorten/go-windows-terminal-sequences v1.0.1/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
 github.com/mitchellh/mapstructure v1.1.2 h1:fmNYVwqnSfB9mZU6OS2O6GsXM+wcskZDuKQzvN1EDeE=
 github.com/mitchellh/mapstructure v1.1.2/go.mod h1:FVVH3fgwuzCH5S8UJGiWEs2h04kUh9fWfEaFds41c1Y=
+github.com/nautilus/gateway v0.0.7/go.mod h1:X8SLkNOIO+C50p/tWCaywy93dmXM0TvcXS1OYaBqFSc=
+github.com/nautilus/gateway/examples/auth v0.0.0-20190716081540-1f7b11eac6c0 h1:iXaeQ75TwUcbGGCBEMkxZl5YfmCK/uYbnHZPrY2TsY4=
+github.com/nautilus/gateway/examples/auth v0.0.0-20190716081540-1f7b11eac6c0/go.mod h1:Isg/lxD/SYAEJZgH4mG/HjsW7uOFVQqP6Kfu5FcVr74=
 github.com/nautilus/graphql v0.0.0-20190129081528-0d6bfc6f1842 h1:GQd8y2SVpLh6Eq2PDkzSE+QZq+ZUCs08/kCTDk9ioIY=
 github.com/nautilus/graphql v0.0.0-20190129081528-0d6bfc6f1842/go.mod h1:/gQq2EuE47owcG7BUzZF/XBnAA8uvPjKqO+bg6A7axM=
 github.com/nautilus/graphql v0.0.0-20190130220441-1aac49cfdb81 h1:MsH7IM4y34eenZWgvZRBYu4cwV+SF7bv0N50sy70f3A=
@@ -36,8 +39,11 @@ github.com/nautilus/graphql v0.0.0-20190220052332-1ec821cfd939 h1:dIhr36omlDy2IM
 github.com/nautilus/graphql v0.0.0-20190220052332-1ec821cfd939/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
 github.com/nautilus/graphql v0.0.0-20190220053332-42ac2d2a1f98 h1:xz+MM8U50sjgNR1qjvh7iO4SH9zF3+fbL/kZtEjtces=
 github.com/nautilus/graphql v0.0.0-20190220053332-42ac2d2a1f98/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
+github.com/nautilus/graphql v0.0.0/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
 github.com/nautilus/graphql v0.0.1 h1:TI0EfcqGvHVfPU/BjGYasFfjvMunPusmT3jn9m3AugY=
 github.com/nautilus/graphql v0.0.1/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
+github.com/nautilus/graphql v0.0.2 h1:yWsQs51LT4QKTTekhF3OxUW2BtvVYiiJ8+3Wk0PxL5k=
+github.com/nautilus/graphql v0.0.2/go.mod h1:58l1aeXqmU+gAfwagVHqTUv8C6LBfa63mZ6VHj1dbXQ=
 github.com/opentracing/opentracing-go v1.0.2 h1:3jA2P6O1F9UOrWVpwrIo17pu01KWvNWg4X946/Y5Zwg=
 github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
