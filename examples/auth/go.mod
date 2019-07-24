@@ -5,6 +5,3 @@ require (
 	github.com/nautilus/graphql v0.0.3
 )
 
-replace github.com/nautilus/gateway => /mnt/c/Users/alec/dv/nautilus/gateway
-
-replace github.com/nautilus/graphql => /mnt/c/Users/alec/dv/nautilus/graphql
