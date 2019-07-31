@@ -251,9 +251,15 @@ func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap 
 	for _, remoteSchema := range schemas {
 		// each type defined by the schema can be found at remoteSchema.URL
 		for name, typeDef := range remoteSchema.Schema.Types {
+
+			// if the type is part of the introspection (and can't be left up to the backing services)
 			if !strings.HasPrefix(typeDef.Name, "__") || !stripInternal {
+				// you can ask for __typename at any service that defines the type
+				locations.RegisterURL(name, "__typename", remoteSchema.URL)
+
 				// each field of each type can be found here
 				for _, fieldDef := range typeDef.Fields {
+
 					// if the field is not an introspection field
 					if !(name == "Query" && strings.HasPrefix(fieldDef.Name, "__")) {
 						locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
