@@ -313,6 +313,16 @@ func TestGateway(t *testing.T) {
 		}, res)
 	})
 
+	t.Run("Introspection field on services", func(t *testing.T) {
+		// compute the location of each field
+		locations := fieldURLs(sources, false)
+
+		// make sure we have entries for __typename at each service
+		userTypenameURLs, err := locations.URLFor("User", "__typename")
+		assert.Nil(t, err)
+		assert.Equal(t, []string{"url1", "url2"}, userTypenameURLs)
+	})
+
 	t.Run("Gateway fields", func(t *testing.T) {
 		// define a gateway field
 		viewerField := &QueryField{
