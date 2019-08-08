@@ -81,8 +81,13 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 		}
 	}
 
+	possibleTypesSet := map[string]Set{}
+
 	// merge each definition of each type into one
 	for name, definitions := range types {
+		if _, exists := possibleTypesSet[name]; !exists {
+			possibleTypesSet[name] = Set{}
+		}
 		for _, definition := range definitions {
 			// look up if the type is already registered in the aggregate
 			previousDefinition, exists := result.Types[name]
@@ -92,8 +97,19 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				// use the declaration that we got from the new schema
 				result.Types[name] = definition
 
-				// register the type as an implementer of itself
-				result.AddPossibleType(name, definition)
+				if definition.Kind == ast.Union {
+					for _, possibleType := range definition.Types {
+						for _, typedef := range types[possibleType] {
+							if !possibleTypesSet[name].Has(typedef.Name) {
+								possibleTypesSet[name].Add(typedef.Name)
+								result.AddPossibleType(name, typedef)
+							}
+						}
+					}
+				} else {
+					// register the type as an implementer of itself
+					result.AddPossibleType(name, definition)
+				}
 
 				// each interface that this type implements needs to be registered
 				for _, iface := range definition.Interfaces {
