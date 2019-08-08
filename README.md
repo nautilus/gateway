@@ -4,7 +4,7 @@
 
 A standalone service designed to consolidate your graphql APIs into one endpoint.
 
-For a guide to getting started read [this post](https://medium.com/@aaivazis/a-guide-to-schema-federation-part-1-995b639ac035). For full documentation visit the [gateway homepage](https://gateway.nautilus.cool).
+For a guide to getting started read [this post](https://medium.com/@aaivazis/a-guide-to-schema-federation-part-1-995b639ac035). For full documentation visit the [gateway homepage](https://gateway.nautilus.dev).
 
 ## Running the Executable
 
