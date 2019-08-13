@@ -688,6 +688,71 @@ func TestMergeSchema_union(t *testing.T) {
 	})
 }
 
+func TestMergeSchema_unions(t *testing.T) {
+	t.Run("Matching", func(t *testing.T) {
+		originalSchema, err := graphql.LoadSchema(`
+			type Foo {
+				name: String!	
+			}
+
+			type Bar {
+				lastName: String!
+			}
+			
+			union Foobar = Foo | Bar
+		`)
+		if !assert.Nil(t, err, "original schema didn't parse") {
+			return
+		}
+
+		// merge the schema with a compatible schema
+		schema, err := testMergeSchemas(t, originalSchema, `
+			type Baz {
+				name: String!
+			}
+
+			type Qux {
+				middleName: String!
+			}
+
+			union Bazqux = Baz | Qux
+		`)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		possibleTypes := schema.GetPossibleTypes(schema.Types["Foobar"])
+		if len(possibleTypes) != 2 {
+			t.Errorf("Union has incorrect number of types. Expected 2, found %v", len(schema.GetPossibleTypes(schema.Types["Foobar"])))
+			return
+		}
+
+		// keep the unique set of the types we visisted
+		visited := Set{}
+		for _, possibleType := range possibleTypes {
+			visited.Add(possibleType.Name)
+		}
+
+		assert.True(t, visited["Foo"], "did not have Bar in possible type")
+		assert.True(t, visited["Bar"], "did not have Baz in possible type")
+
+		possibleTypes = schema.GetPossibleTypes(schema.Types["Bazqux"])
+		if len(possibleTypes) != 2 {
+			t.Errorf("Union has incorrect number of types. Expected 2, found %v", len(schema.GetPossibleTypes(schema.Types["Bazqux"])))
+			return
+		}
+
+		visited = Set{}
+		for _, possibleType := range possibleTypes {
+			visited.Add(possibleType.Name)
+		}
+
+		assert.True(t, visited["Baz"], "did not have Bar in possible type")
+		assert.True(t, visited["Qux"], "did not have Baz in possible type")
+	})
+}
+
 func TestMergeSchema_interfaces(t *testing.T) {
 	t.Run("Matching", func(t *testing.T) {
 		// the directive that we are always comparing to
