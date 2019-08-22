@@ -51,9 +51,7 @@ func (p *NoQueryPersister) Persist(ctx *PlanningContext, hash string, planner Qu
 // WithQueryPersister sets the persister that the gateway will use
 func WithQueryPersister(p QueryPersister) Option {
 	return func(g *Gateway) {
-		g.persister = &AutomaticQueryPersister{
-			planMap: map[string]*QueryPlan{},
-		}
+		g.persister = p
 	}
 }
 
