@@ -92,30 +92,16 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			operation.OperationName = operationName[0]
 		}
 
-		hasCacheKey := false
-		fmt.Println("has persisted query", parameters)
+		// if the request defined any extensions
 		if extensionString, hasExtensions := parameters["extensions"]; hasExtensions {
-			fmt.Println("has persisted query")
 			// copy the extension information into the operation
 			if err := json.NewDecoder(strings.NewReader(extensionString[0])).Decode(&operation.Extensions); err != nil {
 				payloadErr = err
 			}
-
-			// if the operation defines a persisted query
-			if operation.Extensions.QueryPlanCache != nil {
-				hasCacheKey = true
-			}
-
 		}
 
-		// we have to have either a query or a cache key to move on
-		if !hasQuery && !hasCacheKey {
-			// there was no query parameter
-			payloadErr = errors.New("must include query as parameter")
-		} else {
-			// add the query to the list of operations
-			operations = append(operations, operation)
-		}
+		// add the query to the list of operations
+		operations = append(operations, operation)
 		// or we got a POST request
 	} else if r.Method == http.MethodPost {
 		// read the full request body
