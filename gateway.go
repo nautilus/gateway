@@ -23,7 +23,7 @@ type Gateway struct {
 	middlewares    MiddlewareList
 	queryFields    []*QueryField
 	queryerFactory *QueryerFactory
-	persister      QueryPersister
+	queryPlanCache QueryPlanCache
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -36,7 +36,7 @@ type Gateway struct {
 // Execute takes a query string, executes it, and returns the response
 func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	// let the persister grab the plan for us
-	plan, err := g.persister.Persist(&PlanningContext{
+	plan, err := g.queryPlanCache.Retrieve(&PlanningContext{
 		Query:     query,
 		Schema:    g.schema,
 		Gateway:   g,
@@ -98,12 +98,12 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 
 	// set any default values before we start doing stuff with it
 	gateway := &Gateway{
-		sources:     sources,
-		planner:     &MinQueriesPlanner{},
-		executor:    &ParallelExecutor{},
-		merger:      MergerFunc(mergeSchemas),
-		queryFields: []*QueryField{nodeField},
-		persister:   &NoQueryPersister{},
+		sources:        sources,
+		planner:        &MinQueriesPlanner{},
+		executor:       &ParallelExecutor{},
+		merger:         MergerFunc(mergeSchemas),
+		queryFields:    []*QueryField{nodeField},
+		queryPlanCache: &NoQueryPlanCache{},
 	}
 
 	// pass the gateway through any Options

@@ -30,47 +30,47 @@ package gateway
 //		- need for a separate build step that prepares the queries and shares it with the server
 //		- tighter control on operations. The client can only send queries that are approved (pre-computed)
 
-// QueryPersister decides when to compute a plan
-type QueryPersister interface {
-	Persist(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error)
+// QueryPlanCache decides when to compute a plan
+type QueryPlanCache interface {
+	Retrieve(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error)
 }
 
-// WithNoPersistedQueries is the default option and disables any persisted query behavior
-func WithNoPersistedQueries() Option {
-	return WithQueryPersister(&NoQueryPersister{})
+// WithNoQueryPlanCache is the default option and disables any persisted query behavior
+func WithNoQueryPlanCache() Option {
+	return WithQueryPlanCache(&NoQueryPlanCache{})
 }
 
-// NoQueryPersister will always compute the plan for a query, regardless of the value passed as `hash`
-type NoQueryPersister struct{}
+// NoQueryPlanCache will always compute the plan for a query, regardless of the value passed as `hash`
+type NoQueryPlanCache struct{}
 
-// Persist just computes the query plan
-func (p *NoQueryPersister) Persist(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error) {
+// Retrieve just computes the query plan
+func (p *NoQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error) {
 	return planner.Plan(ctx)
 }
 
-// WithQueryPersister sets the persister that the gateway will use
-func WithQueryPersister(p QueryPersister) Option {
+// WithQueryPlanCache sets the query plan cache that the gateway will use
+func WithQueryPlanCache(p QueryPlanCache) Option {
 	return func(g *Gateway) {
-		g.persister = p
+		g.queryPlanCache = p
 	}
 }
 
-// WithAutomaticPersistedQueries enables the "automatic persisted query" technique
-func WithAutomaticPersistedQueries() Option {
-	return WithQueryPersister(&AutomaticQueryPersister{
+// WithAutomaticQueryPlanCache enables the "automatic persisted query" technique
+func WithAutomaticQueryPlanCache() Option {
+	return WithQueryPlanCache(&AutomaticQueryPlanCache{
 		planMap: map[string]*QueryPlan{},
 	})
 }
 
-// AutomaticQueryPersister is a QueryPersister that will use the hash if it points to a known query plan,
+// AutomaticQueryPlanCache is a QueryPlanCache that will use the hash if it points to a known query plan,
 // otherwise it will compute the plan and save it for later, to be referenced by the designated hash.
-type AutomaticQueryPersister struct {
+type AutomaticQueryPlanCache struct {
 	planMap map[string]*QueryPlan
 }
 
-// Persist follows the "automatic query persistance" technique. If the hash is known, it will use the referenced query plan.
+// Retrieve follows the "automatic query persistance" technique. If the hash is known, it will use the referenced query plan.
 // If the hash is not know but the query is provided, it will compute the plan, return it, and save it for later use.
 // If the hash is not known and the query is not provided, it will return with an error prompting the client to provide the hash and query
-func (p *AutomaticQueryPersister) Persist(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error) {
+func (p *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error) {
 	return planner.Plan(ctx)
 }
