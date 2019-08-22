@@ -30,6 +30,10 @@ package gateway
 //		- need for a separate build step that prepares the queries and shares it with the server
 //		- tighter control on operations. The client can only send queries that are approved (pre-computed)
 
+// MessageMissingCachedQuery is the string that the server sends when the user assumes that the server knows about
+// a caches query plan
+const MessageMissingCachedQuery = "PersistedQueryNotFound"
+
 // QueryPlanCache decides when to compute a plan
 type QueryPlanCache interface {
 	Retrieve(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error)

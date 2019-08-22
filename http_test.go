@@ -170,7 +170,7 @@ func TestAutomaticPersistedQueries(t *testing.T) {
 				"Hello": "world",
 			}, nil
 		},
-	)), WithAutomaticPersistedQueries())
+	)), WithAutomaticQueryPlanCache())
 	if err != nil {
 		t.Error(err)
 		return

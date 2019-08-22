@@ -16,7 +16,7 @@ script:
   # install the dependencies
   - run install
   # generate and report the test coverage
-  - run test:coverage
+  - run tests:coverage
 
 before_deploy:
   # build the binaries
