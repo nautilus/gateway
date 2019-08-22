@@ -15,8 +15,13 @@ jobs:
         with:
           version: 1.12
 
-      - name: Run tests
+      - name: Install dependencies
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
           go install github.com/alecaivazis/run
-          run tests
+          run install:ci
+
+      - name: Run tests
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          run test
