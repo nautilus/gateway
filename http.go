@@ -87,6 +87,8 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 				query.OperationName = operationName[0]
 			}
 
+			//
+
 			// add the query to the list of operations
 			operations = append(operations, query)
 

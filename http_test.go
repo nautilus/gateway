@@ -153,6 +153,67 @@ func TestGraphQLHandler(t *testing.T) {
 	})
 }
 
+func TestAutomaticPersistedQueries(t *testing.T) {
+	// load the schema we'll test
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			allUsers: [String!]!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url1"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"Hello": "world",
+			}, nil
+		},
+	)), WithAutomaticPersistedQueries())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	// make a request for an unknown persisted query
+	request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`
+		{
+			"extensions": {
+				"persistedQuery": {
+					"version": 1,
+					"sha256Hash": "1234"
+				}
+			}
+		}
+	`))
+	// a recorder so we can check what the handler responded with
+	responseRecorder := httptest.NewRecorder()
+
+	// call the http hander
+	gateway.PlaygroundHandler(responseRecorder, request)
+
+	// get the response from the handler
+	response := responseRecorder.Result()
+
+	// make sure we got an OK status
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+	// the body of the response
+	body := struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}{}
+	// parse the response
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Error(err)
+		return
+	}
+
+	// make sure that the response is what we expect
+	assert.Equal(t, "PersistedQueryNotFound", body.Errors[0].Message)
+}
+
 func TestPlaygroundHandler_postRequest(t *testing.T) {
 	// a planner that always returns an error
 	planner := &MockErrPlanner{Err: errors.New("Planning error")}

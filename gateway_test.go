@@ -350,7 +350,7 @@ func TestGateway(t *testing.T) {
 				}
 			}
 		`
-		plans, err := gateway.plan(&PlanningContext{
+		plans, err := gateway.planner.Plan(&PlanningContext{
 			Query:     query,
 			Locations: gateway.fieldURLs,
 			Schema:    gateway.schema,

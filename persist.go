@@ -1,45 +1,58 @@
 package gateway
 
-import (
-	"bytes"
-	"encoding/gob"
-)
+// In general, "query persistance" is a term for a family of optimizations that involves
+// storing some kind of representation of the queries that the client will send. For
+// nautilus, this allows for the pre-computation of query plans and can drastically speed
+// up response times.
+//
+// There are different strategies when it comes to timing the computation of these
+// plans. Each strategy has its own trade-offs and should be carefully considered
+//
+// Automatic Persisted Queries:
+// 		- client asks for the query associated with a particular hash
+// 		- if the server knows that hash, execute the query plan. if not, return with a known value
+//		- if the client sees the known value, resend the query with the full query body
+// 		- the server will then calculate the plan and save it for later use
+//      - if the client sends a known hash along with the query body, the query body is ignored
+//
+//      pros/cons:
+//		- no need for a build step
+// 		- the client can send any queries they want
+//
+//
+// StaticPersistedQueries (not implemented yet):
+//		- as part of a build step, the gateway is given the list of queries and associated
+//			hashes
+//		- the client only sends the hash with queries
+// 		- if the server recognizes the hash, execute the query. Otherwise, return with en error
+//
+//		pros/cons:
+//		- need for a separate build step that prepares the queries and shares it with the server
+//		- tighter control on operations. The client can only send queries that are approved (pre-computed)
 
-// QueryPersister archives and retrieves query plans
+// QueryPersister decides when to compute a plan
 type QueryPersister interface {
-	// PersistQuery saves the body of the query somewhere
-	// and returns an address that it can be retrieved later
-	PersistQuery(plan *QueryPlan) (string, error)
-
-	// RestoreQuery takes an address and returns the referenced query plan (if it exists)
-	// if no query plan exists, an error is returned
-	RestoreQuery(address string) (*QueryPlan, error)
+	Persist(ctx PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error)
 }
 
-// ContentAddressPersister uses a byte representation of the query plan as its addresses
-// removing the need for a centralized storage. This does not allow for any kind of list of
-// allowed queries since the address is assumed to be valid if it contains a QueryPlan.
-type ContentAddressPersister struct{}
+// WithNoPersistedQueries is the default option and disables any persisted query behavior
+func WithNoPersistedQueries() Option {
+	return func(g *Gateway) {
 
-// PersistQuery saves the query plan in the in-memory map
-func (p *ContentAddressPersister) PersistQuery(plan *QueryPlan) (string, error) {
-	// a place to write the result
-	var address bytes.Buffer
-
-	err := gob.NewEncoder(&address).Encode(plan)
-	if err != nil {
-		return "", err
 	}
-
-	return address.String(), nil
 }
 
-// RestoreQuery retrieves the plan referenced by the provided address
-func (p *ContentAddressPersister) RestoreQuery(address string) (*QueryPlan, error) {
-	return nil, nil
+// NoQueryPersister will always compute the plan for a query, regardless of the value passed as `hash`
+type NoQueryPersister struct{}
+
+// Persist just computes the query plan
+func (p *NoQueryPersister) Persist(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error) {
+	return planner.Plan(ctx)
 }
 
+// WithAutomaticPersistedQueries enables the "automatic persisted query" technique
+func WithAutomaticPersistedQueries() Option {
+	return func(g *Gateway) {
 
-func init () {
-	gob.Register(graphql.QueryerFunc)
+	}
 }
