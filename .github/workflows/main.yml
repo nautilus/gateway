@@ -13,5 +13,3 @@ jobs:
         with:
           go-version: 1.12
       - run: go get github.com/alecaivazis/run && ${GOPATH}/bin/run tests
-        env:
-          PATH:
