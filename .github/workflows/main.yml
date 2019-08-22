@@ -7,6 +7,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Tests
-        uses: ./.github/images/env
-        run: run tests
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - name: Install go
+        uses: actions/setup-go@master
+        with:
+          version: 1.12
+
+      - name: Install dependencies
+        run: go install github.com/alecaivazis/run
