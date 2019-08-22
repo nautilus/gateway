@@ -17,3 +17,6 @@ jobs:
 
       - name: Install dependencies
         run: go install github.com/alecaivazis/run
+
+      - name: Run tests
+        run: run test
