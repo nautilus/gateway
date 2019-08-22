@@ -14,6 +14,8 @@ jobs:
         uses: actions/setup-go@master
         with:
           version: 1.12
+        env:
+          GOPATH: $HOME
 
       - name: Install dependencies
         run: go install github.com/alecaivazis/run
