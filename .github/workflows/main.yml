@@ -9,5 +9,5 @@ jobs:
     steps:
       - uses: actions/checkout@master
       - name: Setup go
-        uses: ".github/images/env"
+        uses: nautilus/gateway/.github/images/env
       - run: run tests
