@@ -10,11 +10,17 @@ import (
 	"github.com/nautilus/graphql"
 )
 
-// QueryPOSTBody is the incoming payload when sending POST requests to the gateway
-type QueryPOSTBody struct {
+// HTTPOperation is the incoming payload when sending POST requests to the gateway
+type HTTPOperation struct {
 	Query         string                 `json:"query"`
 	Variables     map[string]interface{} `json:"variables"`
 	OperationName string                 `json:"operationName"`
+	Extensions    struct {
+		PersistedQuery struct {
+			Version int    `json:"version"`
+			Hash    string `json:"sha256Hash"`
+		} `json:"persistedQuery"`
+	} `json:"extensions"`
 }
 
 func formatErrors(data map[string]interface{}, err error) map[string]interface{} {
@@ -46,7 +52,7 @@ func formatErrors(data map[string]interface{}, err error) map[string]interface{}
 func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// this handler can handle multiple operations sent in the same query. Internally,
 	// it modules a single operation as a list of one.
-	operations := []*QueryPOSTBody{}
+	operations := []*HTTPOperation{}
 
 	// the error we have encountered when extracting query input
 	var payloadErr error
@@ -59,7 +65,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// get the query parameter
 		if query, ok := parameters["query"]; ok {
 			// build a query obj
-			query := &QueryPOSTBody{
+			query := &HTTPOperation{
 				Query: query[0],
 			}
 
@@ -100,7 +106,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// the first is that the user provides an object in the form of { query, variables, operationName }
 		// the second option is a list of that object
 
-		singleQuery := &QueryPOSTBody{}
+		singleQuery := &HTTPOperation{}
 		// if we were given a single object
 		if err = json.Unmarshal(body, &singleQuery); err == nil {
 			// add it to the list of operations
@@ -108,7 +114,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			// we weren't given an object
 		} else {
 			// but we could have been given a list
-			batch := []*QueryPOSTBody{}
+			batch := []*HTTPOperation{}
 
 			if err = json.Unmarshal(body, &batch); err != nil {
 				payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
@@ -131,6 +137,8 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write(response)
 		return
 	}
+
+	/// Handle the operations regardless of the request method
 
 	// we have to respond to each operation in the right order
 	results := []map[string]interface{}{}

@@ -1,5 +1,10 @@
 package gateway
 
+import (
+	"bytes"
+	"encoding/gob"
+)
+
 // QueryPersister archives and retrieves query plans
 type QueryPersister interface {
 	// PersistQuery saves the body of the query somewhere
@@ -9,24 +14,32 @@ type QueryPersister interface {
 	// RestoreQuery takes an address and returns the referenced query plan (if it exists)
 	// if no query plan exists, an error is returned
 	RestoreQuery(address string) (*QueryPlan, error)
-
-	// Hydrate is called when the gateway first starts and can be used to pay any up-front costs
-	// associated with grabbing the list of persisted queries
-	Hydrate() error
 }
 
-// InMemoryQueryPersister saves the provided plans in an in-memory structure
-type InMemoryQueryPersister struct {
-	queries map[string]*QueryPlan
-}
-
-// Hydrate doesn't do anything in this persister
-func (p *InMemoryQueryPersister) Hydrate() error {
-	return nil
-}
+// ContentAddressPersister uses a byte representation of the query plan as its addresses
+// removing the need for a centralized storage. This does not allow for any kind of list of
+// allowed queries since the address is assumed to be valid if it contains a QueryPlan.
+type ContentAddressPersister struct{}
 
 // PersistQuery saves the query plan in the in-memory map
-func (p *InMemoryQueryPersister) PersistQuery(plan *QueryPlan) (string, error) {
+func (p *ContentAddressPersister) PersistQuery(plan *QueryPlan) (string, error) {
+	// a place to write the result
+	var address bytes.Buffer
 
-	return "", nil
+	err := gob.NewEncoder(&address).Encode(plan)
+	if err != nil {
+		return "", err
+	}
+
+	return address.String(), nil
+}
+
+// RestoreQuery retrieves the plan referenced by the provided address
+func (p *ContentAddressPersister) RestoreQuery(address string) (*QueryPlan, error) {
+	return nil, nil
+}
+
+
+func init () {
+	gob.Register(graphql.QueryerFunc)
 }

@@ -29,6 +29,8 @@ github.com/nautilus/gateway v0.0.7/go.mod h1:X8SLkNOIO+C50p/tWCaywy93dmXM0TvcXS1
 github.com/nautilus/gateway v0.0.9/go.mod h1:byPYFcsR0/qeveNubjzSVWL8MRd+MRgKTpu+s+ZX1i4=
 github.com/nautilus/gateway/examples/auth v0.0.0-20190724183827-01a4c663ce1e h1:e4vK+0MwZV/Io5OROcQh4qhfqCEhz1Oq7X9MrdA0r9c=
 github.com/nautilus/gateway/examples/auth v0.0.0-20190724183827-01a4c663ce1e/go.mod h1:NfFlJ/1B/LwwLJO7YkaQ7tXeUMtqedks87g2Oi3ZT2k=
+github.com/nautilus/gateway/examples/auth v0.0.0-20190813042451-750729497797 h1:S/bPZDPfVrtS9JGQlGyATYSh3TDlMSJiakSnglsbyDo=
+github.com/nautilus/gateway/examples/auth v0.0.0-20190813042451-750729497797/go.mod h1:ThxvpsrAAbz9xB3YcVtPHPNLw9UUNCwJXfA6jBRPlx8=
 github.com/nautilus/graphql v0.0.0-20190129081528-0d6bfc6f1842 h1:GQd8y2SVpLh6Eq2PDkzSE+QZq+ZUCs08/kCTDk9ioIY=
 github.com/nautilus/graphql v0.0.0-20190129081528-0d6bfc6f1842/go.mod h1:/gQq2EuE47owcG7BUzZF/XBnAA8uvPjKqO+bg6A7axM=
 github.com/nautilus/graphql v0.0.0-20190130220441-1aac49cfdb81 h1:MsH7IM4y34eenZWgvZRBYu4cwV+SF7bv0N50sy70f3A=
