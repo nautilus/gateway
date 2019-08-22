@@ -5,16 +5,12 @@ on: [push]
 jobs:
   build:
 
-    runs-on: golang:latest
+    runs-on: ubuntu-latest
     
     steps:
-    - name: Install Go
-      uses: actions/setup-go@v1
-      with:
-        go-version: 1.12
-      id: go
-
-    - name: Install dependencies
-      run: |
-        go get -u github.com/alecaivazis/run
-        run install:ci
+      - uses: actions/checkout@master
+      - name: Setup go
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.12
+      - run: go get github.com/alecaivazis/run && run tests
