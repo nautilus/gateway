@@ -35,13 +35,13 @@ type Gateway struct {
 
 // Execute takes a query string, executes it, and returns the response
 func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
-	// generate a query plan for the query
-	plan, err := g.planner.Plan(&PlanningContext{
+	// let the persister grab the plan for us
+	plan, err := g.persister.Persist(&PlanningContext{
 		Query:     query,
 		Schema:    g.schema,
 		Gateway:   g,
 		Locations: g.fieldURLs,
-	})
+	}, "", g.planner)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +103,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 		executor:    &ParallelExecutor{},
 		merger:      MergerFunc(mergeSchemas),
 		queryFields: []*QueryField{nodeField},
+		persister:   &NoQueryPersister{},
 	}
 
 	// pass the gateway through any Options
