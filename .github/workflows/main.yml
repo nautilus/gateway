@@ -15,6 +15,5 @@ jobs:
       id: go
 
     - name: Install dependencies
-      run: |
-        go get -u github.com/alecaivazis/run
-        run install:ci
+      run: 
+        go get -u github.com/alecaivazis/run && run install:ci
