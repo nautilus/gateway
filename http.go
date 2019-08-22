@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/nautilus/graphql"
 )
@@ -16,7 +17,7 @@ type HTTPOperation struct {
 	Variables     map[string]interface{} `json:"variables"`
 	OperationName string                 `json:"operationName"`
 	Extensions    struct {
-		PersistedQuery *struct {
+		QueryPlanCache *struct {
 			Version int    `json:"version"`
 			Hash    string `json:"sha256Hash"`
 		} `json:"persistedQuery"`
@@ -62,39 +63,58 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// if we got a GET request
 	if r.Method == http.MethodGet {
 		parameters := r.URL.Query()
+
+		// the operation we have to perform
+		operation := &HTTPOperation{}
+
 		// get the query parameter
-		if query, ok := parameters["query"]; ok {
-			// build a query obj
-			query := &HTTPOperation{
-				Query: query[0],
+		query, hasQuery := parameters["query"]
+		if hasQuery {
+			// save the query
+			operation.Query = query[0]
+		}
+
+		// include operationName
+		if variableInput, ok := parameters["variables"]; ok {
+			variables := map[string]interface{}{}
+
+			err := json.Unmarshal([]byte(variableInput[0]), &variables)
+			if err != nil {
+				payloadErr = errors.New("variables must be a json object")
 			}
 
-			// include operationName
-			if variableInput, ok := parameters["variables"]; ok {
-				variables := map[string]interface{}{}
+			// assign the variables to the payload
+			operation.Variables = variables
+		}
 
-				err := json.Unmarshal([]byte(variableInput[0]), &variables)
-				if err != nil {
-					payloadErr = errors.New("variables must be a json object")
-				}
+		// include operationName
+		if operationName, ok := parameters["operationName"]; ok {
+			operation.OperationName = operationName[0]
+		}
 
-				// assign the variables to the payload
-				query.Variables = variables
+		hasCacheKey := false
+		fmt.Println("has persisted query", parameters)
+		if extensionString, hasExtensions := parameters["extensions"]; hasExtensions {
+			fmt.Println("has persisted query")
+			// copy the extension information into the operation
+			if err := json.NewDecoder(strings.NewReader(extensionString[0])).Decode(&operation.Extensions); err != nil {
+				payloadErr = err
 			}
 
-			// include operationName
-			if operationName, ok := parameters["operationName"]; ok {
-				query.OperationName = operationName[0]
+			// if the operation defines a persisted query
+			if operation.Extensions.QueryPlanCache != nil {
+				hasCacheKey = true
 			}
 
-			//
+		}
 
-			// add the query to the list of operations
-			operations = append(operations, query)
-
-		} else {
+		// we have to have either a query or a cache key to move on
+		if !hasQuery && !hasCacheKey {
 			// there was no query parameter
 			payloadErr = errors.New("must include query as parameter")
+		} else {
+			// add the query to the list of operations
+			operations = append(operations, operation)
 		}
 		// or we got a POST request
 	} else if r.Method == http.MethodPost {
@@ -154,8 +174,8 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 
 		// there might be a query plan cache key embedded in the operation
 		cacheKey := ""
-		if operation.Extensions.PersistedQuery != nil {
-			cacheKey = operation.Extensions.PersistedQuery.Hash
+		if operation.Extensions.QueryPlanCache != nil {
+			cacheKey = operation.Extensions.QueryPlanCache.Hash
 		}
 
 		// if there is no query or cache key
