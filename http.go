@@ -16,7 +16,7 @@ type HTTPOperation struct {
 	Variables     map[string]interface{} `json:"variables"`
 	OperationName string                 `json:"operationName"`
 	Extensions    struct {
-		PersistedQuery struct {
+		PersistedQuery *struct {
 			Version int    `json:"version"`
 			Hash    string `json:"sha256Hash"`
 		} `json:"persistedQuery"`
@@ -152,15 +152,21 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// the result of the operation
 		result := map[string]interface{}{}
 
-		// the result of the operation
-		if operation.Query == "" {
+		// there might be a query plan cache key embedded in the operation
+		cacheKey := ""
+		if operation.Extensions.PersistedQuery != nil {
+			cacheKey = operation.Extensions.PersistedQuery.Hash
+		}
+
+		// if there is no query or cache key
+		if operation.Query == "" && cacheKey == "" {
 			statusCode = http.StatusUnprocessableEntity
 			results = append(results, formatErrors(map[string]interface{}{}, errors.New("could not find query body")))
 			continue
 		}
 
 		// fire the query with the request context passed through to execution
-		result, err := g.Execute(r.Context(), operation.Query, operation.Variables)
+		result, err := g.Execute(r.Context(), operation.Query, operation.Variables, cacheKey)
 		if err != nil {
 			results = append(results, formatErrors(map[string]interface{}{}, err))
 			continue

@@ -745,7 +745,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 	}
 
 	// execute any think
-	gateway.Execute(context.Background(), `{ values } `, map[string]interface{}{})
+	gateway.Execute(context.Background(), `{ values } `, map[string]interface{}{}, "")
 
 	// make sure we called the middleware
 	assert.True(t, called, "Did not call middleware")

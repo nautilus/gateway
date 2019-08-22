@@ -153,7 +153,7 @@ func TestGraphQLHandler(t *testing.T) {
 	})
 }
 
-func TestAutomaticPersistedQueries(t *testing.T) {
+func TestQueryPlanCacheParameters(t *testing.T) {
 	// load the schema we'll test
 	schema, _ := graphql.LoadSchema(`
 		type Query {
@@ -161,14 +161,17 @@ func TestAutomaticPersistedQueries(t *testing.T) {
 		}
 	`)
 
+	// the expected result
+	expectedResult := map[string]interface{}{
+		"Hello": "world",
+	}
+
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
 		{Schema: schema, URL: "url1"},
 	}, WithExecutor(ExecutorFunc(
 		func(*ExecutionContext) (map[string]interface{}, error) {
-			return map[string]interface{}{
-				"Hello": "world",
-			}, nil
+			return expectedResult, nil
 		},
 	)), WithAutomaticQueryPlanCache())
 	if err != nil {
@@ -197,7 +200,9 @@ func TestAutomaticPersistedQueries(t *testing.T) {
 	response := responseRecorder.Result()
 
 	// make sure we got an OK status
-	assert.Equal(t, http.StatusOK, response.StatusCode)
+	if !assert.Equal(t, http.StatusOK, response.StatusCode) {
+		return
+	}
 	// the body of the response
 	body := struct {
 		Errors []struct {
@@ -205,13 +210,51 @@ func TestAutomaticPersistedQueries(t *testing.T) {
 		} `json:"errors"`
 	}{}
 	// parse the response
+	defer response.Body.Close()
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Error(err)
 		return
 	}
 
 	// make sure that the response is what we expect
-	assert.Equal(t, "PersistedQueryNotFound", body.Errors[0].Message)
+	if !assert.Equal(t, "PersistedQueryNotFound", body.Errors[0].Message) {
+		return
+	}
+
+	// passing in a valid query along with the hash
+	request = httptest.NewRequest("POST", "/graphql", strings.NewReader(`
+		{
+			"query": "{ allUsers }",
+			"extensions": {
+				"persistedQuery": {
+					"version": 1,
+					"sha256Hash": "1234"
+				}
+			}
+		}
+	`))
+	// a recorder so we can check what the handler responded with
+	responseRecorder2 := httptest.NewRecorder()
+
+	// call the http hander
+	gateway.PlaygroundHandler(responseRecorder2, request)
+	// get the response from the handler
+	response2 := responseRecorder2.Result()
+
+	// make sure we got an OK status
+	if !assert.Equal(t, http.StatusOK, response2.StatusCode) {
+		return
+	}
+
+	// and the expected result
+	result := map[string]interface{}{}
+	defer response2.Body.Close()
+	if err := json.NewDecoder(response2.Body).Decode(&result); err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.Equal(t, map[string]interface{}{"data": expectedResult}, result)
 }
 
 func TestPlaygroundHandler_postRequest(t *testing.T) {

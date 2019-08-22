@@ -159,7 +159,7 @@ func TestGateway(t *testing.T) {
 		}
 
 		// build a query plan that the executor will follow
-		_, err = gateway.Execute(context.Background(), `{ allUsers { firstName } }`, map[string]interface{}{})
+		_, err = gateway.Execute(context.Background(), `{ allUsers { firstName } }`, map[string]interface{}{}, "")
 		if err == nil {
 			t.Errorf("Did not encounter error executing plan.")
 		}
@@ -191,7 +191,7 @@ func TestGateway(t *testing.T) {
 		}
 
 		// build a query plan that the executor will follow
-		response, err := gateway.Execute(context.Background(), `{ allUsers { firstName } }`, map[string]interface{}{})
+		response, err := gateway.Execute(context.Background(), `{ allUsers { firstName } }`, map[string]interface{}{}, "")
 
 		if err != nil {
 			t.Errorf("Encountered error executing plan: %s", err.Error())
@@ -297,7 +297,7 @@ func TestGateway(t *testing.T) {
 		}
 
 		// execute the query
-		res, err := gateway.Execute(context.Background(), query, map[string]interface{}{})
+		res, err := gateway.Execute(context.Background(), query, map[string]interface{}{}, "")
 		if err != nil {
 			t.Error(err.Error())
 			return

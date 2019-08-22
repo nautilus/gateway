@@ -34,14 +34,14 @@ type Gateway struct {
 }
 
 // Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
+func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}, cacheKey string) (map[string]interface{}, error) {
 	// let the persister grab the plan for us
 	plan, err := g.queryPlanCache.Retrieve(&PlanningContext{
 		Query:     query,
 		Schema:    g.schema,
 		Gateway:   g,
 		Locations: g.fieldURLs,
-	}, "", g.planner)
+	}, cacheKey, g.planner)
 	if err != nil {
 		return nil, err
 	}

@@ -57,7 +57,7 @@ func TestAutomaticQueryPlanCache(t *testing.T) {
 	}
 
 	// an instance of the NoCache cache
-	cache := &AutomaticQueryPlanCache{}
+	cache := NewAutomaticQueryPlanCache()
 
 	// passing no query and an unknown hash should return an error with the magic string
 	plan1, err := cache.Retrieve(&PlanningContext{}, "asdf", planner)
@@ -65,11 +65,11 @@ func TestAutomaticQueryPlanCache(t *testing.T) {
 		return
 	}
 	assert.Equal(t, err.Error(), MessageMissingCachedQuery)
-	assert.Equal(t, plan1, plans)
+	assert.Nil(t, plan1)
 
 	// passing a non-empty query along with a hash associates the resulting plan with the hash
 	plan2, err := cache.Retrieve(&PlanningContext{Query: "hello"}, "asdf", planner)
-	if !assert.Nil(t, err, err.Error()) {
+	if !assert.Nil(t, err) {
 		return
 	}
 	assert.Equal(t, plan2, plans)
@@ -77,7 +77,7 @@ func TestAutomaticQueryPlanCache(t *testing.T) {
 	// do the same thing we did in step 1 (ask without a query body)
 	plan3, err := cache.Retrieve(&PlanningContext{}, "asdf", planner)
 	assert.Equal(t, plan3, plans)
-	if !assert.Nil(t, err, err.Error()) {
+	if !assert.Nil(t, err) {
 		return
 	}
 
