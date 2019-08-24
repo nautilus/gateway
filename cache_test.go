@@ -120,7 +120,7 @@ func TestAutomaticQueryPlanCache_passPlannerErrors(t *testing.T) {
 	cache := NewAutomaticQueryPlanCache()
 
 	// passing no query and an unknown hash should return an error with the magic string
-	_, err := cache.Retrieve(&PlanningContext{}, "asdf", planner)
+	_, err := cache.Retrieve(&PlanningContext{Query: "Asdf"}, "asdf", planner)
 	if !assert.NotNil(t, err, "error was nil") {
 		return
 	}
