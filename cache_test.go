@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -109,6 +110,20 @@ func TestAutomaticQueryPlanCache(t *testing.T) {
 
 	// we should have only computed the plan once
 	assert.Equal(t, 1, planner.Count)
+}
+
+func TestAutomaticQueryPlanCache_passPlannerErrors(t *testing.T) {
+	// instantiate a planner that can count how many times it was invoked
+	planner := &MockErrPlanner{errors.New("Error")}
+
+	// an instance of the NoCache cache
+	cache := NewAutomaticQueryPlanCache()
+
+	// passing no query and an unknown hash should return an error with the magic string
+	_, err := cache.Retrieve(&PlanningContext{}, "asdf", planner)
+	if !assert.NotNil(t, err, "error was nil") {
+		return
+	}
 }
 
 func TestAutomaticQueryPlanCache_garbageCollection(t *testing.T) {
