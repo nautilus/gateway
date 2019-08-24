@@ -132,6 +132,9 @@ func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, pl
 				// and we're done
 				return
 			}
+			c.timeMutex.Lock()
+			c.resetTimer = true
+			c.timeMutex.Unlock()
 
 			// otherwise this is the goroutine responsible for cleaning up the cache
 			timer := time.NewTimer(c.ttl)
