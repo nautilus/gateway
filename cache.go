@@ -1,6 +1,10 @@
 package gateway
 
-import "errors"
+import (
+	"errors"
+	"sync"
+	"time"
+)
 
 // In general, "query persistance" is a term for a family of optimizations that involve
 // storing some kind of representation of the queries that the client will send. For
@@ -21,8 +25,7 @@ import "errors"
 //		- no need for a build step
 // 		- the client can send any queries they want
 //
-//
-// StaticPersistedQueries (not implemented yet):
+// StaticPersistedQueries (not implemented here):
 //		- as part of a build step, the gateway is given the list of queries and associated
 //			hashes
 //		- the client only sends the hash with queries
@@ -66,27 +69,112 @@ func WithAutomaticQueryPlanCache() Option {
 	return WithQueryPlanCache(NewAutomaticQueryPlanCache())
 }
 
+type queryPlanCacheItem struct {
+	LastUsed time.Time
+	Value    []*QueryPlan
+}
+
 // AutomaticQueryPlanCache is a QueryPlanCache that will use the hash if it points to a known query plan,
 // otherwise it will compute the plan and save it for later, to be referenced by the designated hash.
 type AutomaticQueryPlanCache struct {
-	planMap map[string][]*QueryPlan
+	cache map[string]*queryPlanCacheItem
+	ttl   time.Duration
+	// the automatic query plan cache needs to clear itself of query plans that have been used
+	// recently. This coordination requires a channel over which events can be trigger whenever
+	// a query is fired, triggering a check to clean up other queries.
+	retrievedPlan chan bool
+	// a boolean to track if there is a timer that needs to be reset
+	resetTimer bool
+	// a mutex on the timer bool
+	timeMutex sync.Mutex
+}
+
+// WithCacheTTL updates and returns the cache with the new cache lifetime. Queries that haven't been
+// used in that long are cleaned up on the next query.
+func (c *AutomaticQueryPlanCache) WithCacheTTL(duration time.Duration) *AutomaticQueryPlanCache {
+	return &AutomaticQueryPlanCache{
+		cache:         c.cache,
+		ttl:           duration,
+		retrievedPlan: c.retrievedPlan,
+		resetTimer:    c.resetTimer,
+	}
 }
 
 // NewAutomaticQueryPlanCache returns a fresh instance of
 func NewAutomaticQueryPlanCache() *AutomaticQueryPlanCache {
 	return &AutomaticQueryPlanCache{
-		planMap: map[string][]*QueryPlan{},
+		cache: map[string]*queryPlanCacheItem{},
+		// default cache lifetime of 3 days
+		ttl:           10 * 24 * time.Hour,
+		retrievedPlan: make(chan bool),
+		resetTimer:    false,
 	}
 }
 
 // Retrieve follows the "automatic query persistance" technique. If the hash is known, it will use the referenced query plan.
 // If the hash is not know but the query is provided, it will compute the plan, return it, and save it for later use.
 // If the hash is not known and the query is not provided, it will return with an error prompting the client to provide the hash and query
-func (p *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error) {
+func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error) {
+
+	// when we're done with retrieving the value we have to clear the cache
+	defer func() {
+		// spawn a goroutine that might be responsible for clearing the cache
+		go func() {
+			// check if there is a timer to reset
+			c.timeMutex.Lock()
+			resetTimer := c.resetTimer
+			c.timeMutex.Unlock()
+
+			// if there is already a goroutine that's waiting to clean things up
+			if resetTimer {
+				// just reset their time
+				c.retrievedPlan <- true
+				// and we're done
+				return
+			}
+
+			// otherwise this is the goroutine responsible for cleaning up the cache
+			timer := time.NewTimer(c.ttl)
+
+			// we will have to consume more than one input
+		TRUE_LOOP:
+			for {
+				select {
+				// if another plan was retrieved
+				case <-c.retrievedPlan:
+					// reset the time
+					timer.Reset(c.ttl)
+
+				// if the timer dinged
+				case <-timer.C:
+					// there is no longer a timer to reset
+					c.timeMutex.Lock()
+					c.resetTimer = false
+					c.timeMutex.Unlock()
+
+					// loop over every time in the cache
+					for key, cacheItem := range c.cache {
+						// if the cached query hasn't been used recently enough
+						if cacheItem.LastUsed.Before(time.Now().Add(-c.ttl)) {
+							// delete it from the cache
+							delete(c.cache, key)
+						}
+					}
+
+					// stop consuming
+					break TRUE_LOOP
+				}
+			}
+
+		}()
+	}()
+
 	// if we have a cached value for the hash
-	if cached, hasCachedValue := p.planMap[hash]; hasCachedValue {
+	if cached, hasCachedValue := c.cache[hash]; hasCachedValue {
+		// update the last used
+		cached.LastUsed = time.Now()
 		// return it
-		return cached, nil
+		return cached.Value, nil
 	}
 
 	// we dont have a cached value
@@ -104,7 +192,10 @@ func (p *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, pl
 	}
 
 	// save it for later
-	p.planMap[hash] = plan
+	c.cache[hash] = &queryPlanCacheItem{
+		LastUsed: time.Now(),
+		Value:    plan,
+	}
 
 	// we're done
 	return plan, nil

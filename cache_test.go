@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -83,4 +84,44 @@ func TestAutomaticQueryPlanCache(t *testing.T) {
 
 	// we should have only computed the plan once
 	assert.Equal(t, 1, planner.Count)
+}
+
+func TestAutomaticQueryPlanCache_garbageCollection(t *testing.T) {
+	// the plan we are expecting back
+	plans := []*QueryPlan{}
+	// instantiate a planner that can count how many times it was invoked
+	planner := &testPlannerCounter{
+		Plans: plans,
+	}
+
+	// an instance of the NoCache cache
+	cache := NewAutomaticQueryPlanCache().WithCacheTTL(100 * time.Millisecond)
+
+	// retrieving the plan back to back should hit the cached version
+	_, err := cache.Retrieve(&PlanningContext{Query: "hello"}, "asdf", planner)
+	if !assert.Nil(t, err) {
+		return
+	}
+	_, err = cache.Retrieve(&PlanningContext{Query: "hello"}, "asdf", planner)
+	if !assert.Nil(t, err) {
+		return
+	}
+	// the plan should have only been computed once
+	assert.Equal(t, 1, planner.Count)
+
+	// wait longer than the cache ttl
+	time.Sleep(150 * time.Millisecond)
+
+	// ask for it twice more
+	_, err = cache.Retrieve(&PlanningContext{Query: "hello"}, "asdf", planner)
+	if !assert.Nil(t, err) {
+		return
+	}
+	_, err = cache.Retrieve(&PlanningContext{}, "asdf", planner)
+	if !assert.Nil(t, err) {
+		return
+	}
+
+	// we should have only generated the plan twice now (once more than before)
+	assert.Equal(t, 2, planner.Count)
 }
