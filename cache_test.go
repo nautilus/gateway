@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,6 +20,30 @@ func (p *testPlannerCounter) Plan(*PlanningContext) ([]*QueryPlan, error) {
 
 	// return the plans
 	return p.Plans, nil
+}
+
+func TestCacheOptions(t *testing.T) {
+	// turn the combo into a remote schema
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			value: String!
+		}
+	`)
+
+	// create a gateway that doesn't wrap any schemas and has no query plan cache
+	gw, err := New([]*graphql.RemoteSchema{
+		{
+			URL:    "asdf",
+			Schema: schema,
+		},
+	}, WithNoQueryPlanCache())
+	if !assert.Nil(t, err) {
+		return
+	}
+
+	// make sure that the query plan cache is one that doesn't cache
+	_, ok := gw.queryPlanCache.(*NoQueryPlanCache)
+	assert.True(t, ok)
 }
 
 func TestNoQueryPlanCache(t *testing.T) {
