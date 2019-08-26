@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"sync"
@@ -231,6 +232,759 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 			"firstName": "hello",
 		},
 	}, result)
+}
+
+func TestExecutor_insertIntoFragmentSpread(t *testing.T) {
+	// the query we want to execute is
+	// {
+	//   photo {								<- Query.services @ serviceA
+	//     ... photoFragment
+	//     }
+	//   }
+	// }
+	// fragment createdByFragment on Photo {
+	//   createdBy {								<- User boundary type
+	// 	 	firstName								<- User.firstName @ serviceA
+	//   	address 							<- User.address @ serviceB
+	//   }
+	// }
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					// a query to satisfy photo.createdBy.firstName
+					{
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Alias: "photo",
+								Name:  "photo",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("Photo", &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.FragmentSpread{
+										Name:       "photoFragment",
+										Definition: nil,
+									},
+								},
+							},
+						},
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"photo": map[string]interface{}{
+								"createdBy": map[string]interface{}{
+									"firstName": "John",
+									"id":        "1",
+								},
+							},
+						}},
+						FragmentDefinitions: ast.FragmentDefinitionList{
+							&ast.FragmentDefinition{
+								Name:          "photoFragment",
+								TypeCondition: "Photo",
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "createdBy",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("User", &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "firstName",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.address
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"photo", "createdBy"}, // photo is the query name here
+								SelectionSet: ast.SelectionSet{
+									&ast.FragmentSpread{
+										Name: "photoFragment",
+									},
+								},
+								Queryer: graphql.QueryerFunc(
+									func(input *graphql.QueryInput) (interface{}, error) {
+										assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+										// make sure that we got the right variable inputs
+										return map[string]interface{}{
+											"node": map[string]interface{}{
+												"address": "addressValue",
+											},
+										}, nil
+									},
+								),
+								FragmentDefinitions: ast.FragmentDefinitionList{
+									&ast.FragmentDefinition{
+										Name:          "photoFragment",
+										TypeCondition: "User",
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name:  "address",
+												Alias: "address",
+												Definition: &ast.FieldDefinition{
+													Name: "address",
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error execluting plan: %v", err.Error())
+		return
+	}
+	assert.Equal(t, map[string]interface{}{
+		"photo": map[string]interface{}{
+			"createdBy": map[string]interface{}{
+				"id":        "1",
+				"firstName": "John",
+				"address":   "addressValue",
+			},
+		},
+	}, result)
+}
+
+func TestExecutor_insertIntoListFragmentSpreads(t *testing.T) {
+	// {
+	// 	photos {								<-- Query.services @ serviceA, list
+	// 	  ...photosFragment
+	// 	}
+	//   }
+	//   fragment photosFragment on Photo {
+	// 	createdBy {
+	// 	  firstName								<-- User.firstName @ serviceA
+	// 	  address								<-- User.address @ serviceB
+	// 	  }
+	//   }
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					// a query to satisfy photo.createdBy.firstName
+					{
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Alias: "photos",
+								Name:  "photos",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("Photo", &ast.Position{}), &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.FragmentSpread{
+										Name:       "photosFragment",
+										Definition: nil,
+									},
+								},
+							},
+						},
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"photos": []interface{}{
+								map[string]interface{}{
+									"createdBy": map[string]interface{}{
+										"firstName": "John",
+										"id":        "1",
+									},
+								},
+								map[string]interface{}{
+									"createdBy": map[string]interface{}{
+										"firstName": "Jane",
+										"id":        "2",
+									},
+								},
+							},
+						}},
+						FragmentDefinitions: ast.FragmentDefinitionList{
+							&ast.FragmentDefinition{
+								Name:          "photosFragment",
+								TypeCondition: "Photo",
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "createdBy",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("User", &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "firstName",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.address
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"photos", "createdBy"}, // photo is the query name here
+								SelectionSet: ast.SelectionSet{
+									&ast.FragmentSpread{
+										Name: "photosFragment",
+									},
+								},
+								Queryer: graphql.QueryerFunc(
+									func(input *graphql.QueryInput) (interface{}, error) {
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										return map[string]interface{}{
+											"node": map[string]interface{}{
+												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+											},
+										}, nil
+									},
+								),
+								FragmentDefinitions: ast.FragmentDefinitionList{
+									&ast.FragmentDefinition{
+										Name:          "photosFragment",
+										TypeCondition: "User",
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name:  "address",
+												Alias: "address",
+												Definition: &ast.FieldDefinition{
+													Name: "address",
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error execluting plan: %v", err.Error())
+		return
+	}
+	assert.Equal(t, map[string]interface{}{
+		"photos": []interface{}{
+			map[string]interface{}{
+				"createdBy": map[string]interface{}{
+					"id":        "1",
+					"firstName": "John",
+					"address":   "address-1",
+				},
+			},
+			map[string]interface{}{
+				"createdBy": map[string]interface{}{
+					"id":        "2",
+					"firstName": "Jane",
+					"address":   "address-2",
+				},
+			},
+		},
+	}, result)
+}
+
+func TestExecutor_insertIntoFragmentSpreadLists(t *testing.T) {
+	// {
+	// 	photo {								<-- Query.services @ serviceA
+	// 	  ...photoFragment
+	// 	}
+	//   }
+	//   fragment photoFragment on Photo {
+	// 	viewedBy {								<-- list
+	// 	  firstName								<-- User.firstName @ serviceA
+	// 	  address								<-- User.address @ serviceB
+	// 	}
+	//   }
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					// a query to satisfy photo.viewedBy.firstName
+					{
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Alias: "photo",
+								Name:  "photo",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("Photo", &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.FragmentSpread{
+										Name:       "photoFragment",
+										Definition: nil,
+									},
+								},
+							},
+						},
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"photo": map[string]interface{}{
+								"viewedBy": []interface{}{
+									map[string]interface{}{
+										"firstName": "John",
+										"id":        "1",
+									},
+									map[string]interface{}{
+										"firstName": "Jane",
+										"id":        "2",
+									},
+								},
+							},
+						}},
+						FragmentDefinitions: ast.FragmentDefinitionList{
+							&ast.FragmentDefinition{
+								Name:          "photoFragment",
+								TypeCondition: "Photo",
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "viewedBy",
+										Definition: &ast.FieldDefinition{
+											Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "firstName",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.address
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"photo", "viewedBy"},
+								SelectionSet: ast.SelectionSet{
+									&ast.FragmentSpread{
+										Name: "photoFragment",
+									},
+								},
+								Queryer: graphql.QueryerFunc(
+									func(input *graphql.QueryInput) (interface{}, error) {
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										return map[string]interface{}{
+											"node": map[string]interface{}{
+												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+											},
+										}, nil
+									},
+								),
+								FragmentDefinitions: ast.FragmentDefinitionList{
+									&ast.FragmentDefinition{
+										Name:          "photoFragment",
+										TypeCondition: "User",
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name:  "address",
+												Alias: "address",
+												Definition: &ast.FieldDefinition{
+													Name: "address",
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error execluting plan: %v", err.Error())
+		return
+	}
+	assert.Equal(t, map[string]interface{}{
+		"photo": map[string]interface{}{
+			"viewedBy": []interface{}{
+				map[string]interface{}{
+					"firstName": "John",
+					"id":        "1",
+					"address":   "address-1",
+				},
+				map[string]interface{}{
+					"firstName": "Jane",
+					"id":        "2",
+					"address":   "address-2",
+				},
+			},
+		},
+	}, result)
+}
+
+func TestExecutor_insertIntoInlineFragment(t *testing.T) {
+	// the query we want to execute is
+	// {
+	//   photo {								<- Query.services @ serviceA
+	//     ... on Photo {
+	// 			createdBy {
+	// 				firstName					<- User.firstName @ serviceA
+	// 				address						<- User.address @ serviceB
+	// 			}
+	// 	   }
+	//  }
+	// }
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					// a query to satisfy photo.createdBy.firstName
+					{
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Alias: "photo",
+								Name:  "photo",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("Photo", &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.InlineFragment{
+										TypeCondition: "Photo",
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "createdBy",
+												Definition: &ast.FieldDefinition{
+													Name: "createdBy",
+													Type: ast.NamedType("User", &ast.Position{}),
+												},
+												SelectionSet: ast.SelectionSet{
+													&ast.Field{
+														Name: "firstName",
+														Definition: &ast.FieldDefinition{
+															Name: "firstName",
+															Type: ast.NamedType("String", &ast.Position{}),
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"photo": map[string]interface{}{
+								"createdBy": map[string]interface{}{
+									"firstName": "John",
+									"id":        "1",
+								},
+							},
+						}},
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.address
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"photo", "createdBy"}, // photo is the query name here
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "address",
+										Definition: &ast.FieldDefinition{
+											Name: "address",
+											Type: ast.NamedType("String", &ast.Position{}),
+										},
+									},
+								},
+								Queryer: graphql.QueryerFunc(
+									func(input *graphql.QueryInput) (interface{}, error) {
+										assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+										// make sure that we got the right variable inputs
+										return map[string]interface{}{
+											"node": map[string]interface{}{
+												"address": "addressValue",
+											},
+										}, nil
+									},
+								),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error execluting plan: %v", err.Error())
+		return
+	}
+	assert.Equal(t, map[string]interface{}{
+		"photo": map[string]interface{}{
+			"createdBy": map[string]interface{}{
+				"id":        "1",
+				"firstName": "John",
+				"address":   "addressValue",
+			},
+		},
+	}, result)
+}
+
+func TestExecutor_insertIntoListInlineFragments(t *testing.T) {
+	// {
+	// 	photos {								<-- Query.services @ serviceA, list
+	// 	  ... on Photo {
+	// 		createdBy {
+	// 	  	  firstName								<-- User.firstName @ serviceA
+	// 	  	  address								<-- User.address @ serviceB
+	// 	    }
+	// 	   }
+	//  }
+	// }
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					// a query to satisfy photo.createdBy.firstName
+					{
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Alias: "photos",
+								Name:  "photos",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("Photo", &ast.Position{}), &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.InlineFragment{
+										TypeCondition: "Photo",
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "createdBy",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("User", &ast.Position{}),
+												},
+												SelectionSet: ast.SelectionSet{
+													&ast.Field{
+														Name: "firstName",
+														Definition: &ast.FieldDefinition{
+															Type: ast.NamedType("String", &ast.Position{}),
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"photos": []interface{}{
+								map[string]interface{}{
+									"createdBy": map[string]interface{}{
+										"firstName": "John",
+										"id":        "1",
+									},
+								},
+								map[string]interface{}{
+									"createdBy": map[string]interface{}{
+										"firstName": "Jane",
+										"id":        "2",
+									},
+								},
+							},
+						}},
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.address
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"photos", "createdBy"}, // photo is the query name here
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "address",
+										Definition: &ast.FieldDefinition{
+											Name: "address",
+											Type: ast.NamedType("String", &ast.Position{}),
+										},
+									},
+								},
+								Queryer: graphql.QueryerFunc(
+									func(input *graphql.QueryInput) (interface{}, error) {
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										return map[string]interface{}{
+											"node": map[string]interface{}{
+												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+											},
+										}, nil
+									},
+								),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error execluting plan: %v", err.Error())
+		return
+	}
+	assert.Equal(t, map[string]interface{}{
+		"photos": []interface{}{
+			map[string]interface{}{
+				"createdBy": map[string]interface{}{
+					"id":        "1",
+					"firstName": "John",
+					"address":   "address-1",
+				},
+			},
+			map[string]interface{}{
+				"createdBy": map[string]interface{}{
+					"id":        "2",
+					"firstName": "Jane",
+					"address":   "address-2",
+				},
+			},
+		},
+	}, result)
+}
+
+func TestExecutor_insertIntoInlineFragmentsList(t *testing.T) {
+	// {
+	// 	photo {								<-- Query.services @ serviceA
+	// 	  ... on Photo {
+	//       viewedBy {						<-- list
+	//          firstName					<-- User.firstName @ serviceA
+	//          address						<-- User.address @ serviceB
+	//       }
+	//    }
+	// 	}
+	// }
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					// a query to satisfy photo.viewedBy.firstName
+					{
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Alias: "photo",
+								Name:  "photo",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("Photo", &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.InlineFragment{
+										TypeCondition: "Photo",
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "viewedBy",
+												Definition: &ast.FieldDefinition{
+													Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+												},
+												SelectionSet: ast.SelectionSet{
+													&ast.Field{
+														Name: "firstName",
+														Definition: &ast.FieldDefinition{
+															Type: ast.NamedType("String", &ast.Position{}),
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							"photo": map[string]interface{}{
+								"viewedBy": []interface{}{
+									map[string]interface{}{
+										"firstName": "John",
+										"id":        "1",
+									},
+									map[string]interface{}{
+										"firstName": "Jane",
+										"id":        "2",
+									},
+								},
+							},
+						}},
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.address
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"photo", "viewedBy"},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "address",
+										Definition: &ast.FieldDefinition{
+											Name: "address",
+											Type: ast.NamedType("String", &ast.Position{}),
+										},
+									},
+								},
+								Queryer: graphql.QueryerFunc(
+									func(input *graphql.QueryInput) (interface{}, error) {
+										t.Log("HELLOOO")
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										return map[string]interface{}{
+											"node": map[string]interface{}{
+												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+											},
+										}, nil
+									},
+								),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error execluting plan: %v", err.Error())
+		return
+	}
+	assert.Equal(t, map[string]interface{}{
+		"photo": map[string]interface{}{
+			"viewedBy": []interface{}{
+				map[string]interface{}{
+					"firstName": "John",
+					"id":        "1",
+					"address":   "address-1",
+				},
+				map[string]interface{}{
+					"firstName": "Jane",
+					"id":        "2",
+					"address":   "address-2",
+				},
+			},
+		},
+	}, result)
+
 }
 
 func TestExecutor_insertIntoLists(t *testing.T) {
@@ -940,7 +1694,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint)
+	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -1227,7 +1981,7 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, [][]string{})
+	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, [][]string{}, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -1303,7 +2057,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint)
+	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
