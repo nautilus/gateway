@@ -255,7 +255,7 @@ func executeStep(
 		for _, dependent := range step.Then {
 			log.Debug("Looking for insertion points for ", dependent.InsertionPoint, "\n\n")
 
-			insertPoints, err := executorFindInsertionPoints(resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint})
+			insertPoints, err := executorFindInsertionPoints(resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint}, step.FragmentDefinitions)
 			if err != nil {
 				errCh <- err
 				return
@@ -285,8 +285,25 @@ func max(a, b int) int {
 	return b
 }
 
+func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDefs ast.FragmentDefinitionList) (*ast.Field, error) {
+	selectionSetFragments, err := graphql.ApplyFragments(selectionSet, fragmentDefs)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, selection := range selectionSetFragments {
+		switch selection := selection.(type) {
+		case *ast.Field:
+			if selection.Alias == matchString || selection.Name == matchString {
+				return selection, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
 // executorFindInsertionPoints returns the list of insertion points where this step should be executed.
-func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string) ([][]string, error) {
+func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) ([][]string, error) {
 	log.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
 	oldBranch := startingPoints
 
@@ -319,13 +336,9 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 		// track wether we found a selection
 		var foundSelection *ast.Field
-
-		// there should be a field in the root selection set that has the target point
-		for _, selection := range graphql.SelectedFields(selectionSetRoot) {
-			// if the selection has the right name we need to add it to the list
-			if selection.Alias == point || selection.Name == point {
-				foundSelection = selection
-			}
+		foundSelection, err := findSelection(point, selectionSetRoot, fragmentDefs)
+		if err != nil {
+			return [][]string{}, err
 		}
 
 		// if we didn't find a selection
@@ -401,7 +414,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 				}
 
 				// compute the insertion points for that entry
-				entryInsertionPoints, err := executorFindInsertionPoints(resultLock, targetPoints, selectionSetRoot, resultEntry, newBranchSet)
+				entryInsertionPoints, err := executorFindInsertionPoints(resultLock, targetPoints, selectionSetRoot, resultEntry, newBranchSet, fragmentDefs)
 				if err != nil {
 					return nil, err
 				}
@@ -414,6 +427,10 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 			// return the flat list of insertion points created by our children
 			return newInsertionPoints, nil
+		}
+		// traverse down the resultChunk for the next iteration
+		if rootValueMap, ok := rootValue.(map[string]interface{}); ok {
+			resultChunk = rootValueMap
 		}
 
 		// we are encountering something that isn't a list so it must be an object or a scalar
