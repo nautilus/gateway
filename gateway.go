@@ -33,37 +33,45 @@ type Gateway struct {
 	fieldURLs FieldURLMap
 }
 
+// RequestContext holds all of the information required to satisfy the user's query
+type RequestContext struct {
+	Context   context.Context
+	Query     string
+	Variables map[string]interface{}
+	CacheKey  string
+}
+
 // Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}, cacheKey string) (map[string]interface{}, error) {
+func (g *Gateway) Execute(ctx *RequestContext) (map[string]interface{}, error) {
 	// let the persister grab the plan for us
 	plan, err := g.queryPlanCache.Retrieve(&PlanningContext{
-		Query:     query,
+		Query:     ctx.Query,
 		Schema:    g.schema,
 		Gateway:   g,
 		Locations: g.fieldURLs,
-	}, cacheKey, g.planner)
+	}, ctx.CacheKey, g.planner)
 	if err != nil {
 		return nil, err
 	}
 
 	// build up the execution context
-	ctx := &ExecutionContext{
-		RequestContext:     requestContext,
+	executionContext := &ExecutionContext{
+		RequestContext:     ctx.Context,
 		RequestMiddlewares: g.requestMiddlewares,
 		Plan:               plan[0],
-		Variables:          variables,
+		Variables:          ctx.Variables,
 	}
 
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	result, err := g.executor.Execute(ctx)
+	result, err := g.executor.Execute(executionContext)
 	if err != nil {
 		return nil, err
 	}
 
 	// now that we have our response, throw it through the list of middlewarse
 	for _, ware := range g.responseMiddlewares {
-		if err := ware(ctx, result); err != nil {
+		if err := ware(executionContext, result); err != nil {
 			return nil, err
 		}
 	}
