@@ -656,10 +656,10 @@ func (e *ErrExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, er
 
 // MockExecutor always returns a success with the provided value
 type MockExecutor struct {
-	value map[string]interface{}
+	Value map[string]interface{}
 }
 
 // Execute returns the provided value
 func (e *MockExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
-	return e.value, nil
+	return e.Value, nil
 }
