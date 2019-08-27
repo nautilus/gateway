@@ -255,7 +255,18 @@ func TestQueryPlanCacheParameters_post(t *testing.T) {
 		return
 	}
 
-	assert.Equal(t, map[string]interface{}{"data": expectedResult}, result)
+	// the expected result
+	expected := map[string]interface{}{
+		"data": expectedResult,
+		"extensions": map[string]interface{}{
+			"persistedQuery": map[string]interface{}{
+				"sha265Hash": "1234",
+				"version":    "1",
+			},
+		},
+	}
+
+	assert.Equal(t, expected, result)
 }
 
 func TestQueryPlanCacheParameters_get(t *testing.T) {

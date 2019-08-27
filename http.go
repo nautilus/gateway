@@ -11,16 +11,18 @@ import (
 	"github.com/nautilus/graphql"
 )
 
+type PersistedQuerySpecification struct {
+	Version int    `json:"version"`
+	Hash    string `json:"sha256Hash"`
+}
+
 // HTTPOperation is the incoming payload when sending POST requests to the gateway
 type HTTPOperation struct {
 	Query         string                 `json:"query"`
 	Variables     map[string]interface{} `json:"variables"`
 	OperationName string                 `json:"operationName"`
 	Extensions    struct {
-		QueryPlanCache *struct {
-			Version int    `json:"version"`
-			Hash    string `json:"sha256Hash"`
-		} `json:"persistedQuery"`
+		QueryPlanCache *PersistedQuerySpecification `json:"persistedQuery"`
 	} `json:"extensions"`
 }
 
@@ -171,20 +173,37 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// fire the query with the request context passed through to execution
-		result, err := g.Execute(&RequestContext{
+		// this might get mutated by the query plan cache so we have to pull it out
+		requestContext := &RequestContext{
 			Context:   r.Context(),
 			Query:     operation.Query,
 			Variables: operation.Variables,
 			CacheKey:  cacheKey,
-		})
+		}
+
+		// fire the query with the request context passed through to execution
+		result, err := g.Execute(requestContext)
 		if err != nil {
 			results = append(results, formatErrors(map[string]interface{}{}, err))
 			continue
 		}
 
+		// the result for this operation
+		payload := map[string]interface{}{"data": result}
+
+		// if there was a cache key associated with this query
+		if requestContext.CacheKey != "" {
+			// embed the cache key in the response
+			payload["extensions"] = map[string]interface{}{
+				"persistedQuery": map[string]interface{}{
+					"sha265Hash": requestContext.CacheKey,
+					"version":    "1",
+				},
+			}
+		}
+
 		// add this result to the list
-		results = append(results, map[string]interface{}{"data": result})
+		results = append(results, payload)
 	}
 
 	// the final result depends on whether we are executing in batch mode or not
