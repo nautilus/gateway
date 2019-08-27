@@ -49,7 +49,7 @@ func (g *Gateway) Execute(ctx *RequestContext) (map[string]interface{}, error) {
 		Schema:    g.schema,
 		Gateway:   g,
 		Locations: g.fieldURLs,
-	}, ctx.CacheKey, g.planner)
+	}, &ctx.CacheKey, g.planner)
 	if err != nil {
 		return nil, err
 	}

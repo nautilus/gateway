@@ -48,6 +48,7 @@ func TestCacheOptions(t *testing.T) {
 }
 
 func TestNoQueryPlanCache(t *testing.T) {
+	cacheKey := "asdf"
 	// the plan we are expecting back
 	plans := []*QueryPlan{}
 	// instantiate a planner that can count how many times it was invoked
@@ -59,11 +60,11 @@ func TestNoQueryPlanCache(t *testing.T) {
 	cache := &NoQueryPlanCache{}
 
 	// ask the cache to retrieve the same hash twice
-	plan1, err := cache.Retrieve(nil, "asdf", planner)
+	plan1, err := cache.Retrieve(nil, &cacheKey, planner)
 	if !assert.Nil(t, err) {
 		return
 	}
-	plan2, err := cache.Retrieve(nil, "asdf", planner)
+	plan2, err := cache.Retrieve(nil, &cacheKey, planner)
 	if !assert.Nil(t, err) {
 		return
 	}
@@ -76,6 +77,7 @@ func TestNoQueryPlanCache(t *testing.T) {
 }
 
 func TestAutomaticQueryPlanCache(t *testing.T) {
+	cacheKey := "asdf"
 	// the plan we are expecting back
 	plans := []*QueryPlan{}
 	// instantiate a planner that can count how many times it was invoked
@@ -87,7 +89,7 @@ func TestAutomaticQueryPlanCache(t *testing.T) {
 	cache := NewAutomaticQueryPlanCache()
 
 	// passing no query and an unknown hash should return an error with the magic string
-	plan1, err := cache.Retrieve(&PlanningContext{}, "asdf", planner)
+	plan1, err := cache.Retrieve(&PlanningContext{}, &cacheKey, planner)
 	if !assert.NotNil(t, err, "error was nil") {
 		return
 	}
@@ -95,14 +97,14 @@ func TestAutomaticQueryPlanCache(t *testing.T) {
 	assert.Nil(t, plan1)
 
 	// passing a non-empty query along with a hash associates the resulting plan with the hash
-	plan2, err := cache.Retrieve(&PlanningContext{Query: "hello"}, "asdf", planner)
+	plan2, err := cache.Retrieve(&PlanningContext{Query: "hello"}, &cacheKey, planner)
 	if !assert.Nil(t, err) {
 		return
 	}
 	assert.Equal(t, plan2, plans)
 
 	// do the same thing we did in step 1 (ask without a query body)
-	plan3, err := cache.Retrieve(&PlanningContext{}, "asdf", planner)
+	plan3, err := cache.Retrieve(&PlanningContext{}, &cacheKey, planner)
 	assert.Equal(t, plan3, plans)
 	if !assert.Nil(t, err) {
 		return
@@ -113,6 +115,7 @@ func TestAutomaticQueryPlanCache(t *testing.T) {
 }
 
 func TestAutomaticQueryPlanCache_passPlannerErrors(t *testing.T) {
+	cacheKey := "asdf"
 	// instantiate a planner that can count how many times it was invoked
 	planner := &MockErrPlanner{errors.New("Error")}
 
@@ -120,13 +123,36 @@ func TestAutomaticQueryPlanCache_passPlannerErrors(t *testing.T) {
 	cache := NewAutomaticQueryPlanCache()
 
 	// passing no query and an unknown hash should return an error with the magic string
-	_, err := cache.Retrieve(&PlanningContext{Query: "Asdf"}, "asdf", planner)
+	_, err := cache.Retrieve(&PlanningContext{Query: "Asdf"}, &cacheKey, planner)
 	if !assert.NotNil(t, err, "error was nil") {
 		return
 	}
 }
 
+func TestAutomaticQueryPlanCache_setCacheKey(t *testing.T) {
+	// instantiate a planner that can count how many times it was invoked
+	planner := &testPlannerCounter{
+		Plans: []*QueryPlan{},
+	}
+
+	// an instance of the NoCache cache
+	cache := NewAutomaticQueryPlanCache()
+
+	// the key of the cache
+	cacheKey := ""
+
+	// plan a query
+	cache.Retrieve(&PlanningContext{Query: "hello"}, &cacheKey, planner)
+
+	// make sure that the key was changed
+	if cacheKey == "" {
+		t.Error("Cache key was not updated")
+		return
+	}
+}
+
 func TestAutomaticQueryPlanCache_garbageCollection(t *testing.T) {
+	cacheKey := "asdf"
 	// the plan we are expecting back
 	plans := []*QueryPlan{}
 	// instantiate a planner that can count how many times it was invoked
@@ -138,11 +164,11 @@ func TestAutomaticQueryPlanCache_garbageCollection(t *testing.T) {
 	cache := NewAutomaticQueryPlanCache().WithCacheTTL(100 * time.Millisecond)
 
 	// retrieving the plan back to back should hit the cached version
-	_, err := cache.Retrieve(&PlanningContext{Query: "hello"}, "asdf", planner)
+	_, err := cache.Retrieve(&PlanningContext{Query: "hello"}, &cacheKey, planner)
 	if !assert.Nil(t, err) {
 		return
 	}
-	_, err = cache.Retrieve(&PlanningContext{Query: "hello"}, "asdf", planner)
+	_, err = cache.Retrieve(&PlanningContext{Query: "hello"}, &cacheKey, planner)
 	if !assert.Nil(t, err) {
 		return
 	}
@@ -153,11 +179,11 @@ func TestAutomaticQueryPlanCache_garbageCollection(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	// ask for it twice more
-	_, err = cache.Retrieve(&PlanningContext{Query: "hello"}, "asdf", planner)
+	_, err = cache.Retrieve(&PlanningContext{Query: "hello"}, &cacheKey, planner)
 	if !assert.Nil(t, err) {
 		return
 	}
-	_, err = cache.Retrieve(&PlanningContext{}, "asdf", planner)
+	_, err = cache.Retrieve(&PlanningContext{}, &cacheKey, planner)
 	if !assert.Nil(t, err) {
 		return
 	}

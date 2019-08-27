@@ -4,6 +4,9 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"crypto/sha256"
+	"encoding/hex"
 )
 
 // In general, "query persistance" is a term for a family of optimizations that involve
@@ -41,7 +44,7 @@ const MessageMissingCachedQuery = "PersistedQueryNotFound"
 
 // QueryPlanCache decides when to compute a plan
 type QueryPlanCache interface {
-	Retrieve(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error)
+	Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) ([]*QueryPlan, error)
 }
 
 // WithNoQueryPlanCache is the default option and disables any persisted query behavior
@@ -53,7 +56,7 @@ func WithNoQueryPlanCache() Option {
 type NoQueryPlanCache struct{}
 
 // Retrieve just computes the query plan
-func (p *NoQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error) {
+func (p *NoQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) ([]*QueryPlan, error) {
 	return planner.Plan(ctx)
 }
 
@@ -114,7 +117,7 @@ func NewAutomaticQueryPlanCache() *AutomaticQueryPlanCache {
 // Retrieve follows the "automatic query persistance" technique. If the hash is known, it will use the referenced query plan.
 // If the hash is not know but the query is provided, it will compute the plan, return it, and save it for later use.
 // If the hash is not known and the query is not provided, it will return with an error prompting the client to provide the hash and query
-func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, planner QueryPlanner) ([]*QueryPlan, error) {
+func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) ([]*QueryPlan, error) {
 
 	// when we're done with retrieving the value we have to clear the cache
 	defer func() {
@@ -173,7 +176,7 @@ func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, pl
 	}()
 
 	// if we have a cached value for the hash
-	if cached, hasCachedValue := c.cache[hash]; hasCachedValue {
+	if cached, hasCachedValue := c.cache[*hash]; hasCachedValue {
 		// update the last used
 		cached.LastUsed = time.Now()
 		// return it
@@ -194,8 +197,15 @@ func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash string, pl
 		return nil, err
 	}
 
+	// if there is no hash
+	if *hash == "" {
+		hashString := sha256.Sum256([]byte(ctx.Query))
+		// generate a hash that will identify the query for later use
+		*hash = hex.EncodeToString(hashString[:])
+	}
+
 	// save it for later
-	c.cache[hash] = &queryPlanCacheItem{
+	c.cache[*hash] = &queryPlanCacheItem{
 		LastUsed: time.Now(),
 		Value:    plan,
 	}
