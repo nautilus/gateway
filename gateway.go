@@ -23,6 +23,7 @@ type Gateway struct {
 	middlewares    MiddlewareList
 	queryFields    []*QueryField
 	queryerFactory *QueryerFactory
+	queryPlanCache QueryPlanCache
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -32,41 +33,45 @@ type Gateway struct {
 	fieldURLs FieldURLMap
 }
 
-func (g *Gateway) plan(ctx *PlanningContext) ([]*QueryPlan, error) {
-	return g.planner.Plan(ctx)
+// RequestContext holds all of the information required to satisfy the user's query
+type RequestContext struct {
+	Context   context.Context
+	Query     string
+	Variables map[string]interface{}
+	CacheKey  string
 }
 
 // Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(requestContext context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error) {
-	// generate a query plan for the query
-	plan, err := g.plan(&PlanningContext{
-		Query:     query,
+func (g *Gateway) Execute(ctx *RequestContext) (map[string]interface{}, error) {
+	// let the persister grab the plan for us
+	plan, err := g.queryPlanCache.Retrieve(&PlanningContext{
+		Query:     ctx.Query,
 		Schema:    g.schema,
 		Gateway:   g,
 		Locations: g.fieldURLs,
-	})
+	}, &ctx.CacheKey, g.planner)
 	if err != nil {
 		return nil, err
 	}
 
 	// build up the execution context
-	ctx := &ExecutionContext{
-		RequestContext:     requestContext,
+	executionContext := &ExecutionContext{
+		RequestContext:     ctx.Context,
 		RequestMiddlewares: g.requestMiddlewares,
 		Plan:               plan[0],
-		Variables:          variables,
+		Variables:          ctx.Variables,
 	}
 
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	result, err := g.executor.Execute(ctx)
+	result, err := g.executor.Execute(executionContext)
 	if err != nil {
 		return nil, err
 	}
 
 	// now that we have our response, throw it through the list of middlewarse
 	for _, ware := range g.responseMiddlewares {
-		if err := ware(ctx, result); err != nil {
+		if err := ware(executionContext, result); err != nil {
 			return nil, err
 		}
 	}
@@ -101,11 +106,12 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 
 	// set any default values before we start doing stuff with it
 	gateway := &Gateway{
-		sources:     sources,
-		planner:     &MinQueriesPlanner{},
-		executor:    &ParallelExecutor{},
-		merger:      MergerFunc(mergeSchemas),
-		queryFields: []*QueryField{nodeField},
+		sources:        sources,
+		planner:        &MinQueriesPlanner{},
+		executor:       &ParallelExecutor{},
+		merger:         MergerFunc(mergeSchemas),
+		queryFields:    []*QueryField{nodeField},
+		queryPlanCache: &NoQueryPlanCache{},
 	}
 
 	// pass the gateway through any Options

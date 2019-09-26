@@ -42,7 +42,11 @@ func schemaTestLoadQuery(query string, target interface{}, variables map[string]
 	}
 
 	// executing the introspection query should return a full description of the schema
-	response, err := gateway.Execute(context.Background(), query, variables)
+	response, err := gateway.Execute(&RequestContext{
+		Context:   context.Background(),
+		Query:     query,
+		Variables: variables,
+	})
 	if err != nil {
 		return err
 	}

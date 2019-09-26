@@ -6,15 +6,24 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/nautilus/graphql"
 )
 
-// QueryPOSTBody is the incoming payload when sending POST requests to the gateway
-type QueryPOSTBody struct {
+type PersistedQuerySpecification struct {
+	Version int    `json:"version"`
+	Hash    string `json:"sha256Hash"`
+}
+
+// HTTPOperation is the incoming payload when sending POST requests to the gateway
+type HTTPOperation struct {
 	Query         string                 `json:"query"`
 	Variables     map[string]interface{} `json:"variables"`
 	OperationName string                 `json:"operationName"`
+	Extensions    struct {
+		QueryPlanCache *PersistedQuerySpecification `json:"persistedQuery"`
+	} `json:"extensions"`
 }
 
 func formatErrors(data map[string]interface{}, err error) map[string]interface{} {
@@ -46,7 +55,7 @@ func formatErrors(data map[string]interface{}, err error) map[string]interface{}
 func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// this handler can handle multiple operations sent in the same query. Internally,
 	// it modules a single operation as a list of one.
-	operations := []*QueryPOSTBody{}
+	operations := []*HTTPOperation{}
 
 	// the error we have encountered when extracting query input
 	var payloadErr error
@@ -56,38 +65,45 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// if we got a GET request
 	if r.Method == http.MethodGet {
 		parameters := r.URL.Query()
+
+		// the operation we have to perform
+		operation := &HTTPOperation{}
+
 		// get the query parameter
-		if query, ok := parameters["query"]; ok {
-			// build a query obj
-			query := &QueryPOSTBody{
-				Query: query[0],
-			}
-
-			// include operationName
-			if variableInput, ok := parameters["variables"]; ok {
-				variables := map[string]interface{}{}
-
-				err := json.Unmarshal([]byte(variableInput[0]), &variables)
-				if err != nil {
-					payloadErr = errors.New("variables must be a json object")
-				}
-
-				// assign the variables to the payload
-				query.Variables = variables
-			}
-
-			// include operationName
-			if operationName, ok := parameters["operationName"]; ok {
-				query.OperationName = operationName[0]
-			}
-
-			// add the query to the list of operations
-			operations = append(operations, query)
-
-		} else {
-			// there was no query parameter
-			payloadErr = errors.New("must include query as parameter")
+		query, hasQuery := parameters["query"]
+		if hasQuery {
+			// save the query
+			operation.Query = query[0]
 		}
+
+		// include operationName
+		if variableInput, ok := parameters["variables"]; ok {
+			variables := map[string]interface{}{}
+
+			err := json.Unmarshal([]byte(variableInput[0]), &variables)
+			if err != nil {
+				payloadErr = errors.New("variables must be a json object")
+			}
+
+			// assign the variables to the payload
+			operation.Variables = variables
+		}
+
+		// include operationName
+		if operationName, ok := parameters["operationName"]; ok {
+			operation.OperationName = operationName[0]
+		}
+
+		// if the request defined any extensions
+		if extensionString, hasExtensions := parameters["extensions"]; hasExtensions {
+			// copy the extension information into the operation
+			if err := json.NewDecoder(strings.NewReader(extensionString[0])).Decode(&operation.Extensions); err != nil {
+				payloadErr = err
+			}
+		}
+
+		// add the query to the list of operations
+		operations = append(operations, operation)
 		// or we got a POST request
 	} else if r.Method == http.MethodPost {
 		// read the full request body
@@ -100,7 +116,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// the first is that the user provides an object in the form of { query, variables, operationName }
 		// the second option is a list of that object
 
-		singleQuery := &QueryPOSTBody{}
+		singleQuery := &HTTPOperation{}
 		// if we were given a single object
 		if err = json.Unmarshal(body, &singleQuery); err == nil {
 			// add it to the list of operations
@@ -108,7 +124,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			// we weren't given an object
 		} else {
 			// but we could have been given a list
-			batch := []*QueryPOSTBody{}
+			batch := []*HTTPOperation{}
 
 			if err = json.Unmarshal(body, &batch); err != nil {
 				payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
@@ -132,6 +148,8 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	/// Handle the operations regardless of the request method
+
 	// we have to respond to each operation in the right order
 	results := []map[string]interface{}{}
 
@@ -142,22 +160,50 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// the result of the operation
 		result := map[string]interface{}{}
 
-		// the result of the operation
-		if operation.Query == "" {
+		// there might be a query plan cache key embedded in the operation
+		cacheKey := ""
+		if operation.Extensions.QueryPlanCache != nil {
+			cacheKey = operation.Extensions.QueryPlanCache.Hash
+		}
+
+		// if there is no query or cache key
+		if operation.Query == "" && cacheKey == "" {
 			statusCode = http.StatusUnprocessableEntity
 			results = append(results, formatErrors(map[string]interface{}{}, errors.New("could not find query body")))
 			continue
 		}
 
+		// this might get mutated by the query plan cache so we have to pull it out
+		requestContext := &RequestContext{
+			Context:   r.Context(),
+			Query:     operation.Query,
+			Variables: operation.Variables,
+			CacheKey:  cacheKey,
+		}
+
 		// fire the query with the request context passed through to execution
-		result, err := g.Execute(r.Context(), operation.Query, operation.Variables)
+		result, err := g.Execute(requestContext)
 		if err != nil {
 			results = append(results, formatErrors(map[string]interface{}{}, err))
 			continue
 		}
 
+		// the result for this operation
+		payload := map[string]interface{}{"data": result}
+
+		// if there was a cache key associated with this query
+		if requestContext.CacheKey != "" {
+			// embed the cache key in the response
+			payload["extensions"] = map[string]interface{}{
+				"persistedQuery": map[string]interface{}{
+					"sha265Hash": requestContext.CacheKey,
+					"version":    "1",
+				},
+			}
+		}
+
 		// add this result to the list
-		results = append(results, map[string]interface{}{"data": result})
+		results = append(results, payload)
 	}
 
 	// the final result depends on whether we are executing in batch mode or not
