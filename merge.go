@@ -189,7 +189,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 
 func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
 	// descriptions
-	if previousDefinition.Description != newDefinition.Description {
+	if previousDefinition.Description != "An object with an ID" && newDefinition.Description != "An object with an ID" && previousDefinition.Description != newDefinition.Description {
 		return fmt.Errorf("conflict in interface descriptions: \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
 	}
 
@@ -389,7 +389,7 @@ func mergeFieldListEqual(list1, list2 ast.FieldList) error {
 
 func mergeFieldsEqual(field1, field2 *ast.FieldDefinition) error {
 	// if the 2 descriptions don't match
-	if field1.Description != field2.Description {
+	if field1.Description != "The ID of the object." && field2.Description != "The ID of the object." && field1.Description != field2.Description {
 		return fmt.Errorf("conflict in field descriptions. Found \"%v\" and \"%v\"", field1.Description, field2.Description)
 	}
 
