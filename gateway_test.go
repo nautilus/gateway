@@ -159,10 +159,16 @@ func TestGateway(t *testing.T) {
 		}
 
 		// build a query plan that the executor will follow
-		_, err = gateway.Execute(&RequestContext{
+		reqCtx := &RequestContext{
 			Context: context.Background(),
 			Query:   "{ allUsers { firstName } }",
-		})
+		}
+		plan, err := gateway.GetPlan(reqCtx)
+		if err != nil {
+			t.Errorf("Encountered error building plan.")
+		}
+
+		_, err = gateway.Execute(reqCtx, plan)
 		if err == nil {
 			t.Errorf("Did not encounter error executing plan.")
 		}
@@ -192,12 +198,19 @@ func TestGateway(t *testing.T) {
 			t.Error(err.Error())
 			return
 		}
-
-		// build a query plan that the executor will follow
-		response, err := gateway.Execute(&RequestContext{
+		reqCtx := &RequestContext{
 			Context: context.Background(),
 			Query:   "{ allUsers { firstName } }",
-		})
+		}
+
+		plan, err := gateway.GetPlan(reqCtx)
+		if err != nil {
+			t.Errorf("Encountered error building plan: %s", err.Error())
+			return
+		}
+
+		// build a query plan that the executor will follow
+		response, err := gateway.Execute(reqCtx, plan)
 
 		if err != nil {
 			t.Errorf("Encountered error executing plan: %s", err.Error())
@@ -302,10 +315,17 @@ func TestGateway(t *testing.T) {
 			return
 		}
 
-		// execute the query
-		res, err := gateway.Execute(&RequestContext{
+		reqCtx := &RequestContext{
 			Context: context.Background(), Query: query,
-		})
+		}
+		plan, err := gateway.GetPlan(reqCtx)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// execute the query
+		res, err := gateway.Execute(reqCtx, plan)
 		if err != nil {
 			t.Error(err.Error())
 			return

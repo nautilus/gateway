@@ -41,19 +41,19 @@ type RequestContext struct {
 	CacheKey  string
 }
 
-// Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(ctx *RequestContext) (map[string]interface{}, error) {
+
+func (g *Gateway) GetPlan(ctx *RequestContext) ([]*QueryPlan, error) {
 	// let the persister grab the plan for us
-	plan, err := g.queryPlanCache.Retrieve(&PlanningContext{
+	return g.queryPlanCache.Retrieve(&PlanningContext{
 		Query:     ctx.Query,
 		Schema:    g.schema,
 		Gateway:   g,
 		Locations: g.fieldURLs,
 	}, &ctx.CacheKey, g.planner)
-	if err != nil {
-		return nil, err
-	}
+}
 
+// Execute takes a query string, executes it, and returns the response
+func (g *Gateway) Execute(ctx *RequestContext, plan []*QueryPlan) (map[string]interface{}, error) {
 	// build up the execution context
 	executionContext := &ExecutionContext{
 		RequestContext:     ctx.Context,

@@ -1498,11 +1498,14 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 		return
 	}
 
-	// execute any think
-	gateway.Execute(&RequestContext{
+	reqCtx := &RequestContext{
 		Context: context.Background(),
 		Query:   "{ values }",
-	})
+	}
+	plan, _ := gateway.GetPlan(reqCtx)
+
+	// execute any think
+	gateway.Execute(reqCtx, plan)
 
 	// make sure we called the middleware
 	assert.True(t, called, "Did not call middleware")
