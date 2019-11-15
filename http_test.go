@@ -121,7 +121,7 @@ func TestGraphQLHandler(t *testing.T) {
 		gateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+		assert.Equal(t, http.StatusBadRequest, responseRecorder.Result().StatusCode)
 	})
 
 	t.Run("error marhsalling response", func(t *testing.T) {
@@ -200,8 +200,8 @@ func TestQueryPlanCacheParameters_post(t *testing.T) {
 	// get the response from the handler
 	response := responseRecorder.Result()
 
-	// make sure we got an OK status
-	if !assert.Equal(t, http.StatusOK, response.StatusCode) {
+	// make sure we got a bad status
+	if !assert.Equal(t, http.StatusBadRequest, response.StatusCode) {
 		return
 	}
 	// the body of the response
@@ -313,8 +313,8 @@ func TestQueryPlanCacheParameters_get(t *testing.T) {
 	// get the response from the handler
 	response := responseRecorder.Result()
 
-	// make sure we got an OK status
-	if !assert.Equal(t, http.StatusOK, response.StatusCode) {
+	// make sure we got a bad status
+	if !assert.Equal(t, http.StatusBadRequest, response.StatusCode) {
 		return
 	}
 	// the body of the response
@@ -376,7 +376,7 @@ func TestPlaygroundHandler_postRequest(t *testing.T) {
 	}
 
 	// make sure we got an error code
-	assert.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, http.StatusBadRequest, response.StatusCode)
 }
 
 func TestPlaygroundHandler_postRequestList(t *testing.T) {
