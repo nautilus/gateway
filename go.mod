@@ -1,4 +1,4 @@
-module github.com/nautilus/gateway
+module github.com/splunk/gateway
 
 require (
 	github.com/99designs/gqlgen v0.7.1
