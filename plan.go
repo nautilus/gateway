@@ -171,7 +171,10 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 			// continuously drain the step channel
 			for {
 				select {
-				case payload := <-newSteps:
+				case payload, ok := <-newSteps:
+					if !ok {
+						return
+					}
 					step := &QueryPlanStep{
 						Queryer:             p.GetQueryer(ctx, payload.Location),
 						ParentType:          payload.ParentType,
@@ -284,6 +287,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 			return nil, err
 		// we are done
 		case <-doneCh:
+			close(stepCh)
 		}
 
 	}
