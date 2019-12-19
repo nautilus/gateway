@@ -284,6 +284,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 			return nil, err
 		// we are done
 		case <-doneCh:
+			close(stepCh)
 		}
 
 	}
