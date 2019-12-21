@@ -140,7 +140,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	// if there was an error retrieving the payload
 	if payloadErr != nil {
 		// stringify the response
-		response, _ := json.Marshal(formatErrors(map[string]interface{}{}, payloadErr))
+		response, _ := json.Marshal(formatErrors(nil, payloadErr))
 
 		// send the error to the user
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -169,7 +169,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// if there is no query or cache key
 		if operation.Query == "" && cacheKey == "" {
 			statusCode = http.StatusUnprocessableEntity
-			results = append(results, formatErrors(map[string]interface{}{}, errors.New("could not find query body")))
+			results = append(results, formatErrors(nil, errors.New("could not find query body")))
 			continue
 		}
 
@@ -181,10 +181,25 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			CacheKey:  cacheKey,
 		}
 
-		// fire the query with the request context passed through to execution
-		result, err := g.Execute(requestContext)
+		// Get the plan, and return a 400 if we can't get the plan
+		plan, err := g.GetPlan(requestContext)
 		if err != nil {
-			results = append(results, formatErrors(map[string]interface{}{}, err))
+			response, err := json.Marshal(formatErrors(nil, err))
+			if err != nil {
+				// if we couldn't serialize the response then we're in internal error territory
+				response, err = json.Marshal(formatErrors(nil, err))
+				if err != nil {
+					response, _ = json.Marshal(formatErrors(nil, err))
+				}
+			}
+			emitResponse(w, http.StatusBadRequest, string(response))
+			return
+		}
+
+		// fire the query with the request context passed through to execution
+		result, err = g.Execute(requestContext, plan)
+		if err != nil {
+			results = append(results, formatErrors(nil, err))
 			continue
 		}
 
@@ -219,16 +234,20 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// if we couldn't serialize the response then we're in internal error territory
 		statusCode = http.StatusInternalServerError
-		response, err = json.Marshal(formatErrors(map[string]interface{}{}, err))
+		response, err = json.Marshal(formatErrors(nil, err))
 		if err != nil {
-			response, _ = json.Marshal(formatErrors(map[string]interface{}{}, err))
+			response, _ = json.Marshal(formatErrors(nil, err))
 		}
 	}
 
 	// send the result to the user
+	emitResponse(w, statusCode, string(response))
+}
+
+func emitResponse(w http.ResponseWriter, code int, response string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	fmt.Fprint(w, string(response))
+	w.WriteHeader(code)
+	fmt.Fprint(w, response)
 }
 
 // PlaygroundHandler returns a http.HandlerFunc which on GET requests shows
