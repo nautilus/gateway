@@ -599,13 +599,28 @@ func (p *MinQueriesPlanner) wrapSelectionSet(config *extractSelectionConfig, loc
 	return ast.SelectionSet{selection}, nil
 }
 
+// selects one location out of possibleLocations, prioritizing the parent's location and the internal schema
+func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *extractSelectionConfig) string {
+	priority := map[string]bool{
+		internalSchemaLocation: true,
+		config.parentLocation:  true,
+	}
+	for _, location := range possibleLocations {
+		if _, ok := priority[location]; ok {
+			return location
+		}
+	}
+	// if no priority is matched, the first location will be returned; this has a bias
+	// towards the first location returned which results in uneven traffic for this location.
+	return possibleLocations[0]
+}
+
 func (p *MinQueriesPlanner) groupSelectionSet(config *extractSelectionConfig) (map[string]ast.SelectionSet, map[string]ast.FragmentDefinitionList, error) {
 
 	locationFields := map[string]ast.SelectionSet{}
 	locationFragments := map[string]ast.FragmentDefinitionList{}
 
 	// split each selection into groups of selection sets to be sent to a single service
-FieldLoop:
 	for _, selection := range config.selection {
 		// each kind of selection contributes differently to the final selection set
 		switch selection := selection.(type) {
@@ -628,29 +643,8 @@ FieldLoop:
 				return nil, nil, err
 			}
 
-			// if this field can only be found in one location
-			if len(possibleLocations) == 1 {
-				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
-				// the field can be found in many locations
-			} else {
-				// locations to prioritize first
-				for _, priority := range []string{config.parentLocation, internalSchemaLocation} {
-					// look to see if the current location is one of the possible locations
-					for _, location := range possibleLocations {
-						// if the location is the same as the parent
-						if location == priority {
-							// assign this field to the parents entry
-							locationFields[priority] = append(locationFields[priority], field)
-							// we're done with this field
-							continue FieldLoop
-						}
-					}
-				}
-
-				// if we got here then this field can be found in multiple services and none of the top priority locations.
-				// for now, just use the first one
-				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
-			}
+			location := p.selectLocation(possibleLocations, config)
+			locationFields[location] = append(locationFields[location], field)
 
 		case *ast.FragmentSpread:
 			log.Debug("Encountered fragment spread ", selection.Name)
@@ -691,8 +685,8 @@ FieldLoop:
 						return nil, nil, err
 					}
 
-					// add the field to the location
-					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], field)
+					fieldLocation := p.selectLocation(fieldLocations, config)
+					fragmentLocations[fieldLocation] = append(fragmentLocations[fieldLocation], field)
 
 				case *ast.FragmentSpread, *ast.InlineFragment:
 					// non-field selections will be handled in the next tick
