@@ -132,6 +132,84 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 	assert.Equal(t, "foo", graphql.SelectedFields(fragmentDef.SelectionSet)[0].Name)
 }
 
+// Tests that location selection for Fields within Fragment Spreads are correctly
+// prioritized, to avoid unnecessary federation steps.
+func TestPlanQuery_includeFragmentsBoundaryTypes(t *testing.T) {
+	// the locations for the schema
+	location1 := "url1"
+	location2 := "url2"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", location1)
+	locations.RegisterURL("BoundaryType", "a", location2)
+	locations.RegisterURL("BoundaryType", "a", location1)
+	locations.RegisterURL("BoundaryType", "b", location2)
+	locations.RegisterURL("BoundaryType", "b", location1)
+	locations.RegisterURL("boundaryA", "fieldA", location2)
+	locations.RegisterURL("boundaryA", "fieldA", location1)
+	locations.RegisterURL("boundaryB", "fieldB", location2)
+	locations.RegisterURL("boundaryB", "fieldB", location1)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: BoundaryType!	
+		}
+
+		type BoundaryType {
+			a: boundaryA!
+			b: boundaryB!
+		}
+
+		type boundaryA {
+			fieldA: String!
+		}
+
+		type boundaryB {
+			fieldB: String!
+		}
+	`)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(
+		&PlanningContext{
+			Query: `
+				query {
+					foo {
+						...Foo
+					}
+				}
+
+				fragment Foo on BoundaryType {
+					a {
+						... aFragment
+					}
+					b {
+						... bFragment
+					}
+				}
+
+				fragment aFragment on boundaryA {
+					fieldA
+				}
+
+				fragment bFragment on boundaryB {
+					fieldB
+				}
+			`,
+			Schema:    schema,
+			Locations: locations,
+		},
+	)
+	if err != nil {
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	assert.Equal(t, len(plans), 1)
+	assert.Equal(t, len(plans[0].RootStep.Then), 1, "Expected only one child step, got: %d", len(plans[0].RootStep.Then))
+	assert.Equal(t, len(plans[0].RootStep.Then[0].Then), 0, "Expected no children steps, got: %d", len(plans[0].RootStep.Then[0].Then))
+}
+
 func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 	// the locations for the schema
 	location1 := "url1"
