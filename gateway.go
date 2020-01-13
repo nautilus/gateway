@@ -61,6 +61,11 @@ func (g *Gateway) Execute(ctx *RequestContext, plans *QueryPlanList) (map[string
 	if len(*plans) == 1 {
 		plan = (*plans)[0]
 	} else {
+		// if we weren't given an operation name then we don't know which one to send
+		if ctx.OperationName == "" {
+			return nil, errors.New("please provide an operation name")
+		}
+
 		// find the plan for the right operation
 		operationPlan, err := plans.ForOperation(ctx.OperationName)
 		if err != nil {
