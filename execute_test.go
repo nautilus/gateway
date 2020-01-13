@@ -1455,7 +1455,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 
 	// we need a planner that will leave behind a simple plan
 	planner := &MockPlanner{
-		QueryPlanList{
+		&QueryPlanList{
 			{
 				Operation: &ast.OperationDefinition{
 					Operation: ast.Query,

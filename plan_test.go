@@ -37,7 +37,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	}
 
 	// the first selection is the only one we care about
-	root := plans[0].RootStep.Then[0]
+	root := (*plans)[0].RootStep.Then[0]
 	// there should only be one selection
 	if len(root.SelectionSet) != 1 {
 		t.Error("encountered the wrong number of selections under root step")
@@ -91,13 +91,13 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 		return
 	}
 
-	if len(plans[0].RootStep.Then) != 1 {
+	if len((*plans)[0].RootStep.Then) != 1 {
 		t.Error("Could not find the step with fragment spread")
 		return
 	}
 
 	// the first selection is the only one we care about
-	root := plans[0].RootStep.Then[0]
+	root := (*plans)[0].RootStep.Then[0]
 
 	// there should only be one selection
 	if len(root.SelectionSet) != 1 {
@@ -172,13 +172,13 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 		return
 	}
 
-	if len(plans[0].RootStep.Then) != 2 {
-		t.Errorf("Encountered incorrect number of steps after root step. Expected 2, found %v", len(plans[0].RootStep.Then))
+	if len((*plans)[0].RootStep.Then) != 2 {
+		t.Errorf("Encountered incorrect number of steps after root step. Expected 2, found %v", len((*plans)[0].RootStep.Then))
 		return
 	}
 
 	// get the step for location 1
-	location1Step := plans[0].RootStep.Then[0]
+	location1Step := (*plans)[0].RootStep.Then[0]
 	// make sure that the step has only one selection (the fragment)
 	if len(location1Step.SelectionSet) != 1 {
 		t.Errorf("Encountered incorrect number of selections under location 1 step. Expected 1, found %v", len(location1Step.SelectionSet))
@@ -187,7 +187,7 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 	assert.Equal(t, &ast.FragmentSpread{Name: "Foo"}, location1Step.SelectionSet[0])
 
 	// get the step for location 2
-	location2Step := plans[0].RootStep.Then[1]
+	location2Step := (*plans)[0].RootStep.Then[1]
 	// make sure that the step has only one selection (the fragment)
 	if len(location2Step.SelectionSet) != 1 {
 		t.Errorf("Encountered incorrect number of selections under location 2 step. Expected 1, found %v", len(location2Step.SelectionSet))
@@ -258,13 +258,13 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 		return
 	}
 
-	if len(plans[0].RootStep.Then) != 2 {
-		t.Errorf("Encountered incorrect number of steps after root step. Expected 2, found %v", len(plans[0].RootStep.Then))
+	if len((*plans)[0].RootStep.Then) != 2 {
+		t.Errorf("Encountered incorrect number of steps after root step. Expected 2, found %v", len((*plans)[0].RootStep.Then))
 		return
 	}
 
 	// get the step for location 1
-	location1Step := plans[0].RootStep.Then[0]
+	location1Step := (*plans)[0].RootStep.Then[0]
 	assert.Equal(t, []string{}, location1Step.InsertionPoint)
 	// make sure that the step has only one selection (the fragment)
 	if len(location1Step.SelectionSet) != 1 {
@@ -273,7 +273,7 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 	}
 
 	// get the step for location 2
-	location2Step := plans[0].RootStep.Then[1]
+	location2Step := (*plans)[0].RootStep.Then[1]
 	assert.Equal(t, []string{}, location2Step.InsertionPoint)
 	// make sure that the step has only one selection (the fragment)
 	if len(location2Step.SelectionSet) != 1 {
@@ -352,7 +352,7 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 	}
 
 	// grab the 2 sibling steps
-	steps := plans[0].RootStep.Then
+	steps := (*plans)[0].RootStep.Then
 	if !assert.Len(t, steps, 2) {
 		return
 	}
@@ -489,7 +489,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 	}
 
 	// the first selection is the only one we care about
-	rootStep := selections[0].RootStep.Then[0]
+	rootStep := (*selections)[0].RootStep.Then[0]
 
 	// there should only be one selection
 	if len(rootStep.SelectionSet) != 1 {
@@ -606,7 +606,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// the third step is grabb CatPhoto.owner.firstName from the user service from the user service
 
 	// the first step should have all users
-	firstStep := plans[0].RootStep.Then[0]
+	firstStep := (*plans)[0].RootStep.Then[0]
 	// make sure we are grabbing values off of Query since its the root
 	assert.Equal(t, "Query", firstStep.ParentType)
 
@@ -756,7 +756,7 @@ func TestPlanQuery_preferParentLocation(t *testing.T) {
 	// there should only be 1 step to this query
 
 	// the first step should have all users
-	firstStep := plans[0].RootStep.Then[0]
+	firstStep := (*plans)[0].RootStep.Then[0]
 	// make sure we are grabbing values off of Query since its the root
 	assert.Equal(t, "Query", firstStep.ParentType)
 
@@ -829,7 +829,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 				{"allUsers"},
 				{"allUsers", "catPhotos"},
 			},
-		}, plans[0].FieldsToScrub)
+		}, (*plans)[0].FieldsToScrub)
 	})
 
 	t.Run("Single Step no Scrubbing", func(t *testing.T) {
@@ -853,7 +853,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 		// places where we want to scrub it
 		assert.Equal(t, map[string][][]string{
 			"id": {},
-		}, plans[0].FieldsToScrub)
+		}, (*plans)[0].FieldsToScrub)
 	})
 
 	t.Run("Existing id", func(t *testing.T) {
@@ -884,7 +884,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 			"id": {
 				{"allUsers", "catPhotos"},
 			},
-		}, plans[0].FieldsToScrub)
+		}, (*plans)[0].FieldsToScrub)
 	})
 }
 
@@ -942,7 +942,7 @@ func TestPlanQuery_groupSiblings(t *testing.T) {
 	// the second queries User.favoriteCatSpecies and User.catPhotos
 
 	// the first step should have all users
-	firstStep := plans[0].RootStep.Then[0]
+	firstStep := (*plans)[0].RootStep.Then[0]
 	// make sure we are grabbing values off of Query since its the root
 	assert.Equal(t, "Query", firstStep.ParentType)
 
@@ -1011,16 +1011,16 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	}
 
 	// we should return only one plan
-	if !assert.Len(t, plans, 1) {
+	if !assert.Len(t, *plans, 1) {
 		return
 	}
 
 	// this plan should have 1 step that should hit the internal API
-	if !assert.Len(t, plans[0].RootStep.Then, 1, "incorrect number of steps in plan") ||
-		!assert.IsType(t, &Gateway{}, plans[0].RootStep.Then[0].Queryer, "first step does not go to the internal API") {
+	if !assert.Len(t, (*plans)[0].RootStep.Then, 1, "incorrect number of steps in plan") ||
+		!assert.IsType(t, &Gateway{}, (*plans)[0].RootStep.Then[0].Queryer, "first step does not go to the internal API") {
 		return
 	}
-	internalStep := plans[0].RootStep.Then[0]
+	internalStep := (*plans)[0].RootStep.Then[0]
 
 	// the step should have 2 after it
 	if !assert.Len(t, internalStep.Then, 2) {
@@ -1141,7 +1141,7 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 	}
 
 	// there is only one step
-	firstStep := plans[0].RootStep.Then[0]
+	firstStep := (*plans)[0].RootStep.Then[0]
 	// make sure it has the right variable dependencies
 	assert.Equal(t, Set{"id": true}, firstStep.Variables)
 
@@ -1217,7 +1217,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 
 	// there is only one direct step
-	steps := plans[0].RootStep.Then
+	steps := (*plans)[0].RootStep.Then
 	if !assert.Len(t, steps, 1) {
 		return
 	}

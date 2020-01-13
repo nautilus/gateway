@@ -234,8 +234,8 @@ func TestGateway(t *testing.T) {
 		// create a new schema with the sources and a planner that will respond with
 		// values that have ids
 		gateway, err := New(sources, WithPlanner(&MockPlanner{
-			QueryPlanList{
-				{
+			&QueryPlanList{
+				&QueryPlan{
 					FieldsToScrub: map[string][][]string{
 						"id": {
 							{"allUsers"},
@@ -389,13 +389,13 @@ func TestGateway(t *testing.T) {
 			return
 		}
 
-		if !assert.Len(t, plans[0].RootStep.Then, 1) {
+		if !assert.Len(t, (*plans)[0].RootStep.Then, 1) {
 			return
 		}
 
 		// invoke the first step
 		res := map[string]interface{}{}
-		err = plans[0].RootStep.Then[0].Queryer.Query(context.Background(), &graphql.QueryInput{
+		err = (*plans)[0].RootStep.Then[0].Queryer.Query(context.Background(), &graphql.QueryInput{
 			Query: query,
 			QueryDocument: &ast.QueryDocument{
 				Operations: ast.OperationList{
@@ -455,9 +455,9 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 	// create a new schema with the sources and a planner that will respond with
 	// values that have ids
 	gateway, err := New(sources, WithPlanner(&MockPlanner{
-		QueryPlanList{
+		&QueryPlanList{
 			// the plan for the Foo operation
-			{
+			&QueryPlan{
 				FieldsToScrub: map[string][][]string{},
 				Operation: &ast.OperationDefinition{
 					Name:      "Foo",
@@ -497,7 +497,7 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 			},
 
 			// the plan for the Bar operation
-			{
+			&QueryPlan{
 				FieldsToScrub: map[string][][]string{},
 				Operation: &ast.OperationDefinition{
 					Name:      "Bar",
