@@ -56,6 +56,60 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 	assert.Len(t, rootField.SelectionSet, 0)
 }
 
+func TestPlanQuery_multipleOperations(t *testing.T) {
+	// the location for the schema
+	location := "url1"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", location)
+	locations.RegisterURL("Query", "bar", location)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: Boolean
+			bar: Boolean
+		}
+	`)
+
+	// compute the plan for a query that just hits one service
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query Foo { 
+				foo 
+			}
+
+			query Bar { 
+				bar
+			}
+		`,
+		Schema:        schema,
+		Locations:     locations,
+		OperationName: "Bar",
+	})
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when building schema: %s", err.Error())
+		return
+	}
+
+	// the first selection is the only one we care about
+	root := plans[0].RootStep.Then[0]
+	// there should only be one selection
+	if len(root.SelectionSet) != 1 {
+		t.Error("encountered the wrong number of selections under root step")
+		return
+	}
+	rootField := graphql.SelectedFields(root.SelectionSet)[0]
+
+	// we need to be asking for Query.foo
+	assert.Equal(t, rootField.Name, "bar")
+
+	// there should be anything selected underneath it
+	assert.Len(t, rootField.SelectionSet, 0)
+}
+
 func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 	// the location for the schema
 	location := "url1"

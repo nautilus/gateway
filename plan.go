@@ -82,10 +82,11 @@ func (p *MinQueriesPlanner) WithQueryerFactory(factory *QueryerFactory) QueryPla
 
 // PlanningContext is the input struct to the Plan method
 type PlanningContext struct {
-	Query     string
-	Schema    *ast.Schema
-	Locations FieldURLMap
-	Gateway   *Gateway
+	Query         string
+	OperationName string
+	Schema        *ast.Schema
+	Locations     FieldURLMap
+	Gateway       *Gateway
 }
 
 // Plan computes the nested selections that will need to be performed

@@ -35,20 +35,21 @@ type Gateway struct {
 
 // RequestContext holds all of the information required to satisfy the user's query
 type RequestContext struct {
-	Context   context.Context
-	Query     string
-	Variables map[string]interface{}
-	CacheKey  string
+	Context       context.Context
+	Query         string
+	OperationName string
+	Variables     map[string]interface{}
+	CacheKey      string
 }
-
 
 func (g *Gateway) GetPlan(ctx *RequestContext) ([]*QueryPlan, error) {
 	// let the persister grab the plan for us
 	return g.queryPlanCache.Retrieve(&PlanningContext{
-		Query:     ctx.Query,
-		Schema:    g.schema,
-		Gateway:   g,
-		Locations: g.fieldURLs,
+		Query:         ctx.Query,
+		OperationName: ctx.OperationName,
+		Schema:        g.schema,
+		Gateway:       g,
+		Locations:     g.fieldURLs,
 	}, &ctx.CacheKey, g.planner)
 }
 
