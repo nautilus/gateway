@@ -52,7 +52,7 @@ type newQueryPlanStepPayload struct {
 // QueryPlanner is responsible for taking a string with a graphql query and returns
 // the steps to fulfill it
 type QueryPlanner interface {
-	Plan(*PlanningContext) (*QueryPlanList, error)
+	Plan(*PlanningContext) (QueryPlanList, error)
 }
 
 // PlannerWithQueryerFactory is an interface for planners with configurable queryer factories
@@ -89,7 +89,7 @@ type PlanningContext struct {
 }
 
 // Plan computes the nested selections that will need to be performed
-func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) (*QueryPlanList, error) {
+func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) (QueryPlanList, error) {
 	// the first thing to do is to parse the query
 	parsedQuery, e := gqlparser.LoadQuery(ctx.Schema, ctx.Query)
 	if e != nil {
@@ -117,7 +117,7 @@ func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) (*QueryPlanList, error) {
 	return plans, nil
 }
 
-func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.QueryDocument) (*QueryPlanList, error) {
+func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.QueryDocument) (QueryPlanList, error) {
 	// an accumulator
 	plans := QueryPlanList{}
 
@@ -293,7 +293,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 	}
 
 	// return the final plan
-	return &plans, nil
+	return plans, nil
 }
 
 type extractSelectionConfig struct {
@@ -764,8 +764,8 @@ FieldLoop:
 // This plan results in a query that has fields that were not explicitly asked for.
 // In order for the executor to know what to filter out of the final reply,
 // we have to leave behind paths to objects that need to be scrubbed.
-func (p *MinQueriesPlanner) generateScrubFields(plans *QueryPlanList, requestSelection ast.SelectionSet) error {
-	for _, plan := range *plans {
+func (p *MinQueriesPlanner) generateScrubFields(plans QueryPlanList, requestSelection ast.SelectionSet) error {
+	for _, plan := range plans {
 		// the list of fields to scrub in this plan
 		fieldsToScrub := map[string][][]string{"id": {}}
 
@@ -964,16 +964,16 @@ type MockErrPlanner struct {
 	Err error
 }
 
-func (p *MockErrPlanner) Plan(*PlanningContext) (*QueryPlanList, error) {
+func (p *MockErrPlanner) Plan(*PlanningContext) (QueryPlanList, error) {
 	return nil, p.Err
 }
 
 // MockPlanner always returns the provided list of plans. Useful in testing.
 type MockPlanner struct {
-	Plans *QueryPlanList
+	Plans QueryPlanList
 }
 
-func (p *MockPlanner) Plan(*PlanningContext) (*QueryPlanList, error) {
+func (p *MockPlanner) Plan(*PlanningContext) (QueryPlanList, error) {
 	return p.Plans, nil
 }
 
@@ -981,9 +981,9 @@ func (p *MockPlanner) Plan(*PlanningContext) (*QueryPlanList, error) {
 type QueryPlanList []*QueryPlan
 
 // ForOperation returns the query plan meant to satisfy the given operation name
-func (l *QueryPlanList) ForOperation(name string) (*QueryPlan, error) {
+func (l QueryPlanList) ForOperation(name string) (*QueryPlan, error) {
 	// look over every plan in the list for the operation with the matching name
-	for _, plan := range *l {
+	for _, plan := range l {
 		if plan.Operation.Name == name {
 			return plan, nil
 		}

@@ -12,10 +12,10 @@ import (
 // MockPlanner always returns the provided list of plans. Useful in testing.
 type testPlannerCounter struct {
 	Count int
-	Plans *QueryPlanList
+	Plans QueryPlanList
 }
 
-func (p *testPlannerCounter) Plan(*PlanningContext) (*QueryPlanList, error) {
+func (p *testPlannerCounter) Plan(*PlanningContext) (QueryPlanList, error) {
 	// increment the count
 	p.Count++
 
@@ -50,7 +50,7 @@ func TestCacheOptions(t *testing.T) {
 func TestNoQueryPlanCache(t *testing.T) {
 	cacheKey := "asdf"
 	// the plan we are expecting back
-	plans := &QueryPlanList{}
+	plans := QueryPlanList{}
 	// instantiate a planner that can count how many times it was invoked
 	planner := &testPlannerCounter{
 		Plans: plans,
@@ -79,7 +79,7 @@ func TestNoQueryPlanCache(t *testing.T) {
 func TestAutomaticQueryPlanCache(t *testing.T) {
 	cacheKey := "asdf"
 	// the plan we are expecting back
-	plans := &QueryPlanList{}
+	plans := QueryPlanList{}
 	// instantiate a planner that can count how many times it was invoked
 	planner := &testPlannerCounter{
 		Plans: plans,
@@ -132,7 +132,7 @@ func TestAutomaticQueryPlanCache_passPlannerErrors(t *testing.T) {
 func TestAutomaticQueryPlanCache_setCacheKey(t *testing.T) {
 	// instantiate a planner that can count how many times it was invoked
 	planner := &testPlannerCounter{
-		Plans: &QueryPlanList{},
+		Plans: QueryPlanList{},
 	}
 
 	// an instance of the NoCache cache
@@ -157,7 +157,7 @@ func TestAutomaticQueryPlanCache_garbageCollection(t *testing.T) {
 	plans := QueryPlanList{}
 	// instantiate a planner that can count how many times it was invoked
 	planner := &testPlannerCounter{
-		Plans: &plans,
+		Plans: plans,
 	}
 
 	// an instance of the NoCache cache

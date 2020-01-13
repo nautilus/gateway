@@ -42,7 +42,7 @@ type RequestContext struct {
 	CacheKey      string
 }
 
-func (g *Gateway) GetPlans(ctx *RequestContext) (*QueryPlanList, error) {
+func (g *Gateway) GetPlans(ctx *RequestContext) (QueryPlanList, error) {
 	// let the persister grab the plan for us
 	return g.queryPlanCache.Retrieve(&PlanningContext{
 		Query:     ctx.Query,
@@ -53,13 +53,13 @@ func (g *Gateway) GetPlans(ctx *RequestContext) (*QueryPlanList, error) {
 }
 
 // Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(ctx *RequestContext, plans *QueryPlanList) (map[string]interface{}, error) {
+func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]interface{}, error) {
 	// the plan we mean to execute
 	var plan *QueryPlan
 
 	// if there is only one plan (one operation) then use it
-	if len(*plans) == 1 {
-		plan = (*plans)[0]
+	if len(plans) == 1 {
+		plan = plans[0]
 	} else {
 		// if we weren't given an operation name then we don't know which one to send
 		if ctx.OperationName == "" {
