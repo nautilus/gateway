@@ -183,7 +183,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Get the plan, and return a 400 if we can't get the plan
-		plan, err := g.GetPlan(requestContext)
+		plan, err := g.GetPlans(requestContext)
 		if err != nil {
 			response, err := json.Marshal(formatErrors(nil, err))
 			if err != nil {

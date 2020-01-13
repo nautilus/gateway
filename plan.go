@@ -49,10 +49,13 @@ type newQueryPlanStepPayload struct {
 	Wrapper        ast.SelectionSet
 }
 
+// QueryPlanList is a list of plans which can be indexed by operation name
+type QueryPlanList []*QueryPlan
+
 // QueryPlanner is responsible for taking a string with a graphql query and returns
 // the steps to fulfill it
 type QueryPlanner interface {
-	Plan(*PlanningContext) ([]*QueryPlan, error)
+	Plan(*PlanningContext) (QueryPlanList, error)
 }
 
 // PlannerWithQueryerFactory is an interface for planners with configurable queryer factories
@@ -82,15 +85,14 @@ func (p *MinQueriesPlanner) WithQueryerFactory(factory *QueryerFactory) QueryPla
 
 // PlanningContext is the input struct to the Plan method
 type PlanningContext struct {
-	Query         string
-	OperationName string
-	Schema        *ast.Schema
-	Locations     FieldURLMap
-	Gateway       *Gateway
+	Query     string
+	Schema    *ast.Schema
+	Locations FieldURLMap
+	Gateway   *Gateway
 }
 
 // Plan computes the nested selections that will need to be performed
-func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) (QueryPlanList, error) {
 	// the first thing to do is to parse the query
 	parsedQuery, e := gqlparser.LoadQuery(ctx.Schema, ctx.Query)
 	if e != nil {
@@ -118,9 +120,9 @@ func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) ([]*QueryPlan, error) {
 	return plans, nil
 }
 
-func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.QueryDocument) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.QueryDocument) (QueryPlanList, error) {
 	// an accumulator
-	plans := []*QueryPlan{}
+	plans := QueryPlanList{}
 
 	for _, operation := range query.Operations {
 		// each operation results in a new query
@@ -765,7 +767,7 @@ FieldLoop:
 // This plan results in a query that has fields that were not explicitly asked for.
 // In order for the executor to know what to filter out of the final reply,
 // we have to leave behind paths to objects that need to be scrubbed.
-func (p *MinQueriesPlanner) generateScrubFields(plans []*QueryPlan, requestSelection ast.SelectionSet) error {
+func (p *MinQueriesPlanner) generateScrubFields(plans QueryPlanList, requestSelection ast.SelectionSet) error {
 	for _, plan := range plans {
 		// the list of fields to scrub in this plan
 		fieldsToScrub := map[string][][]string{"id": {}}
@@ -965,15 +967,15 @@ type MockErrPlanner struct {
 	Err error
 }
 
-func (p *MockErrPlanner) Plan(*PlanningContext) ([]*QueryPlan, error) {
+func (p *MockErrPlanner) Plan(*PlanningContext) (QueryPlanList, error) {
 	return nil, p.Err
 }
 
 // MockPlanner always returns the provided list of plans. Useful in testing.
 type MockPlanner struct {
-	Plans []*QueryPlan
+	Plans QueryPlanList
 }
 
-func (p *MockPlanner) Plan(*PlanningContext) ([]*QueryPlan, error) {
+func (p *MockPlanner) Plan(*PlanningContext) (QueryPlanList, error) {
 	return p.Plans, nil
 }
