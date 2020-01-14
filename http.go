@@ -175,14 +175,15 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 
 		// this might get mutated by the query plan cache so we have to pull it out
 		requestContext := &RequestContext{
-			Context:   r.Context(),
-			Query:     operation.Query,
-			Variables: operation.Variables,
-			CacheKey:  cacheKey,
+			Context:       r.Context(),
+			Query:         operation.Query,
+			OperationName: operation.OperationName,
+			Variables:     operation.Variables,
+			CacheKey:      cacheKey,
 		}
 
 		// Get the plan, and return a 400 if we can't get the plan
-		plan, err := g.GetPlan(requestContext)
+		plan, err := g.GetPlans(requestContext)
 		if err != nil {
 			response, err := json.Marshal(formatErrors(nil, err))
 			if err != nil {

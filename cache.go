@@ -44,7 +44,7 @@ const MessageMissingCachedQuery = "PersistedQueryNotFound"
 
 // QueryPlanCache decides when to compute a plan
 type QueryPlanCache interface {
-	Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) ([]*QueryPlan, error)
+	Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) (QueryPlanList, error)
 }
 
 // WithNoQueryPlanCache is the default option and disables any persisted query behavior
@@ -56,7 +56,7 @@ func WithNoQueryPlanCache() Option {
 type NoQueryPlanCache struct{}
 
 // Retrieve just computes the query plan
-func (p *NoQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) ([]*QueryPlan, error) {
+func (p *NoQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) (QueryPlanList, error) {
 	return planner.Plan(ctx)
 }
 
@@ -74,7 +74,7 @@ func WithAutomaticQueryPlanCache() Option {
 
 type queryPlanCacheItem struct {
 	LastUsed time.Time
-	Value    []*QueryPlan
+	Value    QueryPlanList
 }
 
 // AutomaticQueryPlanCache is a QueryPlanCache that will use the hash if it points to a known query plan,
@@ -117,7 +117,7 @@ func NewAutomaticQueryPlanCache() *AutomaticQueryPlanCache {
 // Retrieve follows the "automatic query persistance" technique. If the hash is known, it will use the referenced query plan.
 // If the hash is not know but the query is provided, it will compute the plan, return it, and save it for later use.
 // If the hash is not known and the query is not provided, it will return with an error prompting the client to provide the hash and query
-func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) ([]*QueryPlan, error) {
+func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) (QueryPlanList, error) {
 
 	// when we're done with retrieving the value we have to clear the cache
 	defer func() {
