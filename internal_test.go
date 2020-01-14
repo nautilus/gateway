@@ -46,7 +46,7 @@ func schemaTestLoadQuery(query string, target interface{}, variables map[string]
 		Query:     query,
 		Variables: variables,
 	}
-	plan, err := gateway.GetPlan(reqCtx)
+	plan, err := gateway.GetPlans(reqCtx)
 	if err != nil {
 		return err
 	}

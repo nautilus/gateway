@@ -1456,7 +1456,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 
 	// we need a planner that will leave behind a simple plan
 	planner := &MockPlanner{
-		[]*QueryPlan{
+		QueryPlanList{
 			{
 				Operation: &ast.OperationDefinition{
 					Operation: ast.Query,
@@ -1503,7 +1503,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 		Context: context.Background(),
 		Query:   "{ values }",
 	}
-	plan, _ := gateway.GetPlan(reqCtx)
+	plan, _ := gateway.GetPlans(reqCtx)
 
 	// execute any think
 	gateway.Execute(reqCtx, plan)

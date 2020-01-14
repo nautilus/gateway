@@ -8,7 +8,7 @@ go:
 
 install:
   # download our task runner
-  - go get -u github.com/alecaivazis/run
+  - go get github.com/alecaivazis/run
   # install the ci dependencies
   - run install:ci
 

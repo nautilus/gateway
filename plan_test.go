@@ -1458,7 +1458,7 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 	}
 
 	// the query we're building goes to the top level Query object
-	operation := plannerBuildQuery("Query", variables, selection, ast.FragmentDefinitionList{})
+	operation := plannerBuildQuery("hoopla", "Query", variables, selection, ast.FragmentDefinitionList{})
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -1467,6 +1467,7 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operations[0].Operation)
 	assert.Equal(t, variables, operation.Operations[0].VariableDefinitions)
+	assert.Equal(t, "hoopla", operation.Operations[0].Name)
 
 	// the selection set should be the same as what we passed in
 	assert.Equal(t, selection, operation.Operations[0].SelectionSet)
@@ -1496,7 +1497,7 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 	}
 
 	// the query we're building goes to the User object
-	operation := plannerBuildQuery(objType, ast.VariableDefinitionList{}, selection, ast.FragmentDefinitionList{})
+	operation := plannerBuildQuery("", objType, ast.VariableDefinitionList{}, selection, ast.FragmentDefinitionList{})
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -1504,6 +1505,9 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operations[0].Operation)
+
+	// operation name should be blank
+	assert.Equal(t, "", operation.Operations[0].Name)
 
 	// there should be one selection (node) with an argument for the id
 	if len(operation.Operations[0].SelectionSet) != 1 {
