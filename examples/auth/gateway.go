@@ -7,7 +7,7 @@ import (
 
 	"github.com/nautilus/gateway"
 	"github.com/nautilus/graphql"
-	"github.com/vektah/gqlparser/ast"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // the first thing we need to define is a middleware for our handler

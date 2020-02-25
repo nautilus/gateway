@@ -13,7 +13,7 @@ import (
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
-	"github.com/vektah/gqlparser/ast"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 type roundTripFunc func(req *http.Request) *http.Response

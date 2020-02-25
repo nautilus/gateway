@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/nautilus/graphql"
-	"github.com/vektah/gqlparser/ast"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // Executor is responsible for executing a query plan against the remote
