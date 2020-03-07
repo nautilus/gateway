@@ -18,6 +18,13 @@ import (
 	"github.com/vektah/gqlparser/ast"
 )
 
+type resultWithErrors struct {
+	Errors []struct {
+		Extensions map[string]string `json:"extensions"`
+		Message    string            `json:"message"`
+	} `json:"errors"`
+}
+
 func TestGraphQLHandler_postMissingQuery(t *testing.T) {
 	schema, err := graphql.LoadSchema(`
 		type Query {
@@ -83,6 +90,13 @@ func TestGraphQLHandler(t *testing.T) {
 
 		// make sure we got an error code
 		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+
+		// verify the graphql error code
+		result, err := readResultWithErrors(responseRecorder, t)
+		if err != nil {
+			assert.Error(t, err)
+		}
+		assert.Equal(t, result.Errors[0].Extensions["code"], "BAD_USER_INPUT")
 	})
 
 	t.Run("Non-object variables fails", func(t *testing.T) {
@@ -151,7 +165,26 @@ func TestGraphQLHandler(t *testing.T) {
 
 		// make sure we got an error code
 		assert.Equal(t, http.StatusInternalServerError, responseRecorder.Result().StatusCode)
+
+		// verify the graphql error code
+		result, err := readResultWithErrors(responseRecorder, t)
+		if err != nil {
+			assert.Error(t, err)
+		}
+		assert.Equal(t, result.Errors[0].Extensions["code"], "UNKNOWN_ERROR")
 	})
+}
+
+func readResultWithErrors(responseRecorder *httptest.ResponseRecorder, t *testing.T) (*resultWithErrors, error) {
+	body, err := ioutil.ReadAll(responseRecorder.Result().Body)
+	if err != nil {
+		return nil, err
+	}
+
+	//result := map[string]interface{}{}
+	result := resultWithErrors{}
+	err = json.Unmarshal(body, &result)
+	return &result, nil
 }
 
 func TestQueryPlanCacheParameters_post(t *testing.T) {
