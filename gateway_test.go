@@ -127,6 +127,18 @@ func TestGateway(t *testing.T) {
 		assert.Equal(t, &factory, gateway.planner.(*MinQueriesPlanner).QueryerFactory)
 	})
 
+	t.Run("WithLocationPriorities", func(t *testing.T) {
+		priorities := []string{"url1", "url2"}
+
+		gateway, err := New(sources, WithLocationPriorities(priorities))
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		assert.Equal(t, priorities, gateway.locationPriorities)
+	})
+
 	t.Run("fieldURLs ignore introspection", func(t *testing.T) {
 		locations := fieldURLs(sources, true)
 
