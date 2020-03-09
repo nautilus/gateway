@@ -27,6 +27,10 @@ type HTTPOperation struct {
 }
 
 func formatErrors(data map[string]interface{}, err error) map[string]interface{} {
+	return formatErrorsWithCode(data, err, "UNKNOWN_ERROR")
+}
+
+func formatErrorsWithCode(data map[string]interface{}, err error, code string) map[string]interface{} {
 	// the final list of formatted errors
 	var errList graphql.ErrorList
 
@@ -35,9 +39,7 @@ func formatErrors(data map[string]interface{}, err error) map[string]interface{}
 		errList = list
 	} else {
 		errList = graphql.ErrorList{
-			&graphql.Error{
-				Message: err.Error(),
-			},
+			graphql.NewError(code, err.Error()),
 		}
 	}
 
@@ -169,7 +171,10 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// if there is no query or cache key
 		if operation.Query == "" && cacheKey == "" {
 			statusCode = http.StatusUnprocessableEntity
-			results = append(results, formatErrors(nil, errors.New("could not find query body")))
+			results = append(
+				results,
+				formatErrorsWithCode(nil, errors.New("could not find query body"), "BAD_USER_INPUT"),
+			)
 			continue
 		}
 
@@ -185,7 +190,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// Get the plan, and return a 400 if we can't get the plan
 		plan, err := g.GetPlans(requestContext)
 		if err != nil {
-			response, err := json.Marshal(formatErrors(nil, err))
+			response, err := json.Marshal(formatErrorsWithCode(nil, err, "GRAPHQL_VALIDATION_FAILED"))
 			if err != nil {
 				// if we couldn't serialize the response then we're in internal error territory
 				response, err = json.Marshal(formatErrors(nil, err))
@@ -200,7 +205,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// fire the query with the request context passed through to execution
 		result, err = g.Execute(requestContext, plan)
 		if err != nil {
-			results = append(results, formatErrors(nil, err))
+			results = append(results, formatErrorsWithCode(nil, err, "INTERNAL_SERVER_ERROR"))
 			continue
 		}
 
