@@ -60,13 +60,19 @@ type PlannerWithQueryerFactory interface {
 	WithQueryerFactory(*QueryerFactory) QueryPlanner
 }
 
+// PlannerWithLocationFactory is an interface for planners with configurable location priorities
+type PlannerWithLocationPriorities interface {
+	WithLocationPriorities(priorities []string) QueryPlanner
+}
+
 // QueryerFactory is a function that returns the queryer to use depending on the context
 type QueryerFactory func(ctx *PlanningContext, url string) graphql.Queryer
 
 // Planner is meant to be embedded in other QueryPlanners to share configuration
 type Planner struct {
-	QueryerFactory *QueryerFactory
-	queryerCache   map[string]graphql.Queryer
+	QueryerFactory     *QueryerFactory
+	queryerCache       map[string]graphql.Queryer
+	LocationPriorities []string
 }
 
 // MinQueriesPlanner does the most basic level of query planning
@@ -77,6 +83,11 @@ type MinQueriesPlanner struct {
 // WithQueryerFactory returns a version of the planner with the factory set
 func (p *MinQueriesPlanner) WithQueryerFactory(factory *QueryerFactory) QueryPlanner {
 	p.Planner.QueryerFactory = factory
+	return p
+}
+
+func (p *MinQueriesPlanner) WithLocationPriorities(priorities []string) QueryPlanner {
+	p.LocationPriorities = priorities
 	return p
 }
 
@@ -634,7 +645,11 @@ FieldLoop:
 				// the field can be found in many locations
 			} else {
 				// locations to prioritize first
-				for _, priority := range []string{config.parentLocation, internalSchemaLocation} {
+				priorities := make([]string, len(p.LocationPriorities), len(p.LocationPriorities)+2)
+				copy(priorities, p.LocationPriorities)
+				priorities = append(priorities, config.parentLocation, internalSchemaLocation)
+
+				for _, priority := range priorities {
 					// look to see if the current location is one of the possible locations
 					for _, location := range possibleLocations {
 						// if the location is the same as the parent
