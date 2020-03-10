@@ -6,6 +6,9 @@ language: go
 go:
   - "1.12"
 
+env:
+  - GO111MODULE=on
+
 install:
   # download our task runner
   - go get github.com/alecaivazis/run
@@ -15,8 +18,9 @@ install:
 script:
   # install the dependencies
   - run install
-  # generate and report the test coverage
-  - run tests:coverage
+  # generate and report the test coverage if we have a token for coveralls
+  - 'if [ "$COVERALLS_TOKEN" != "" ]; then run tests:coverage; fi'
+  - 'if [ "$COVERALLS_TOKEN" = "" ]; then run tests; fi'
 
 before_deploy:
   # build the binaries
