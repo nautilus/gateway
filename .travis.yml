@@ -15,8 +15,9 @@ install:
 script:
   # install the dependencies
   - run install
-  # generate and report the test coverage
-  - run tests:coverage
+  # generate and report the test coverage if we have a token for coveralls
+  - 'if [ "$COVERALLS_TOKEN" != "" ]; then bash run tests:coverage; fi'
+  - 'if [ "$COVERALLS_TOKEN" = "" ]; then bash run tests; fi'
 
 before_deploy:
   # build the binaries
