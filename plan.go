@@ -60,6 +60,11 @@ type PlannerWithQueryerFactory interface {
 	WithQueryerFactory(*QueryerFactory) QueryPlanner
 }
 
+// PlannerWithLocationFactory is an interface for planners with configurable location priorities
+type PlannerWithLocationPriorities interface {
+	WithLocationPriorities(priorities []string) QueryPlanner
+}
+
 // QueryerFactory is a function that returns the queryer to use depending on the context
 type QueryerFactory func(ctx *PlanningContext, url string) graphql.Queryer
 
@@ -72,11 +77,17 @@ type Planner struct {
 // MinQueriesPlanner does the most basic level of query planning
 type MinQueriesPlanner struct {
 	Planner
+	LocationPriorities []string
 }
 
 // WithQueryerFactory returns a version of the planner with the factory set
 func (p *MinQueriesPlanner) WithQueryerFactory(factory *QueryerFactory) QueryPlanner {
 	p.Planner.QueryerFactory = factory
+	return p
+}
+
+func (p *MinQueriesPlanner) WithLocationPriorities(priorities []string) QueryPlanner {
+	p.LocationPriorities = priorities
 	return p
 }
 
@@ -601,18 +612,31 @@ func (p *MinQueriesPlanner) wrapSelectionSet(config *extractSelectionConfig, loc
 
 // selects one location out of possibleLocations, prioritizing the parent's location and the internal schema
 func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *extractSelectionConfig) string {
-	priority := map[string]bool{
-		internalSchemaLocation: true,
-		config.parentLocation:  true,
-	}
-	for _, location := range possibleLocations {
-		if _, ok := priority[location]; ok {
-			return location
+	// if this field can only be found in one location
+	if len(possibleLocations) == 1 {
+		return possibleLocations[0]
+		// the field can be found in many locations
+	} else {
+		// locations to prioritize first
+		priorities := make([]string, len(p.LocationPriorities), len(p.LocationPriorities)+2)
+		copy(priorities, p.LocationPriorities)
+		priorities = append(priorities, config.parentLocation, internalSchemaLocation)
+
+		for _, priority := range priorities {
+			// look to see if the current location is one of the possible locations
+			for _, location := range possibleLocations {
+				// if the location is the same as the parent
+				if location == priority {
+					// assign this field to the parents entry
+					return priority
+				}
+			}
 		}
+
+		// if we got here then this field can be found in multiple services and none of the top priority locations.
+		// for now, just use the first one
+		return possibleLocations[0]
 	}
-	// if no priority is matched, the first location will be returned; this has a bias
-	// towards the first location returned which results in uneven traffic for this location.
-	return possibleLocations[0]
 }
 
 func (p *MinQueriesPlanner) groupSelectionSet(config *extractSelectionConfig) (map[string]ast.SelectionSet, map[string]ast.FragmentDefinitionList, error) {
@@ -645,7 +669,6 @@ func (p *MinQueriesPlanner) groupSelectionSet(config *extractSelectionConfig) (m
 
 			location := p.selectLocation(possibleLocations, config)
 			locationFields[location] = append(locationFields[location], field)
-
 		case *ast.FragmentSpread:
 			log.Debug("Encountered fragment spread ", selection.Name)
 
