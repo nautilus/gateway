@@ -15,15 +15,16 @@ import (
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
 type Gateway struct {
-	sources        []*graphql.RemoteSchema
-	schema         *ast.Schema
-	planner        QueryPlanner
-	executor       Executor
-	merger         Merger
-	middlewares    MiddlewareList
-	queryFields    []*QueryField
-	queryerFactory *QueryerFactory
-	queryPlanCache QueryPlanCache
+	sources            []*graphql.RemoteSchema
+	schema             *ast.Schema
+	planner            QueryPlanner
+	executor           Executor
+	merger             Merger
+	middlewares        MiddlewareList
+	queryFields        []*QueryField
+	queryerFactory     *QueryerFactory
+	queryPlanCache     QueryPlanCache
+	locationPriorities []string
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -149,6 +150,14 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 		}
 	}
 
+	// if we have location priorities to assign
+	if gateway.locationPriorities != nil {
+		// if the planner can accept the priorities
+		if planner, ok := gateway.planner.(PlannerWithLocationPriorities); ok {
+			gateway.planner = planner.WithLocationPriorities(gateway.locationPriorities)
+		}
+	}
+
 	internal := gateway.internalSchema()
 	// find the field URLs before we merge schemas. We need to make sure to include
 	// the fields defined by the gateway's internal schema
@@ -253,6 +262,12 @@ func WithQueryFields(fields ...*QueryField) Option {
 func WithQueryerFactory(factory *QueryerFactory) Option {
 	return func(g *Gateway) {
 		g.queryerFactory = factory
+	}
+}
+
+func WithLocationPriorities(priorities []string) Option {
+	return func(g *Gateway) {
+		g.locationPriorities = priorities
 	}
 }
 

@@ -210,11 +210,17 @@ func executeStep(
 		}
 	}
 
+	operationName := ""
+	if plan != nil && plan.Operation != nil {
+		operationName = plan.Operation.Name
+	}
+
 	// fire the query
 	err := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,
+		OperationName: operationName,
 	}, &queryResult)
 	if err != nil {
 		log.Warn("Network Error: ", err)
