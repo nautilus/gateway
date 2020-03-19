@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -131,12 +132,13 @@ func (l *Logger) FormatSelectionSet(selection ast.SelectionSet) string {
 }
 
 var log *Logger
+var level logrus.Level
 
 func newLogEntry() *logrus.Entry {
 	entry := logrus.New()
 
 	// only log the warning severity or above.
-	entry.SetLevel(logrus.WarnLevel)
+	entry.SetLevel(level)
 
 	// configure the formatter
 	entry.SetFormatter(&logrus.TextFormatter{
@@ -150,4 +152,12 @@ func newLogEntry() *logrus.Entry {
 func init() {
 	log = &Logger{}
 
+	switch os.Getenv("LOGLEVEL") {
+	case "Debug":
+		level = logrus.DebugLevel
+	case "Info":
+		level = logrus.InfoLevel
+	default:
+		level = logrus.WarnLevel
+	}
 }
