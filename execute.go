@@ -89,8 +89,11 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				if payload == nil {
 					continue
 				}
-				log.Debug("Inserting result into ", payload.InsertionPoint)
-				log.Debug("Result: ", payload.Result)
+
+				if len(payload.InsertionPoint) > 0 {
+					log.Debug("Inserting result into ", payload.InsertionPoint)
+					log.Debug("Result: ", payload.Result)
+				}
 
 				// we have to grab the value in the result and write it to the appropriate spot in the
 				// acumulator.
@@ -100,7 +103,10 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 					continue
 				}
 
-				log.Debug("Done. ", result)
+				if len(payload.InsertionPoint) > 0 {
+					log.Debug("Done. ", result)
+				}
+
 				// one of the queries is done
 				stepWg.Done()
 
@@ -276,7 +282,9 @@ func executeStep(
 		}
 	}
 
-	log.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
+	if len(insertionPoint) > 0 {
+		log.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
+	}
 	// send the result to be stitched in with our accumulator
 	resultCh <- &queryExecutionResult{
 		InsertionPoint: insertionPoint,
