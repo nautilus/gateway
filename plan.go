@@ -52,12 +52,17 @@ type newQueryPlanStepPayload struct {
 // QueryPlanner is responsible for taking a string with a graphql query and returns
 // the steps to fulfill it
 type QueryPlanner interface {
-	Plan(*PlanningContext) ([]*QueryPlan, error)
+	Plan(*PlanningContext) (QueryPlanList, error)
 }
 
 // PlannerWithQueryerFactory is an interface for planners with configurable queryer factories
 type PlannerWithQueryerFactory interface {
 	WithQueryerFactory(*QueryerFactory) QueryPlanner
+}
+
+// PlannerWithLocationFactory is an interface for planners with configurable location priorities
+type PlannerWithLocationPriorities interface {
+	WithLocationPriorities(priorities []string) QueryPlanner
 }
 
 // QueryerFactory is a function that returns the queryer to use depending on the context
@@ -72,11 +77,17 @@ type Planner struct {
 // MinQueriesPlanner does the most basic level of query planning
 type MinQueriesPlanner struct {
 	Planner
+	LocationPriorities []string
 }
 
 // WithQueryerFactory returns a version of the planner with the factory set
 func (p *MinQueriesPlanner) WithQueryerFactory(factory *QueryerFactory) QueryPlanner {
 	p.Planner.QueryerFactory = factory
+	return p
+}
+
+func (p *MinQueriesPlanner) WithLocationPriorities(priorities []string) QueryPlanner {
+	p.LocationPriorities = priorities
 	return p
 }
 
@@ -89,7 +100,7 @@ type PlanningContext struct {
 }
 
 // Plan computes the nested selections that will need to be performed
-func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) (QueryPlanList, error) {
 	// the first thing to do is to parse the query
 	parsedQuery, e := gqlparser.LoadQuery(ctx.Schema, ctx.Query)
 	if e != nil {
@@ -117,9 +128,9 @@ func (p *MinQueriesPlanner) Plan(ctx *PlanningContext) ([]*QueryPlan, error) {
 	return plans, nil
 }
 
-func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.QueryDocument) ([]*QueryPlan, error) {
+func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.QueryDocument) (QueryPlanList, error) {
 	// an accumulator
-	plans := []*QueryPlan{}
+	plans := QueryPlanList{}
 
 	for _, operation := range query.Operations {
 		// each operation results in a new query
@@ -171,7 +182,10 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 			// continuously drain the step channel
 			for {
 				select {
-				case payload := <-newSteps:
+				case payload, ok := <-newSteps:
+					if !ok {
+						return
+					}
 					step := &QueryPlanStep{
 						Queryer:             p.GetQueryer(ctx, payload.Location),
 						ParentType:          payload.ParentType,
@@ -241,7 +255,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 					}
 
 					// build up the query document
-					step.QueryDocument = plannerBuildQuery(step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions)
+					step.QueryDocument = plannerBuildQuery(plan.Operation.Name, step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions)
 
 					// we also need to turn the query into a string
 					queryString, err := graphql.PrintQuery(step.QueryDocument)
@@ -284,6 +298,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 			return nil, err
 		// we are done
 		case <-doneCh:
+			close(stepCh)
 		}
 
 	}
@@ -595,13 +610,41 @@ func (p *MinQueriesPlanner) wrapSelectionSet(config *extractSelectionConfig, loc
 	return ast.SelectionSet{selection}, nil
 }
 
+// selects one location out of possibleLocations, prioritizing the parent's location and the internal schema
+func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *extractSelectionConfig) string {
+	// if this field can only be found in one location
+	if len(possibleLocations) == 1 {
+		return possibleLocations[0]
+		// the field can be found in many locations
+	} else {
+		// locations to prioritize first
+		priorities := make([]string, len(p.LocationPriorities), len(p.LocationPriorities)+2)
+		copy(priorities, p.LocationPriorities)
+		priorities = append(priorities, config.parentLocation, internalSchemaLocation)
+
+		for _, priority := range priorities {
+			// look to see if the current location is one of the possible locations
+			for _, location := range possibleLocations {
+				// if the location is the same as the parent
+				if location == priority {
+					// assign this field to the parents entry
+					return priority
+				}
+			}
+		}
+
+		// if we got here then this field can be found in multiple services and none of the top priority locations.
+		// for now, just use the first one
+		return possibleLocations[0]
+	}
+}
+
 func (p *MinQueriesPlanner) groupSelectionSet(config *extractSelectionConfig) (map[string]ast.SelectionSet, map[string]ast.FragmentDefinitionList, error) {
 
 	locationFields := map[string]ast.SelectionSet{}
 	locationFragments := map[string]ast.FragmentDefinitionList{}
 
 	// split each selection into groups of selection sets to be sent to a single service
-FieldLoop:
 	for _, selection := range config.selection {
 		// each kind of selection contributes differently to the final selection set
 		switch selection := selection.(type) {
@@ -624,30 +667,8 @@ FieldLoop:
 				return nil, nil, err
 			}
 
-			// if this field can only be found in one location
-			if len(possibleLocations) == 1 {
-				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
-				// the field can be found in many locations
-			} else {
-				// locations to prioritize first
-				for _, priority := range []string{config.parentLocation, internalSchemaLocation} {
-					// look to see if the current location is one of the possible locations
-					for _, location := range possibleLocations {
-						// if the location is the same as the parent
-						if location == priority {
-							// assign this field to the parents entry
-							locationFields[priority] = append(locationFields[priority], field)
-							// we're done with this field
-							continue FieldLoop
-						}
-					}
-				}
-
-				// if we got here then this field can be found in multiple services and none of the top priority locations.
-				// for now, just use the first one
-				locationFields[possibleLocations[0]] = append(locationFields[possibleLocations[0]], field)
-			}
-
+			location := p.selectLocation(possibleLocations, config)
+			locationFields[location] = append(locationFields[location], field)
 		case *ast.FragmentSpread:
 			log.Debug("Encountered fragment spread ", selection.Name)
 
@@ -687,8 +708,8 @@ FieldLoop:
 						return nil, nil, err
 					}
 
-					// add the field to the location
-					fragmentLocations[fieldLocations[0]] = append(fragmentLocations[fieldLocations[0]], field)
+					fieldLocation := p.selectLocation(fieldLocations, config)
+					fragmentLocations[fieldLocation] = append(fragmentLocations[fieldLocation], field)
 
 				case *ast.FragmentSpread, *ast.InlineFragment:
 					// non-field selections will be handled in the next tick
@@ -760,7 +781,7 @@ FieldLoop:
 // This plan results in a query that has fields that were not explicitly asked for.
 // In order for the executor to know what to filter out of the final reply,
 // we have to leave behind paths to objects that need to be scrubbed.
-func (p *MinQueriesPlanner) generateScrubFields(plans []*QueryPlan, requestSelection ast.SelectionSet) error {
+func (p *MinQueriesPlanner) generateScrubFields(plans QueryPlanList, requestSelection ast.SelectionSet) error {
 	for _, plan := range plans {
 		// the list of fields to scrub in this plan
 		fieldsToScrub := map[string][][]string{"id": {}}
@@ -886,11 +907,12 @@ func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 	return graphql.NewSingleRequestQueryer(url)
 }
 
-func plannerBuildQuery(parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList) *ast.QueryDocument {
+func plannerBuildQuery(operationName, parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList) *ast.QueryDocument {
 	log.Debug("Building Query: \n"+"\tParentType: ", parentType, " ")
 	// build up an operation for the query
 	operation := &ast.OperationDefinition{
 		VariableDefinitions: variables,
+		Name:                operationName,
 	}
 
 	// assign the right operation
@@ -960,15 +982,30 @@ type MockErrPlanner struct {
 	Err error
 }
 
-func (p *MockErrPlanner) Plan(*PlanningContext) ([]*QueryPlan, error) {
+func (p *MockErrPlanner) Plan(*PlanningContext) (QueryPlanList, error) {
 	return nil, p.Err
 }
 
 // MockPlanner always returns the provided list of plans. Useful in testing.
 type MockPlanner struct {
-	Plans []*QueryPlan
+	Plans QueryPlanList
 }
 
-func (p *MockPlanner) Plan(*PlanningContext) ([]*QueryPlan, error) {
+func (p *MockPlanner) Plan(*PlanningContext) (QueryPlanList, error) {
 	return p.Plans, nil
+}
+
+// QueryPlanList is a list of plans which can be indexed by operation name
+type QueryPlanList []*QueryPlan
+
+// ForOperation returns the query plan meant to satisfy the given operation name
+func (l QueryPlanList) ForOperation(name string) (*QueryPlan, error) {
+	// look over every plan in the list for the operation with the matching name
+	for _, plan := range l {
+		if plan.Operation.Name == name {
+			return plan, nil
+		}
+	}
+
+	return nil, errors.New("could not find query for operation " + name)
 }

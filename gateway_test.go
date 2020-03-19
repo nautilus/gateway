@@ -127,6 +127,18 @@ func TestGateway(t *testing.T) {
 		assert.Equal(t, &factory, gateway.planner.(*MinQueriesPlanner).QueryerFactory)
 	})
 
+	t.Run("WithLocationPriorities", func(t *testing.T) {
+		priorities := []string{"url1", "url2"}
+
+		gateway, err := New(sources, WithLocationPriorities(priorities))
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		assert.Equal(t, priorities, gateway.locationPriorities)
+	})
+
 	t.Run("fieldURLs ignore introspection", func(t *testing.T) {
 		locations := fieldURLs(sources, true)
 
@@ -159,10 +171,16 @@ func TestGateway(t *testing.T) {
 		}
 
 		// build a query plan that the executor will follow
-		_, err = gateway.Execute(&RequestContext{
+		reqCtx := &RequestContext{
 			Context: context.Background(),
 			Query:   "{ allUsers { firstName } }",
-		})
+		}
+		plans, err := gateway.GetPlans(reqCtx)
+		if err != nil {
+			t.Errorf("Encountered error building plan.")
+		}
+
+		_, err = gateway.Execute(reqCtx, plans)
 		if err == nil {
 			t.Errorf("Did not encounter error executing plan.")
 		}
@@ -192,12 +210,19 @@ func TestGateway(t *testing.T) {
 			t.Error(err.Error())
 			return
 		}
-
-		// build a query plan that the executor will follow
-		response, err := gateway.Execute(&RequestContext{
+		reqCtx := &RequestContext{
 			Context: context.Background(),
 			Query:   "{ allUsers { firstName } }",
-		})
+		}
+
+		plan, err := gateway.GetPlans(reqCtx)
+		if err != nil {
+			t.Errorf("Encountered error building plan: %s", err.Error())
+			return
+		}
+
+		// build a query plan that the executor will follow
+		response, err := gateway.Execute(reqCtx, plan)
 
 		if err != nil {
 			t.Errorf("Encountered error executing plan: %s", err.Error())
@@ -221,8 +246,8 @@ func TestGateway(t *testing.T) {
 		// create a new schema with the sources and a planner that will respond with
 		// values that have ids
 		gateway, err := New(sources, WithPlanner(&MockPlanner{
-			Plans: []*QueryPlan{
-				{
+			QueryPlanList{
+				&QueryPlan{
 					FieldsToScrub: map[string][][]string{
 						"id": {
 							{"allUsers"},
@@ -302,10 +327,17 @@ func TestGateway(t *testing.T) {
 			return
 		}
 
-		// execute the query
-		res, err := gateway.Execute(&RequestContext{
+		reqCtx := &RequestContext{
 			Context: context.Background(), Query: query,
-		})
+		}
+		plan, err := gateway.GetPlans(reqCtx)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// execute the query
+		res, err := gateway.Execute(reqCtx, plan)
 		if err != nil {
 			t.Error(err.Error())
 			return
@@ -409,6 +441,140 @@ func TestGateway(t *testing.T) {
 		// make sure the result of the queryer matches exepctations
 		assert.Equal(t, map[string]interface{}{"viewer": map[string]interface{}{"id": "1"}}, res)
 	})
+}
+
+func TestGatewayExecuteRespectsOperationName(t *testing.T) {
+	// define a schema source
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: String!
+			bar: String!
+		}
+	`)
+	sources := []*graphql.RemoteSchema{{Schema: schema, URL: "a"}}
+
+	// the query we're going to fire should have two defined operations
+	query := `
+		query Foo {
+			foo 
+		}
+
+		query Bar { 
+			bar 
+		}
+	`
+
+	// create a new schema with the sources and a planner that will respond with
+	// values that have ids
+	gateway, err := New(sources, WithPlanner(&MockPlanner{
+		QueryPlanList{
+			// the plan for the Foo operation
+			&QueryPlan{
+				FieldsToScrub: map[string][][]string{},
+				Operation: &ast.OperationDefinition{
+					Name:      "Foo",
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "foo",
+							Definition: &ast.FieldDefinition{
+								Type: ast.NamedType("String", &ast.Position{}),
+							},
+						},
+					},
+				},
+				RootStep: &QueryPlanStep{
+					Then: []*QueryPlanStep{
+						{
+
+							// this is equivalent to
+							// query { allUsers }
+							ParentType:     "Query",
+							InsertionPoint: []string{},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "foo",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("String", &ast.Position{}),
+									},
+								},
+							},
+							// return a known value we can test against
+							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+								"foo": "foo",
+							}},
+						},
+					},
+				},
+			},
+
+			// the plan for the Bar operation
+			&QueryPlan{
+				FieldsToScrub: map[string][][]string{},
+				Operation: &ast.OperationDefinition{
+					Name:      "Bar",
+					Operation: ast.Query,
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{
+							Name: "bar",
+							Definition: &ast.FieldDefinition{
+								Type: ast.NamedType("String", &ast.Position{}),
+							},
+						},
+					},
+				},
+				RootStep: &QueryPlanStep{
+					Then: []*QueryPlanStep{
+						{
+
+							// this is equivalent to
+							// query { allUsers }
+							ParentType:     "Query",
+							InsertionPoint: []string{},
+							SelectionSet: ast.SelectionSet{
+								&ast.Field{
+									Name: "bar",
+									Definition: &ast.FieldDefinition{
+										Type: ast.NamedType("String", &ast.Position{}),
+									},
+								},
+							},
+							// return a known value we can test against
+							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+								"bar": "bar",
+							}},
+						},
+					},
+				},
+			},
+		},
+	}))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	reqCtx := &RequestContext{
+		Context: context.Background(), Query: query,
+		OperationName: "Bar",
+	}
+	plan, err := gateway.GetPlans(reqCtx)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// execute the query
+	res, err := gateway.Execute(reqCtx, plan)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// make sure we didn't get any ids
+	assert.Equal(t, map[string]interface{}{
+		"bar": "bar",
+	}, res)
 }
 
 func TestFieldURLs_concat(t *testing.T) {

@@ -132,6 +132,84 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 	assert.Equal(t, "foo", graphql.SelectedFields(fragmentDef.SelectionSet)[0].Name)
 }
 
+// Tests that location selection for Fields within Fragment Spreads are correctly
+// prioritized, to avoid unnecessary federation steps.
+func TestPlanQuery_includeFragmentsBoundaryTypes(t *testing.T) {
+	// the locations for the schema
+	location1 := "url1"
+	location2 := "url2"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "foo", location1)
+	locations.RegisterURL("BoundaryType", "a", location2)
+	locations.RegisterURL("BoundaryType", "a", location1)
+	locations.RegisterURL("BoundaryType", "b", location2)
+	locations.RegisterURL("BoundaryType", "b", location1)
+	locations.RegisterURL("boundaryA", "fieldA", location2)
+	locations.RegisterURL("boundaryA", "fieldA", location1)
+	locations.RegisterURL("boundaryB", "fieldB", location2)
+	locations.RegisterURL("boundaryB", "fieldB", location1)
+
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			foo: BoundaryType!	
+		}
+
+		type BoundaryType {
+			a: boundaryA!
+			b: boundaryB!
+		}
+
+		type boundaryA {
+			fieldA: String!
+		}
+
+		type boundaryB {
+			fieldB: String!
+		}
+	`)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(
+		&PlanningContext{
+			Query: `
+				query {
+					foo {
+						...Foo
+					}
+				}
+
+				fragment Foo on BoundaryType {
+					a {
+						... aFragment
+					}
+					b {
+						... bFragment
+					}
+				}
+
+				fragment aFragment on boundaryA {
+					fieldA
+				}
+
+				fragment bFragment on boundaryB {
+					fieldB
+				}
+			`,
+			Schema:    schema,
+			Locations: locations,
+		},
+	)
+	if err != nil {
+		t.Errorf("encountered error when planning query: %s", err.Error())
+		return
+	}
+
+	assert.Equal(t, len(plans), 1)
+	assert.Equal(t, len(plans[0].RootStep.Then), 1, "Expected only one child step, got: %d", len(plans[0].RootStep.Then))
+	assert.Equal(t, len(plans[0].RootStep.Then[0].Then), 0, "Expected no children steps, got: %d", len(plans[0].RootStep.Then[0].Then))
+}
+
 func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 	// the locations for the schema
 	location1 := "url1"
@@ -1380,7 +1458,7 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 	}
 
 	// the query we're building goes to the top level Query object
-	operation := plannerBuildQuery("Query", variables, selection, ast.FragmentDefinitionList{})
+	operation := plannerBuildQuery("hoopla", "Query", variables, selection, ast.FragmentDefinitionList{})
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -1389,6 +1467,7 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operations[0].Operation)
 	assert.Equal(t, variables, operation.Operations[0].VariableDefinitions)
+	assert.Equal(t, "hoopla", operation.Operations[0].Name)
 
 	// the selection set should be the same as what we passed in
 	assert.Equal(t, selection, operation.Operations[0].SelectionSet)
@@ -1418,7 +1497,7 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 	}
 
 	// the query we're building goes to the User object
-	operation := plannerBuildQuery(objType, ast.VariableDefinitionList{}, selection, ast.FragmentDefinitionList{})
+	operation := plannerBuildQuery("", objType, ast.VariableDefinitionList{}, selection, ast.FragmentDefinitionList{})
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -1426,6 +1505,9 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 
 	// it should be a query
 	assert.Equal(t, ast.Query, operation.Operations[0].Operation)
+
+	// operation name should be blank
+	assert.Equal(t, "", operation.Operations[0].Name)
 
 	// there should be one selection (node) with an argument for the id
 	if len(operation.Operations[0].SelectionSet) != 1 {
@@ -1485,4 +1567,123 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 
 func TestPlanQuery_mutationsInSeries(t *testing.T) {
 	t.Skip("Not implemented")
+}
+
+func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
+	location1 := "url1"
+	location2 := "url2"
+
+	type testCase struct {
+		priorities       []string
+		allUsersLocation string
+		lastNameLocation string
+	}
+
+	// The location map for fields for this query.
+	// All fields live on location1. "lastName" is
+	// additionally available on location2.
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "allUsers", location1)
+	locations.RegisterURL("User", "firstName", location1)
+	locations.RegisterURL("User", "lastName", location1)
+	locations.RegisterURL("User", "lastName", location2)
+
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			firstName: String!
+			lastName: String!
+		}
+
+		type Query {
+			allUsers: [User!]!
+		}
+	`)
+
+	// plan function creates a plan based on the passed in priorities
+	plan := func(priorities []string) (QueryPlanList, error) {
+		planner := (&MinQueriesPlanner{}).WithLocationPriorities(priorities)
+
+		selections, err := planner.Plan(&PlanningContext{
+			Query: `
+				{
+					allUsers {
+						firstName
+						lastName
+					}
+				}
+			`,
+			Schema:    schema,
+			Locations: locations,
+		})
+
+		if err != nil {
+			return nil, fmt.Errorf("encountered error when planning query: %s", err.Error())
+		}
+
+		return selections, nil
+	}
+
+	// Test case 1:
+	//
+	// Plan with no manually defined priorities.
+	// locality rules dictate that "lastName" should
+	// be resolved at location1, since it is avaiable
+	// in both locations but the parent "allUsers"
+	// query only lives on location1.
+
+	selections, err := plan([]string{})
+	if err != nil {
+		t.Errorf("test setup failed: %s", err)
+		return
+	}
+
+	// There is only one root-level query (allUsers), so
+	// there should be only one step off the root
+	assert.Equal(t, 1, len(selections[0].RootStep.Then))
+	allUsersStep := selections[0].RootStep.Then[0]
+
+	assert.Equal(t, location1, allUsersStep.Queryer.(*graphql.SingleRequestQueryer).URL())
+
+	// All fields under allUsers can be resolved at the same
+	// location in this case, so there should be no next step.
+	allUsersField := graphql.SelectedFields(allUsersStep.SelectionSet)[0]
+	assert.Equal(t, "allUsers", allUsersField.Name)
+	assert.Equal(t, 0, len(allUsersStep.Then))
+
+	// Test case 2:
+	//
+	// Plan with manually defined priorities.
+	// location2 is prioritized over location1,
+	// so the planner should ignore locality and
+	// resolve lastName at location 2.
+
+	selections, err = plan([]string{location2})
+	if err != nil {
+		t.Errorf("test setup failed: %s", err)
+		return
+	}
+
+	// There is only one root-level query (allUsers), so
+	// there should be only one step off the root
+	assert.Equal(t, 1, len(selections[0].RootStep.Then))
+	allUsersStep = selections[0].RootStep.Then[0]
+
+	assert.Equal(t, location1, allUsersStep.Queryer.(*graphql.SingleRequestQueryer).URL())
+
+	allUsersField = graphql.SelectedFields(allUsersStep.SelectionSet)[0]
+	assert.Equal(t, "allUsers", allUsersField.Name)
+
+	// lastName will be resolved on location2, due to the
+	// priorities list, so there should be another step
+	// to retrieve that field from the other location.
+	assert.Equal(t, 1, len(allUsersStep.Then))
+	lastNameStep := allUsersStep.Then[0]
+
+	// We should only be requesting "lastName" from the other location
+	lastNameSelections := graphql.SelectedFields(lastNameStep.SelectionSet)
+	assert.Equal(t, 1, len(lastNameSelections))
+
+	lastNameField := lastNameSelections[0]
+	assert.Equal(t, "lastName", lastNameField.Name)
+	assert.Equal(t, location2, lastNameStep.Queryer.(*graphql.SingleRequestQueryer).URL())
 }

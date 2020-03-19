@@ -47,7 +47,8 @@ func TestExecutor_plansOfOne(t *testing.T) {
 								"hello",
 								"world",
 							},
-						}},
+						},
+						},
 					},
 				},
 			},
@@ -1455,7 +1456,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 
 	// we need a planner that will leave behind a simple plan
 	planner := &MockPlanner{
-		[]*QueryPlan{
+		QueryPlanList{
 			{
 				Operation: &ast.OperationDefinition{
 					Operation: ast.Query,
@@ -1498,11 +1499,14 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 		return
 	}
 
-	// execute any think
-	gateway.Execute(&RequestContext{
+	reqCtx := &RequestContext{
 		Context: context.Background(),
 		Query:   "{ values }",
-	})
+	}
+	plan, _ := gateway.GetPlans(reqCtx)
+
+	// execute any think
+	gateway.Execute(reqCtx, plan)
 
 	// make sure we called the middleware
 	assert.True(t, called, "Did not call middleware")
@@ -1534,6 +1538,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 		Plan: &QueryPlan{
 			Operation: &ast.OperationDefinition{
 				Operation:           ast.Query,
+				Name:                "hoopla",
 				VariableDefinitions: fullVariableDefs,
 			},
 			RootStep: &QueryPlanStep{
@@ -1568,6 +1573,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 								// and definitions
 								assert.Equal(t, ast.VariableDefinitionList{fullVariableDefs[0]}, input.QueryDocument.Operations[0].VariableDefinitions)
 								assert.Equal(t, "hello", input.Query)
+								assert.Equal(t, "hoopla", input.OperationName)
 
 								return map[string]interface{}{"values": []string{"world"}}, nil
 							},

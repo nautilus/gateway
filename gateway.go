@@ -15,15 +15,16 @@ import (
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
 // that plan
 type Gateway struct {
-	sources        []*graphql.RemoteSchema
-	schema         *ast.Schema
-	planner        QueryPlanner
-	executor       Executor
-	merger         Merger
-	middlewares    MiddlewareList
-	queryFields    []*QueryField
-	queryerFactory *QueryerFactory
-	queryPlanCache QueryPlanCache
+	sources            []*graphql.RemoteSchema
+	schema             *ast.Schema
+	planner            QueryPlanner
+	executor           Executor
+	merger             Merger
+	middlewares        MiddlewareList
+	queryFields        []*QueryField
+	queryerFactory     *QueryerFactory
+	queryPlanCache     QueryPlanCache
+	locationPriorities []string
 
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
@@ -35,30 +36,52 @@ type Gateway struct {
 
 // RequestContext holds all of the information required to satisfy the user's query
 type RequestContext struct {
-	Context   context.Context
-	Query     string
-	Variables map[string]interface{}
-	CacheKey  string
+	Context       context.Context
+	Query         string
+	OperationName string
+	Variables     map[string]interface{}
+	CacheKey      string
 }
 
-// Execute takes a query string, executes it, and returns the response
-func (g *Gateway) Execute(ctx *RequestContext) (map[string]interface{}, error) {
+func (g *Gateway) GetPlans(ctx *RequestContext) (QueryPlanList, error) {
 	// let the persister grab the plan for us
-	plan, err := g.queryPlanCache.Retrieve(&PlanningContext{
+	return g.queryPlanCache.Retrieve(&PlanningContext{
 		Query:     ctx.Query,
 		Schema:    g.schema,
 		Gateway:   g,
 		Locations: g.fieldURLs,
 	}, &ctx.CacheKey, g.planner)
-	if err != nil {
-		return nil, err
+}
+
+// Execute takes a query string, executes it, and returns the response
+func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]interface{}, error) {
+	// the plan we mean to execute
+	var plan *QueryPlan
+
+	// if there is only one plan (one operation) then use it
+	if len(plans) == 1 {
+		plan = plans[0]
+	} else {
+		// if we weren't given an operation name then we don't know which one to send
+		if ctx.OperationName == "" {
+			return nil, errors.New("please provide an operation name")
+		}
+
+		// find the plan for the right operation
+		operationPlan, err := plans.ForOperation(ctx.OperationName)
+		if err != nil {
+			return nil, err
+		}
+
+		// use the one for the operation
+		plan = operationPlan
 	}
 
 	// build up the execution context
 	executionContext := &ExecutionContext{
 		RequestContext:     ctx.Context,
 		RequestMiddlewares: g.requestMiddlewares,
-		Plan:               plan[0],
+		Plan:               plan,
 		Variables:          ctx.Variables,
 	}
 
@@ -124,6 +147,14 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 		// if the planner can accept the factory
 		if planner, ok := gateway.planner.(PlannerWithQueryerFactory); ok {
 			gateway.planner = planner.WithQueryerFactory(gateway.queryerFactory)
+		}
+	}
+
+	// if we have location priorities to assign
+	if gateway.locationPriorities != nil {
+		// if the planner can accept the priorities
+		if planner, ok := gateway.planner.(PlannerWithLocationPriorities); ok {
+			gateway.planner = planner.WithLocationPriorities(gateway.locationPriorities)
 		}
 	}
 
@@ -231,6 +262,12 @@ func WithQueryFields(fields ...*QueryField) Option {
 func WithQueryerFactory(factory *QueryerFactory) Option {
 	return func(g *Gateway) {
 		g.queryerFactory = factory
+	}
+}
+
+func WithLocationPriorities(priorities []string) Option {
+	return func(g *Gateway) {
+		g.locationPriorities = priorities
 	}
 }
 
