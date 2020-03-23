@@ -31,7 +31,6 @@ jobs:
           run tests:coverage
 
       - name: Report to Coveralls
-        uses: coverallsapp/github-action@master
+      - uses: shogo82148/actions-goveralls@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: ./coverage.out
+          path-to-profile: coverage.out
