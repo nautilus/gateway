@@ -290,10 +290,7 @@ func max(a, b int) int {
 }
 
 func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDefs ast.FragmentDefinitionList) (*ast.Field, error) {
-	log.Debug(graphql.FormatSelectionSet(selectionSet))
 	selectionSetFragments, err := graphql.ApplyFragments(selectionSet, fragmentDefs)
-	log.Debug(graphql.FormatSelectionSet(selectionSet))
-	log.Debug("^^^^ after")
 	if err != nil {
 		return nil, err
 	}
@@ -318,8 +315,6 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 	// track the root of the selection set while  we walk
 	selectionSetRoot := selectionSet
 
-	log.Debug(graphql.FormatSelectionSet(selectionSetRoot))
-
 	// a place to refer to parts of the results
 	resultChunk := result
 
@@ -342,13 +337,9 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		// the point in the steps insertion path that we want to add
 		point := targetPoints[pointI]
 
-		log.Debug("Looking for ", point)
-
-		log.Debug(graphql.FormatSelectionSet(selectionSetRoot))
 		// find the selection node in the AST corresponding to the point
 		var foundSelection *ast.Field
 		foundSelection, err := findSelection(point, selectionSetRoot, fragmentDefs)
-		log.Debug(graphql.FormatSelectionSet(selectionSetRoot))
 		if err != nil {
 			log.Debug("Error looking for selection")
 			return [][]string{}, err
