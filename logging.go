@@ -75,7 +75,7 @@ func newLogEntry() *logrus.Entry {
 	entry := logrus.New()
 
 	// only log the warning severity or above.
-	entry.SetLevel(logrus.DebugLevel)
+	entry.SetLevel(logrus.WarnLevel)
 
 	// configure the formatter
 	entry.SetFormatter(&logrus.TextFormatter{

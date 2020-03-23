@@ -26,6 +26,4 @@ require (
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )
 
-replace github.com/nautilus/graphql => ../graphql
-
 go 1.13
