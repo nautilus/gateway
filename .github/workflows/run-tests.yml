@@ -10,9 +10,16 @@ jobs:
 
     steps:
       - name: Install Go
+        id: go
         uses: actions/setup-go@v1
         with:
-          version: 1.13
+          go-version: 1.13
+
+      - name: Checkout source
+        uses: actions/checkout@master
+        with:
+          ref: ${{ github.ref }}
+          path: ${{ go.module-path }}
 
       - name: Install Dependencies
         run: |
@@ -21,6 +28,8 @@ jobs:
           export PATH=${PATH}:`go env GOPATH`/bin
           go get github.com/alecaivazis/run
           run install:ci
+        working-directory: ${{ go.module-path }}
 
       - name: Run Tests
         run: run tests:coverage
+        working-directory: ${{ go.module-path }}
