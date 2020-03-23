@@ -1,0 +1,21 @@
+name: Precheck
+
+# run this workflow on commits and pull requests
+on: [push, pull_request]
+
+jobs:
+  tests:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v1
+        with:
+          version: 1.13
+
+      - name: Install Dependencies
+        run: go get github.com/alecaivazis/run && run install:ci
+
+      - name: Run Tests
+        run: run tests:coverage
