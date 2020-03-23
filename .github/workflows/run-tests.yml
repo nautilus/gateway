@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install Go
+      - name: Use Go 1.13
         uses: actions/setup-go@v1
         with:
           go-version: 1.13
@@ -19,15 +19,18 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-      - name: Install runner
-        run: go get github.com/alecaivazis/run
-
-      - name: Install Dependencies
+      - name: Install runner and dependencies
         run: |
+          go get github.com/alecaivazis/run
           export PATH=${PATH}:`go env GOPATH`/bin
           run install:ci
 
-      - name: Run Tests
+      - name: Run tests
         run: |
           export PATH=${PATH}:`go env GOPATH`/bin
           run tests:coverage
+
+      - name: Report to Coveralls
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

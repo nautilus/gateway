@@ -3,7 +3,6 @@ task "install:ci" {
     command     = <<EOF
     go get \
         golang.org/x/tools/cmd/cover \
-        github.com/mattn/goveralls \
         github.com/tcnksm/ghr \
         github.com/mitchellh/gox
     EOF
@@ -23,7 +22,6 @@ task "tests:coverage" {
     description = "Run the tests, generate a coverage report, and report it to coveralls"
     pipeline    = [
         "go test -v -covermode=atomic -coverprofile=coverage.out {% .files %}",
-        "goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN"
     ]
 }
 
