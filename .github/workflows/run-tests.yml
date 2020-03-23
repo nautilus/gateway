@@ -1,4 +1,4 @@
-name: Precheck
+name: CI Checks
 
 # run this workflow on commits and pull requests
 on: [push, pull_request]
