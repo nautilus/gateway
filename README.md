@@ -1,6 +1,6 @@
 # nautilus/gateway
 
-[![Build Status](https://travis-ci.org/nautilus/gateway.svg?branch=master)](https://travis-ci.org/nautilus/gateway) [![Coverage Status](https://coveralls.io/repos/github/nautilus/gateway/badge.svg?branch=master)](https://coveralls.io/github/nautilus/gateway?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/nautilus/gateway)](https://goreportcard.com/report/github.com/nautilus/gateway)
+![CI Checks](https://github.com/nautilus/gateway/workflows/CI%20Checks/badge.svg) [![Coverage Status](https://coveralls.io/repos/github/nautilus/gateway/badge.svg?branch=master)](https://coveralls.io/github/nautilus/gateway?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/nautilus/gateway)](https://goreportcard.com/report/github.com/nautilus/gateway)
 
 A standalone service designed to consolidate your graphql APIs into one endpoint.
 
@@ -23,5 +23,5 @@ arguments to pass the executable, run `./gateway --help`.
 ## Versioning
 
 This project is built as a go module and follows the practices outlined in the [spec](https://github.com/golang/go/wiki/Modules). Please consider all APIs experimental and subject
-to change until v1 has been released at which point semantic versioning will be strictly followed. Before 
+to change until v1 has been released at which point semantic versioning will be strictly followed. Before
 then, minor version bumps denote an API breaking change.
