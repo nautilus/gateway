@@ -2,7 +2,6 @@ task "install:ci" {
     description = "Install the necessary dependencies to run in CI. does not run `install`"
     command     = <<EOF
     go get \
-        golang.org/x/tools/cmd/cover \
         github.com/tcnksm/ghr \
         github.com/mitchellh/gox
     EOF
