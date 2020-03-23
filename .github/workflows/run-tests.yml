@@ -21,11 +21,11 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # add executables installed with go get to PATH
-          # https://github.com/actions/setup-go/issues/14
           export PATH=${PATH}:`go env GOPATH`/bin
           go get github.com/alecaivazis/run
           run install:ci
 
       - name: Run Tests
-        run: run tests:coverage
+        run: |
+          export PATH=${PATH}:`go env GOPATH`/bin
+          run tests:coverage
