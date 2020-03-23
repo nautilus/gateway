@@ -376,8 +376,6 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 			if !ok {
 				return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootValue)
 			}
-			log.Debug("-->", rootList)
-
 			// build up a new list of insertion points
 			newInsertionPoints := [][]string{}
 
@@ -418,7 +416,6 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 				} else {
 					newBranchSet = append(newBranchSet, []string{entryPoint})
 				}
-				fmt.Println("before this")
 
 				// compute the insertion points for that entry
 				entryInsertionPoints, err := executorFindInsertionPoints(resultLock, targetPoints, selectionSetRoot, resultEntry, newBranchSet, fragmentDefs)
