@@ -19,10 +19,12 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
+      - name: Install runner
+        run: go get github.com/alecaivazis/run
+
       - name: Install Dependencies
         run: |
           export PATH=${PATH}:`go env GOPATH`/bin
-          go get github.com/alecaivazis/run
           run install:ci
 
       - name: Run Tests
