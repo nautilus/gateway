@@ -259,8 +259,6 @@ func executeStep(
 		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
 		// insertion point. For lists, insertion points look like: ["user", "friends:0", "catPhotos:0", "owner"]
 		for _, dependent := range step.Then {
-			log.Debug("Looking for insertion points for ", dependent.InsertionPoint, "\n\n")
-
 			insertPoints, err := executorFindInsertionPoints(resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint}, step.FragmentDefinitions)
 			if err != nil {
 				errCh <- err
@@ -292,7 +290,10 @@ func max(a, b int) int {
 }
 
 func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDefs ast.FragmentDefinitionList) (*ast.Field, error) {
+	log.Debug(graphql.FormatSelectionSet(selectionSet))
 	selectionSetFragments, err := graphql.ApplyFragments(selectionSet, fragmentDefs)
+	log.Debug(graphql.FormatSelectionSet(selectionSet))
+	log.Debug("^^^^ after")
 	if err != nil {
 		return nil, err
 	}
@@ -305,6 +306,7 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 			}
 		}
 	}
+
 	return nil, nil
 }
 
@@ -315,6 +317,8 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 	// track the root of the selection set while  we walk
 	selectionSetRoot := selectionSet
+
+	log.Debug(graphql.FormatSelectionSet(selectionSetRoot))
 
 	// a place to refer to parts of the results
 	resultChunk := result
@@ -340,15 +344,19 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 		log.Debug("Looking for ", point)
 
-		// track wether we found a selection
+		log.Debug(graphql.FormatSelectionSet(selectionSetRoot))
+		// find the selection node in the AST corresponding to the point
 		var foundSelection *ast.Field
 		foundSelection, err := findSelection(point, selectionSetRoot, fragmentDefs)
+		log.Debug(graphql.FormatSelectionSet(selectionSetRoot))
 		if err != nil {
+			log.Debug("Error looking for selection")
 			return [][]string{}, err
 		}
 
 		// if we didn't find a selection
 		if foundSelection == nil {
+			log.Debug("No selection")
 			return [][]string{}, nil
 		}
 
@@ -377,6 +385,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 			if !ok {
 				return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootValue)
 			}
+			log.Debug("-->", rootList)
 
 			// build up a new list of insertion points
 			newInsertionPoints := [][]string{}
@@ -418,6 +427,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 				} else {
 					newBranchSet = append(newBranchSet, []string{entryPoint})
 				}
+				fmt.Println("before this")
 
 				// compute the insertion points for that entry
 				entryInsertionPoints, err := executorFindInsertionPoints(resultLock, targetPoints, selectionSetRoot, resultEntry, newBranchSet, fragmentDefs)

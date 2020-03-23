@@ -477,7 +477,7 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 		return
 	}
 	loc1SubSelection, ok := loc1Selection.SelectionSet[0].(*ast.InlineFragment)
-	if !assert.True(t, ok, "first sub-selection in location 1 selection is not an inline fragment: \n%v", log.FormatSelectionSet(loc1Selection.SelectionSet)) {
+	if !assert.True(t, ok, "first sub-selection in location 1 selection is not an inline fragment: \n%v", graphql.FormatSelectionSet(loc1Selection.SelectionSet)) {
 		return
 	}
 
@@ -1371,7 +1371,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 
 	// there should be one selection on the step
 	if !assert.Len(t, secondStep.SelectionSet, 1,
-		"Second step had the wrong number of selections %v", log.FormatSelectionSet(secondStep.SelectionSet),
+		"Second step had the wrong number of selections %v", graphql.FormatSelectionSet(secondStep.SelectionSet),
 	) {
 		return
 	}
@@ -1389,7 +1389,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 	// make sure that the definition has 2 selections: a field and a fragment spread
 	if !assert.Len(t, defn.SelectionSet, 2, "QueryFragment in the second step had the wrong definition") {
-		fmt.Println(log.FormatSelectionSet(defn.SelectionSet))
+		fmt.Println(graphql.FormatSelectionSet(defn.SelectionSet))
 		return
 	}
 
