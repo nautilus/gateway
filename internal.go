@@ -6,7 +6,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql/introspection"
 	"github.com/mitchellh/mapstructure"
-	"github.com/vektah/gqlparser/ast"
+	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/nautilus/graphql"
 )

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/vektah/gqlparser"
-	"github.com/vektah/gqlparser/ast"
+	"github.com/vektah/gqlparser/v2"
+	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/nautilus/graphql"
 )
@@ -214,7 +214,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 							"\tSelectionSet: \n%s",
 						step.ParentType,
 						payload.InsertionPoint,
-						log.FormatSelectionSet(payload.SelectionSet),
+						graphql.FormatSelectionSet(payload.SelectionSet),
 					))
 
 					// we are going to start walking down the operations selection set and let
