@@ -1,0 +1,40 @@
+name: Upload Executables
+
+# run this workflow when a release is published
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Use Go 1.13
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.13
+
+      - name: Checkout source
+        uses: actions/checkout@master
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Install runner and dependencies
+        run: |
+          go get github.com/alecaivazis/run
+          export PATH=${PATH}:`go env GOPATH`/bin
+          run install:ci
+
+      - name: Get the version
+        id: get_version
+        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+
+      - name: Build and deploy binaries
+        run: |
+          export PATH=${PATH}:`go env GOPATH`/bin
+          run build
+          run deploy
+        with:
+          version: ${{ steps.get_version.outputs.VERSION }}

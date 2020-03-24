@@ -2,8 +2,6 @@ task "install:ci" {
     description = "Install the necessary dependencies to run in CI. does not run `install`"
     command     = <<EOF
     go get \
-        golang.org/x/tools/cmd/cover \
-        github.com/mattn/goveralls \
         github.com/tcnksm/ghr \
         github.com/mitchellh/gox
     EOF
@@ -23,7 +21,6 @@ task "tests:coverage" {
     description = "Run the tests, generate a coverage report, and report it to coveralls"
     pipeline    = [
         "go test -v -covermode=atomic -coverprofile=coverage.out {% .files %}",
-        "$HOME/gopath/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN"
     ]
 }
 
@@ -36,7 +33,7 @@ task "build" {
 
 task "deploy" {
     description = "Push the built artifacts to the release. assumes its running in CI"
-    command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway $TRAVIS_TAG ./bin"
+    command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway $INPUT_VERSION ./bin"
 }
 
 variables {
