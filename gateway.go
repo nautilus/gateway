@@ -89,7 +89,7 @@ func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]
 	// execute the plan and return the results
 	result, err := g.executor.Execute(executionContext)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 
 	// now that we have our response, throw it through the list of middlewarse
