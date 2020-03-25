@@ -187,6 +187,14 @@ func executeStep(
 			return
 		}
 
+		if pointData.ID == "<nil>" {
+			resultCh <- &queryExecutionResult{
+				InsertionPoint: insertionPoint,
+				Result:         nil,
+			}
+			return
+		}
+
 		// if we dont have an id
 		if pointData.ID == "" {
 			errCh <- fmt.Errorf("Could not find id in path")
@@ -477,18 +485,10 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 				}
 			} else {
-				rootObj, ok := rootValue.(map[string]interface{})
-				if !ok {
-					return nil, fmt.Errorf("Root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
-				}
-
+				rootObj, _ := rootValue.(map[string]interface{})
 				for i := range oldBranch {
 					// look up the id of the object
 					id := rootObj["id"]
-					if !ok {
-						return nil, errors.New("Could not find the id for the object")
-					}
-
 					oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
 				}
 			}
@@ -590,6 +590,11 @@ func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex,
 
 func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}) error {
 	// log.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
+
+	if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil {
+		return nil
+	}
+
 	if len(path) > 0 {
 		// a pointer to the objects we are modifying
 		obj, err := executorExtractValue(target, resultLock, path)
