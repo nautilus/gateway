@@ -200,7 +200,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		// fire the query with the request context passed through to execution
 		result, err = g.Execute(requestContext, plan)
 		if err != nil {
-			results = append(results, formatErrors(nil, err))
+			results = append(results, formatErrors(result, err))
 			continue
 		}
 
