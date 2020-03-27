@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/nautilus/graphql"
-	"github.com/vektah/gqlparser/ast"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // Executor is responsible for executing a query plan against the remote
@@ -210,11 +210,17 @@ func executeStep(
 		}
 	}
 
+	operationName := ""
+	if plan != nil && plan.Operation != nil {
+		operationName = plan.Operation.Name
+	}
+
 	// fire the query
 	err := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,
+		OperationName: operationName,
 	}, &queryResult)
 	if err != nil {
 		log.Warn("Network Error: ", err)
@@ -253,8 +259,6 @@ func executeStep(
 		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
 		// insertion point. For lists, insertion points look like: ["user", "friends:0", "catPhotos:0", "owner"]
 		for _, dependent := range step.Then {
-			log.Debug("Looking for insertion points for ", dependent.InsertionPoint, "\n\n")
-
 			insertPoints, err := executorFindInsertionPoints(resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint}, step.FragmentDefinitions)
 			if err != nil {
 				errCh <- err
@@ -299,6 +303,7 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 			}
 		}
 	}
+
 	return nil, nil
 }
 
@@ -332,17 +337,17 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		// the point in the steps insertion path that we want to add
 		point := targetPoints[pointI]
 
-		log.Debug("Looking for ", point)
-
-		// track wether we found a selection
+		// find the selection node in the AST corresponding to the point
 		var foundSelection *ast.Field
 		foundSelection, err := findSelection(point, selectionSetRoot, fragmentDefs)
 		if err != nil {
+			log.Debug("Error looking for selection")
 			return [][]string{}, err
 		}
 
 		// if we didn't find a selection
 		if foundSelection == nil {
+			log.Debug("No selection")
 			return [][]string{}, nil
 		}
 
@@ -371,7 +376,6 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 			if !ok {
 				return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootValue)
 			}
-
 			// build up a new list of insertion points
 			newInsertionPoints := [][]string{}
 

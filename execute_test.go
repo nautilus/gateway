@@ -13,7 +13,7 @@ import (
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
-	"github.com/vektah/gqlparser/ast"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 type roundTripFunc func(req *http.Request) *http.Response
@@ -47,7 +47,8 @@ func TestExecutor_plansOfOne(t *testing.T) {
 								"hello",
 								"world",
 							},
-						}},
+						},
+						},
 					},
 				},
 			},
@@ -1537,6 +1538,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 		Plan: &QueryPlan{
 			Operation: &ast.OperationDefinition{
 				Operation:           ast.Query,
+				Name:                "hoopla",
 				VariableDefinitions: fullVariableDefs,
 			},
 			RootStep: &QueryPlanStep{
@@ -1571,6 +1573,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 								// and definitions
 								assert.Equal(t, ast.VariableDefinitionList{fullVariableDefs[0]}, input.QueryDocument.Operations[0].VariableDefinitions)
 								assert.Equal(t, "hello", input.Query)
+								assert.Equal(t, "hoopla", input.OperationName)
 
 								return map[string]interface{}{"values": []string{"world"}}, nil
 							},

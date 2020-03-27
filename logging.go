@@ -1,11 +1,8 @@
 package gateway
 
 import (
-	"fmt"
-	"strings"
-
+	"github.com/nautilus/graphql"
 	"github.com/sirupsen/logrus"
-	"github.com/vektah/gqlparser/ast"
 )
 
 // Logger handles the logging in the gateway library
@@ -69,65 +66,7 @@ func (l *Logger) QueryPlanStep(step *QueryPlanStep) {
 		"insertion point": step.InsertionPoint,
 	}).Info(step.ParentType)
 
-	log.Info(l.FormatSelectionSet(step.SelectionSet))
-}
-
-func (l *Logger) indentPrefix(level int) string {
-	acc := "\n"
-	// build up the prefix
-	for i := 0; i <= level; i++ {
-		acc += "    "
-	}
-
-	return acc
-}
-func (l *Logger) selectionSelectionSet(level int, selectionSet ast.SelectionSet) string {
-	acc := " {"
-	// and any sub selection
-	acc += l.selection(level+1, selectionSet)
-	acc += l.indentPrefix(level) + "}"
-
-	return acc
-}
-
-func (l *Logger) selection(level int, selectionSet ast.SelectionSet) string {
-	acc := ""
-
-	for _, selection := range selectionSet {
-		acc += l.indentPrefix(level)
-		switch selection := selection.(type) {
-		case *ast.Field:
-			// add the field name
-			acc += selection.Name
-			if len(selection.SelectionSet) > 0 {
-				acc += l.selectionSelectionSet(level, selection.SelectionSet)
-			}
-		case *ast.InlineFragment:
-			// print the fragment name
-			acc += fmt.Sprintf("... on %v", selection.TypeCondition) +
-				l.selectionSelectionSet(level, selection.SelectionSet)
-		case *ast.FragmentSpread:
-			// print the fragment name
-			acc += "..." + selection.Name
-		}
-	}
-
-	return acc
-}
-
-// FormatSelectionSet returns a pretty printed version of a selection set
-func (l *Logger) FormatSelectionSet(selection ast.SelectionSet) string {
-	acc := "{"
-
-	insides := l.selection(0, selection)
-
-	if strings.TrimSpace(insides) != "" {
-		acc += insides + "\n}"
-	} else {
-		acc += "}"
-	}
-
-	return acc
+	log.Info(graphql.FormatSelectionSet(step.SelectionSet))
 }
 
 var log *Logger
