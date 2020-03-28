@@ -33,7 +33,7 @@ task "build" {
 
 task "deploy" {
     description = "Push the built artifacts to the release. assumes its running in CI"
-    command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway $INPUT_VERSION ./bin"
+    command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway $VERSION ./bin"
 }
 
 variables {
