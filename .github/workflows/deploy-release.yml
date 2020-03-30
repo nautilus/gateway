@@ -35,6 +35,4 @@ jobs:
         run: |
           export PATH=${PATH}:`go env GOPATH`/bin
           run build
-          run deploy
-        with:
-          version: ${{ steps.get_version.outputs.VERSION }}
+          VERSION=${{ steps.get_version.outputs.VERSION }} run deploy
