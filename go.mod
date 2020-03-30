@@ -11,7 +11,7 @@ require (
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/matryer/moq v0.0.0-20200125112110-7615cbe60268 // indirect
 	github.com/mitchellh/mapstructure v1.2.2
-	github.com/nautilus/graphql v0.0.8
+	github.com/nautilus/graphql v0.0.9
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.4.2
