@@ -368,6 +368,16 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		// get the type of the object in question
 		selectionType := foundSelection.Definition.Type
 
+		if rootValue == nil {
+			if selectionType.NonNull {
+				err := fmt.Errorf("Received null for required field: %v", foundSelection.Name)
+				log.Warn(err)
+				return nil, err
+			} else {
+				return nil, nil
+			}
+		}
+
 		// if the type is a list
 		if selectionType.Elem != nil {
 			log.Debug("Selection should be a list")
