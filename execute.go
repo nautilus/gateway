@@ -159,9 +159,7 @@ func executeStep(
 	errCh chan error,
 	stepWg *sync.WaitGroup,
 ) {
-	log.Debug("")
-	log.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
-
+	log.Info("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
 	// log the query
 	log.QueryPlanStep(step)
 
@@ -231,9 +229,9 @@ func executeStep(
 	}
 
 	// fire the query
-	log.Debug(spew.Sdump(queryer))
-	log.Debug("Query:", step.QueryString)
-	log.Debug("Variables:", variables)
+	log.Info(spew.Sdump(queryer))
+	log.Info("Query:", step.QueryString)
+	log.Info("Variables:", variables)
 	err := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
@@ -285,7 +283,7 @@ func executeStep(
 
 			// this dependent needs to fire for every object that the insertion point references
 			for _, insertionPoint := range insertPoints {
-				log.Info("Spawn step to be inserted into ", dependent.ParentType, " ", insertionPoint)
+				log.Info("Spawn step to be inserted in ", dependent.ParentType, ". Insertion point: ", insertionPoint)
 				stepWg.Add(1)
 				go executeStep(ctx, plan, dependent, insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
 			}
