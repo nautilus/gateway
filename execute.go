@@ -10,6 +10,8 @@ import (
 
 	"github.com/nautilus/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 // Executor is responsible for executing a query plan against the remote
@@ -160,8 +162,6 @@ func executeStep(
 	log.Debug("")
 	log.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
 
-	log.Debug(step.SelectionSet)
-
 	// log the query
 	log.QueryPlanStep(step)
 
@@ -179,6 +179,7 @@ func executeStep(
 	// the id of the object we are query is defined by the last step in the realized insertion point
 	if len(insertionPoint) > 0 {
 		head := insertionPoint[max(len(insertionPoint)-1, 0)]
+		log.Debug("Head: ", head)
 
 		// get the data of the point
 		pointData, err := executorGetPointData(head)
@@ -230,6 +231,9 @@ func executeStep(
 	}
 
 	// fire the query
+	log.Debug(spew.Sdump(queryer))
+	log.Debug("Query:", step.QueryString)
+	log.Debug("Variables:", variables)
 	err := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
@@ -281,7 +285,7 @@ func executeStep(
 
 			// this dependent needs to fire for every object that the insertion point references
 			for _, insertionPoint := range insertPoints {
-				log.Info("Spawn ", insertionPoint)
+				log.Info("Spawn step to be inserted into ", dependent.ParentType, " ", insertionPoint)
 				stepWg.Add(1)
 				go executeStep(ctx, plan, dependent, insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
 			}
@@ -367,7 +371,6 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 			return [][]string{}, nil
 		}
 
-		log.Debug("")
 		log.Debug("Found Selection for: ", point)
 		log.Debug("Result Chunk: ", resultChunk)
 		// make sure we are looking at the top of the selection set next time
