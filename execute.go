@@ -330,7 +330,11 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 // executorFindInsertionPoints returns the list of insertion points where this step should be executed.
 func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) ([][]string, error) {
 	log.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
-	oldBranch := startingPoints
+	oldBranch := make([][]string, len(startingPoints))
+	for i := range startingPoints {
+		oldBranch[i] = make([]string, len(startingPoints[i]))
+		copy(oldBranch[i], startingPoints[i])
+	}
 
 	// track the root of the selection set while  we walk
 	selectionSetRoot := selectionSet
