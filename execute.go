@@ -11,8 +11,7 @@ import (
 	"github.com/nautilus/graphql"
 	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/v2/ast"
-
-	"github.com/davecgh/go-spew/spew"
+	//"github.com/davecgh/go-spew/spew"
 )
 
 // Executor is responsible for executing a query plan against the remote
