@@ -18,10 +18,11 @@ type QueryPlanStep struct {
 	Then           []*QueryPlanStep
 
 	// required info to generate the query
-	Queryer      graphql.Queryer
-	ParentType   string
-	ParentID     string
-	SelectionSet ast.SelectionSet
+	Queryer        graphql.Queryer
+	ParentType     string
+	ParentID       string
+	ParentLocation string
+	SelectionSet   ast.SelectionSet
 
 	// pre-generated query stuff
 	QueryDocument       *ast.QueryDocument
@@ -189,6 +190,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 					step := &QueryPlanStep{
 						Queryer:             p.GetQueryer(ctx, payload.Location),
 						ParentType:          payload.ParentType,
+						ParentLocation:      payload.Location,
 						SelectionSet:        ast.SelectionSet{},
 						InsertionPoint:      payload.InsertionPoint,
 						Variables:           Set{},
@@ -197,7 +199,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 
 					// if there is a parent to this query
 					if payload.Parent != nil {
-						log.Debug(fmt.Sprintf("Adding step as dependency"))
+						log.Trace(fmt.Sprintf("Adding step as dependency"))
 						// add the new step to the Then of the parent
 						payload.Parent.Then = append(payload.Parent.Then, step)
 					}
@@ -207,7 +209,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 						plan.RootStep = step
 					}
 
-					log.Debug(fmt.Sprintf(
+					log.Trace(fmt.Sprintf(
 						"Encountered new step: \n"+
 							"\tParentType: %v \n"+
 							"\tInsertion Point: %v \n"+
@@ -269,7 +271,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 					// we're done processing this step
 					stepWg.Done()
 
-					log.Debug("")
+					log.Trace("")
 				}
 			}
 		}(stepCh)
@@ -323,9 +325,9 @@ type extractSelectionConfig struct {
 }
 
 func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (ast.SelectionSet, error) {
-	log.Debug("")
-	log.Debug("--- Extracting Selection ---")
-	log.Debug("Parent location: ", config.parentLocation)
+	log.Trace("")
+	log.Trace("--- Extracting Selection ---")
+	log.Trace("Parent location: ", config.parentLocation)
 
 	// in order to group together fields in as few queries as possible, we need to group
 	// the selection set by the location.
@@ -334,7 +336,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 		return nil, err
 	}
 
-	log.Debug("Fields By Location: ", locationFields)
+	log.Trace("Fields By Location: ", locationFields)
 
 	// we only need to add an ID field if there are steps coming off of this insertion point
 	checkForID := false
@@ -347,7 +349,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 		}
 
 		// we are dealing with a selection to another location that isn't the current one
-		log.Debug(fmt.Sprintf(
+		log.Trace(fmt.Sprintf(
 			"Adding the new step"+
 				"\n\tParent Type: %s"+
 				"\n\tLocation: %v"+
@@ -360,7 +362,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 
 		// if we have a wrapper to add
 		if config.wrapper != nil && len(config.wrapper) > 0 {
-			log.Debug("wrapping selection", config.wrapper)
+			log.Trace("wrapping selection", config.wrapper)
 
 			// use the wrapped version
 			selectionSet, err = p.wrapSelectionSet(config, locationFragments, location, selectionSet)
@@ -425,7 +427,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 					}
 				}
 
-				log.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
+				log.Trace("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
 				// add any possible selections provided by this fields selections
 				subSelection, err := p.extractSelection(&extractSelectionConfig{
 					stepCh:         config.stepCh,
@@ -444,12 +446,12 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 					return nil, err
 				}
 
-				log.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, selection.Name, subSelection))
+				log.Trace(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, selection.Name, subSelection))
 
 				// overwrite the selection set for this selection
 				selection.SelectionSet = subSelection
 			} else {
-				log.Debug("found a scalar")
+				log.Trace("found a scalar")
 			}
 			// the field is now safe to add to the parents selection set
 
@@ -511,7 +513,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 			config.step.FragmentDefinitions.ForName(selection.Name).SelectionSet = subSelection
 
 		case *ast.InlineFragment:
-			log.Debug("found an inline fragment. extracting to ", config.insertionPoint, ". Parent insertion", config.insertionPoint)
+			log.Trace("found an inline fragment. extracting to ", config.insertionPoint, ". Parent insertion", config.insertionPoint)
 
 			newWrapper := make(ast.SelectionSet, len(config.wrapper))
 			copy(newWrapper, config.wrapper)
@@ -549,7 +551,7 @@ func (p *MinQueriesPlanner) extractSelection(config *extractSelectionConfig) (as
 
 func (p *MinQueriesPlanner) wrapSelectionSet(config *extractSelectionConfig, locationFragments map[string]ast.FragmentDefinitionList, location string, selectionSet ast.SelectionSet) (ast.SelectionSet, error) {
 
-	log.Debug("wrapping selection", config.wrapper)
+	log.Trace("wrapping selection", config.wrapper)
 
 	// pointers required to nest the
 	var selection ast.Selection
@@ -649,7 +651,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(config *extractSelectionConfig) (m
 		// each kind of selection contributes differently to the final selection set
 		switch selection := selection.(type) {
 		case *ast.Field:
-			log.Debug("Encountered field ", selection.Name)
+			log.Trace("Encountered field ", selection.Name)
 
 			field := &ast.Field{
 				Name:             selection.Name,
@@ -670,7 +672,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(config *extractSelectionConfig) (m
 			location := p.selectLocation(possibleLocations, config)
 			locationFields[location] = append(locationFields[location], field)
 		case *ast.FragmentSpread:
-			log.Debug("Encountered fragment spread ", selection.Name)
+			log.Trace("Encountered fragment spread ", selection.Name)
 
 			// a fragments fields can span multiple services so a single fragment can result in many selections being added
 			fragmentLocations := map[string]ast.SelectionSet{}
@@ -736,7 +738,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(config *extractSelectionConfig) (m
 			}
 
 		case *ast.InlineFragment:
-			log.Debug("Encountered inline fragment on ", selection.TypeCondition)
+			log.Trace("Encountered inline fragment on ", selection.TypeCondition)
 
 			// we need to split the inline fragment into an inline fragment for each location that this cover
 			// and then add those inline fragments to the final selection
@@ -908,7 +910,7 @@ func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 }
 
 func plannerBuildQuery(operationName, parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList) *ast.QueryDocument {
-	log.Debug("Building Query: \n"+"\tParentType: ", parentType, " ")
+	log.Trace("Building Query: \n"+"\tParentType: ", parentType, " ")
 	// build up an operation for the query
 	operation := &ast.OperationDefinition{
 		VariableDefinitions: variables,

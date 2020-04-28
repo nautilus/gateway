@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/nautilus/graphql"
+	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/davecgh/go-spew/spew"
@@ -93,8 +94,8 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				}
 
 				if len(payload.InsertionPoint) > 0 {
-					log.Debug("Inserting result into ", payload.InsertionPoint)
-					log.Debug("Result: ", payload.Result)
+					log.Trace("Inserting result into ", payload.InsertionPoint)
+					log.Trace("Result: ", payload.Result)
 				}
 
 				// we have to grab the value in the result and write it to the appropriate spot in the
@@ -106,7 +107,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				}
 
 				if len(payload.InsertionPoint) > 0 {
-					log.Debug("Done. ", result)
+					log.Trace("Done. ", result)
 				}
 
 				// one of the queries is done
@@ -159,7 +160,7 @@ func executeStep(
 	errCh chan error,
 	stepWg *sync.WaitGroup,
 ) {
-	log.Info("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
+	log.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
 	// log the query
 	log.QueryPlanStep(step)
 
@@ -177,7 +178,7 @@ func executeStep(
 	// the id of the object we are query is defined by the last step in the realized insertion point
 	if len(insertionPoint) > 0 {
 		head := insertionPoint[max(len(insertionPoint)-1, 0)]
-		log.Debug("Head: ", head)
+		log.Trace("Head: ", head)
 
 		// get the data of the point
 		pointData, err := executorGetPointData(head)
@@ -229,9 +230,7 @@ func executeStep(
 	}
 
 	// fire the query
-	log.Info(spew.Sdump(queryer))
-	log.Info("Query:", step.QueryString)
-	log.Info("Variables:", variables)
+
 	err := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
@@ -239,10 +238,28 @@ func executeStep(
 		OperationName: operationName,
 	}, &queryResult)
 	if err != nil {
-		log.Warn("Network Error: ", err)
+		log.Warn(fmt.Sprintf("Network Error %s: %v", operationName, err))
+		log.Info("Network Error %s: %s", operationName, step.QueryString)
 		errCh <- err
 		return
 	}
+
+	if level == logrus.InfoLevel {
+		node, nodeOk := queryResult["node"].(map[string]interface{})
+		var predicates []string
+		if nodeOk {
+			predicates = make([]string, 0, len(node))
+			for k := range node {
+				predicates = append(predicates, k)
+			}
+		}
+		// c := spew.NewDefaultConfig()
+		// c.MaxDepth = 2
+		// c.Dump(step.SelectionSet)
+		log.Info(fmt.Sprintf("%s: %s%v %v %s", operationName, step.ParentType, predicates, insertionPoint, step.ParentLocation))
+	}
+	log.Debug("Query:", step.QueryString)
+	log.Debug("Variables:", variables)
 
 	// NOTE: this insertion point could point to a list of values. If it did, we have to have
 	//       passed it to the this invocation of this function. It is safe to trust this
@@ -252,7 +269,7 @@ func executeStep(
 	// underneath the `node` field as the result for the query
 	stripNode := step.ParentType != "Query" && step.ParentType != "Subscription" && step.ParentType != "Mutation"
 	if stripNode {
-		log.Debug("Should strip node")
+		log.Trace("Should strip node")
 		// get the result from the response that we have to stitch there
 		extractedResult, err := executorExtractValue(queryResult, resultLock, []string{"node"})
 		if err != nil {
@@ -271,7 +288,7 @@ func executeStep(
 
 	// if there are next steps
 	if len(step.Then) > 0 {
-		log.Debug("Kicking off child queries")
+		log.Trace("Kicking off child queries")
 		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
 		// insertion point. For lists, insertion points look like: ["user", "friends:0", "catPhotos:0", "owner"]
 		for _, dependent := range step.Then {
@@ -283,7 +300,7 @@ func executeStep(
 
 			// this dependent needs to fire for every object that the insertion point references
 			for _, insertionPoint := range insertPoints {
-				log.Info("Spawn step to be inserted in ", dependent.ParentType, ". Insertion point: ", insertionPoint)
+				log.Debug("Spawn step to be inserted in ", dependent.ParentType, ". Insertion point: ", insertionPoint)
 				stepWg.Add(1)
 				go executeStep(ctx, plan, dependent, insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
 			}
@@ -291,7 +308,7 @@ func executeStep(
 	}
 
 	if len(insertionPoint) > 0 {
-		log.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
+		log.Trace("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	}
 	// send the result to be stitched in with our accumulator
 	resultCh <- &queryExecutionResult{
@@ -327,7 +344,7 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 
 // executorFindInsertionPoints returns the list of insertion points where this step should be executed.
 func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) ([][]string, error) {
-	log.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
+	log.Trace("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
 	oldBranch := make([][]string, len(startingPoints))
 	for i := range startingPoints {
 		oldBranch[i] = make([]string, len(startingPoints[i]))
@@ -350,8 +367,8 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		}
 	}
 
-	log.Debug("First meaningful path point: ", targetPoints[startingIndex])
-	log.Debug("result ", resultChunk)
+	log.Trace("First meaningful path point: ", targetPoints[startingIndex])
+	log.Trace("result ", resultChunk)
 
 	// if our starting point is []string{"users:0"} then we know everything so far
 	// is along the path of the steps insertion point
@@ -363,18 +380,18 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		var foundSelection *ast.Field
 		foundSelection, err := findSelection(point, selectionSetRoot, fragmentDefs)
 		if err != nil {
-			log.Debug("Error looking for selection")
+			log.Trace("Error looking for selection")
 			return [][]string{}, err
 		}
 
 		// if we didn't find a selection
 		if foundSelection == nil {
-			log.Debug("No selection")
+			log.Trace("No selection")
 			return [][]string{}, nil
 		}
 
-		log.Debug("Found Selection for: ", point)
-		log.Debug("Result Chunk: ", resultChunk)
+		log.Trace("Found Selection for: ", point)
+		log.Trace("Result Chunk: ", resultChunk)
 		// make sure we are looking at the top of the selection set next time
 		selectionSetRoot = foundSelection.SelectionSet
 
@@ -391,7 +408,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 		// if the type is a list
 		if selectionType.Elem != nil {
-			log.Debug("Selection should be a list")
+			log.Trace("Selection should be a list")
 			// make sure the root value is a list
 			rootList, ok := rootValue.([]interface{})
 			if !ok {
@@ -409,7 +426,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 				// the point we are going to add to the list
 				entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
-				log.Debug("Adding ", entryPoint, " to list")
+				log.Trace("Adding ", entryPoint, " to list")
 
 				newBranchSet := make([][]string, len(oldBranch))
 				copy(newBranchSet, oldBranch)
@@ -484,7 +501,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 						return nil, errors.New("Could not find the id for the object")
 					}
 
-					// log.Debug("Adding id to ", oldBranch[i][pointI])
+					// log.Trace("Adding id to ", oldBranch[i][pointI])
 
 					oldBranch[i][pointI] = fmt.Sprintf("%s:%v#%v", oldBranch[i][pointI], i, id)
 
@@ -508,7 +525,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex, path []string) (interface{}, error) {
 	// a pointer to the objects we are modifying
 	var recent interface{} = source
-	log.Debug("Pulling ", path, " from ", source)
+	log.Trace("Pulling ", path, " from ", source)
 
 	for i, point := range path[:] {
 		// if the point designates an element in the list
@@ -594,7 +611,7 @@ func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex,
 }
 
 func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}) error {
-	// log.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
+	// log.Trace("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
 
 	if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil {
 		return nil

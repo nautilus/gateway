@@ -15,40 +15,59 @@ type Logger struct {
 // LoggerFields is a wrapper over a map of key,value pairs to associate with the log
 type LoggerFields map[string]interface{}
 
+func (l *Logger) Trace(args ...interface{}) {
+	if level >= logrus.TraceLevel {
+		entry := newLogEntry()
+		// if there are fields
+		if l.fields != nil {
+			entry = entry.WithFields(l.fields)
+		}
+
+		// finally log
+		entry.Trace(args...)
+	}
+}
+
 // Debug should be used for any logging that would be useful for debugging
 func (l *Logger) Debug(args ...interface{}) {
-	entry := newLogEntry()
-	// if there are fields
-	if l.fields != nil {
-		entry = entry.WithFields(l.fields)
-	}
+	if level >= logrus.DebugLevel {
+		entry := newLogEntry()
+		// if there are fields
+		if l.fields != nil {
+			entry = entry.WithFields(l.fields)
+		}
 
-	// finally log
-	entry.Debug(args...)
+		// finally log
+		entry.Debug(args...)
+	}
 }
 
 // Info should be used for any logging that doesn't necessarily need attention but is nice to see by default
 func (l *Logger) Info(args ...interface{}) {
-	entry := newLogEntry()
-	// if there are fields
-	if l.fields != nil {
-		entry = entry.WithFields(l.fields)
-	}
+	if level >= logrus.InfoLevel {
+		entry := newLogEntry()
+		// if there are fields
+		if l.fields != nil {
+			entry = entry.WithFields(l.fields)
+		}
 
-	// finally log
-	entry.Info(args...)
+		// finally log
+		entry.Info(args...)
+	}
 }
 
 // Warn should be used for logging that needs attention
 func (l *Logger) Warn(args ...interface{}) {
-	entry := newLogEntry()
-	// if there are fields
-	if l.fields != nil {
-		entry = entry.WithFields(l.fields)
-	}
+	if level >= logrus.WarnLevel {
+		entry := newLogEntry()
+		// if there are fields
+		if l.fields != nil {
+			entry = entry.WithFields(l.fields)
+		}
 
-	// finally log
-	entry.Warn(args...)
+		// finally log
+		entry.Warn(args...)
+	}
 }
 
 // WithFields adds the provided fields to the Log
@@ -66,9 +85,9 @@ func (l *Logger) QueryPlanStep(step *QueryPlanStep) {
 	log.WithFields(LoggerFields{
 		"id":              step.ParentID,
 		"insertion point": step.InsertionPoint,
-	}).Info(step.ParentType)
+	}).Debug(step.ParentType)
 
-	log.Info(graphql.FormatSelectionSet(step.SelectionSet))
+	log.Debug(graphql.FormatSelectionSet(step.SelectionSet))
 }
 
 var log *Logger
@@ -93,6 +112,8 @@ func init() {
 	log = &Logger{}
 
 	switch os.Getenv("LOGLEVEL") {
+	case "Trace":
+		level = logrus.TraceLevel
 	case "Debug":
 		level = logrus.DebugLevel
 	case "Info":
