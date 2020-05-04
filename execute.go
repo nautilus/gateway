@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nautilus/graphql"
 	"github.com/sirupsen/logrus"
@@ -230,15 +231,18 @@ func executeStep(
 
 	// fire the query
 
+	queryT := time.Now()
 	err := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,
 		OperationName: operationName,
 	}, &queryResult)
+	responseT := time.Now()
+	elapsedD := responseT.Sub(queryT)
 	if err != nil {
 		log.Warn(fmt.Sprintf("Network Error %s: %v", operationName, err))
-		log.Info("Network Error %s: %s", operationName, step.QueryString)
+		log.Info("Query for Network Error %s: %s", operationName, step.QueryString)
 		errCh <- err
 		return
 	}
@@ -252,10 +256,17 @@ func executeStep(
 				predicates = append(predicates, k)
 			}
 		}
+
 		// c := spew.NewDefaultConfig()
-		// c.MaxDepth = 2
-		// c.Dump(step.SelectionSet)
-		log.Info(fmt.Sprintf("%s: %s%v %v %s", operationName, step.ParentType, predicates, insertionPoint, step.ParentLocation))
+		// c.MaxDepth = 5
+		// c.Dump(step)
+
+		id := "#"
+		if len(insertionPoint) > 0 {
+			last := len(insertionPoint) - 1
+			id = insertionPoint[last]
+		}
+		log.Info(fmt.Sprintf("%04dms %s/%s: %s%v %s", elapsedD.Milliseconds(), step.ParentLocation, operationName, step.ParentType, predicates, id))
 	}
 	log.Debug("Query:", step.QueryString)
 	log.Debug("Variables:", variables)
