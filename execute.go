@@ -242,7 +242,7 @@ func executeStep(
 	elapsedD := responseT.Sub(queryT)
 	if err != nil {
 		log.Warn(fmt.Sprintf("Network Error %s: %v", operationName, err))
-		log.Info("Query for Network Error %s: %s", operationName, step.QueryString)
+		log.Info(fmt.Sprintf("Query for Network Error %s: %s", operationName, step.QueryString))
 		errCh <- err
 		return
 	}
