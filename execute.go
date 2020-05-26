@@ -106,8 +106,9 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 					continue
 				}
 
+				log.Info("Done: ", payload.InsertionPoint, payload.Result)
 				if len(payload.InsertionPoint) > 0 {
-					log.Trace("Done. ", result)
+					log.Trace(result)
 				}
 
 				// one of the queries is done
