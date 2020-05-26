@@ -74,12 +74,6 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 		return nil, errors.New("was given empty plan")
 	}
 
-	// the root step could have multiple steps that have to happen
-	for _, step := range ctx.Plan.RootStep.Then {
-		stepWg.Add(1)
-		go executeStep(ctx, ctx.Plan, step, []string{}, resultLock, ctx.Variables, resultCh, errCh, stepWg)
-	}
-
 	// the list of errors we have encountered while executing the plan
 	errs := graphql.ErrorList{}
 
@@ -132,6 +126,12 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 			}
 		}
 	}()
+
+	// the root step could have multiple steps that have to happen
+	for _, step := range ctx.Plan.RootStep.Then {
+		stepWg.Add(1)
+		go executeStep(ctx, ctx.Plan, step, []string{}, resultLock, ctx.Variables, resultCh, errCh, stepWg)
+	}
 
 	// when the wait group is finished
 	stepWg.Wait()
@@ -298,6 +298,11 @@ func executeStep(
 	}
 
 	// if there are next steps
+	type dependentInsertionPoint struct {
+		dependent       *QueryPlanStep
+		insertionPoints [][]string
+	}
+	dependentInsertionPoints := make([]dependentInsertionPoint, 0, 10)
 	if len(step.Then) > 0 {
 		log.Trace("Kicking off child queries")
 		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
@@ -308,23 +313,31 @@ func executeStep(
 				errCh <- err
 				return
 			}
-
-			// this dependent needs to fire for every object that the insertion point references
-			for _, insertionPoint := range insertPoints {
-				log.Debug("Spawn step to be inserted in ", dependent.ParentType, ". Insertion point: ", insertionPoint)
-				stepWg.Add(1)
-				go executeStep(ctx, plan, dependent, insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
-			}
+			dependentInsertionPoints = append(dependentInsertionPoints, dependentInsertionPoint{
+				dependent:       dependent,
+				insertionPoints: insertPoints,
+			})
+			stepWg.Add(len(insertPoints))
 		}
-	}
-
-	if len(insertionPoint) > 0 {
-		log.Trace("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	}
 	// send the result to be stitched in with our accumulator
 	resultCh <- &queryExecutionResult{
 		InsertionPoint: insertionPoint,
 		Result:         queryResult,
+	}
+
+	// if there are next steps
+	if len(step.Then) > 0 {
+		log.Trace("Kicking off child queries")
+		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
+		// insertion point. For lists, insertion points look like: ["user", "friends:0", "catPhotos:0", "owner"]
+		for _, p := range dependentInsertionPoints {
+			// this dependent needs to fire for every object that the insertion point references
+			for _, insertionPoint := range p.insertionPoints {
+				log.Debug("Spawn step to be inserted in ", p.dependent.ParentType, ". Insertion point: ", insertionPoint)
+				go executeStep(ctx, plan, p.dependent, insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
+			}
+		}
 	}
 }
 
@@ -530,7 +543,6 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 				}
 			}
 		}
-
 	}
 
 	// return the aggregation
