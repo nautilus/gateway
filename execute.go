@@ -389,7 +389,9 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 		// find the selection node in the AST corresponding to the point
 		var foundSelection *ast.Field
+		resultLock.Lock()
 		foundSelection, err := findSelection(point, selectionSetRoot, fragmentDefs)
+		resultLock.Unlock()
 		if err != nil {
 			log.Trace("Error looking for selection")
 			return [][]string{}, err
@@ -404,7 +406,9 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		log.Trace("Found Selection for: ", point)
 		log.Trace("Result Chunk: ", resultChunk)
 		// make sure we are looking at the top of the selection set next time
+		resultLock.Lock()
 		selectionSetRoot = foundSelection.SelectionSet
+		resultLock.Unlock()
 
 		var value = resultChunk
 
