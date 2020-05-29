@@ -36,4 +36,7 @@ jobs:
         run: |
           export PATH=${PATH}:`go env GOPATH`/bin
           run build
-          ghr -t $GITHUB_TOKEN -u nautilus -r gateway ${{ steps.get_version.outputs.VERSION }} ./bin
+          echo $VERSION
+          ghr -t $GITHUB_TOKEN -u nautilus -r gateway $VERSION ./bin
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
