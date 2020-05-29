@@ -37,7 +37,7 @@ jobs:
       - name: Build and deploy binaries
         run: |
           export PATH=${PATH}:`go env GOPATH`/bin
-          run Build
+          run build
 
       - name: Create Release
         id: create_release
