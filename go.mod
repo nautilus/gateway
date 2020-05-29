@@ -10,6 +10,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/matryer/moq v0.0.0-20200125112110-7615cbe60268 // indirect
+	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.2.2
 	github.com/nautilus/graphql v0.0.9
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
@@ -18,6 +19,7 @@ require (
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/stretchr/testify v1.4.0
+	github.com/tcnksm/ghr v0.13.0 // indirect
 	github.com/urfave/cli v1.22.2 // indirect
 	github.com/vektah/dataloaden v0.3.0 // indirect
 	github.com/vektah/gqlparser v1.1.0
