@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Run Tests
+    name: Build and Upload
     runs-on: ubuntu-latest
 
     steps:
@@ -30,6 +30,7 @@ jobs:
       - name: Get the version
         id: get_version
         run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        shell: bash
 
       - name: Build and deploy binaries
         run: |
