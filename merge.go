@@ -195,7 +195,7 @@ func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, new
 
 	// fields
 	if len(previousDefinition.Fields) != len(newDefinition.Fields) {
-		return fmt.Errorf("inconsistent number of fields")
+		return fmt.Errorf("inconsistent number of fields, %s vs %s", previousDefinition.Name, newDefinition.Name)
 	}
 	for _, field := range previousDefinition.Fields {
 		// get the corresponding field in the other definition
@@ -370,7 +370,15 @@ func mergeEnumValuesEqual(value1, value2 *ast.EnumValueDefinition) error {
 
 func mergeFieldListEqual(list1, list2 ast.FieldList) error {
 	if len(list1) != len(list2) {
-		return fmt.Errorf("inconsistent number of fields")
+		names1 := make([]string, 0, len(list1))
+		for _, field := range list1 {
+			names1 = append(names1, field.Name)
+		}
+		names2 := make([]string, 0, len(list1))
+		for _, field := range list2 {
+			names2 = append(names2, field.Name)
+		}
+		return fmt.Errorf("inconsistent number of fields in fieldList, %v vs %v", names1, names2)
 	}
 	for _, field := range list1 {
 		// get the corresponding field in the other definition
