@@ -579,12 +579,12 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 
 	// name
 	if type1.NamedType != type2.NamedType {
-		return errors.New("types do not have the same name")
+		return fmt.Errorf("types %s and %s do not have the same name", type1.NamedType, type2.NamedType)
 	}
 
 	// nullability
 	if type1.NonNull != type2.NonNull {
-		return errors.New("types do not have the same nullability constraints")
+		return fmt.Errorf("types %s do not have the same nullability constraints", type1.NamedType)
 	}
 
 	// subtypes (ie, non-null string)
