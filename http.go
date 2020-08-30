@@ -4,16 +4,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/nautilus/graphql"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"strings"
-
-	"github.com/nautilus/graphql"
 )
 
 type PersistedQuerySpecification struct {
 	Version int    `json:"version"`
 	Hash    string `json:"sha256Hash"`
+}
+
+type File struct {
+	File     multipart.File
+	Filename string
+	Size     int64
 }
 
 // HTTPOperation is the incoming payload when sending POST requests to the gateway
@@ -108,34 +114,35 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		operations = append(operations, operation)
 		// or we got a POST request
 	} else if r.Method == http.MethodPost {
-		// read the full request body
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			payloadErr = fmt.Errorf("encountered error reading body: %s", err.Error())
-		}
-
-		// there are two possible options for receiving information from a post request
-		// the first is that the user provides an object in the form of { query, variables, operationName }
-		// the second option is a list of that object
-
-		singleQuery := &HTTPOperation{}
-		// if we were given a single object
-		if err = json.Unmarshal(body, &singleQuery); err == nil {
-			// add it to the list of operations
-			operations = append(operations, singleQuery)
-			// we weren't given an object
+		body, fileMap, extractError := extractBody(r)
+		if extractError != nil {
+			payloadErr = extractError
 		} else {
-			// but we could have been given a list
-			batch := []*HTTPOperation{}
+			// there are two possible options for receiving information from a post request
+			// the first is that the user provides an object in the form of { query, variables, operationName }
+			// the second option is a list of that object
 
-			if err = json.Unmarshal(body, &batch); err != nil {
-				payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
+			singleQuery := &HTTPOperation{}
+			// if we were given a single object
+			if err := json.Unmarshal(body, &singleQuery); err == nil {
+				// add it to the list of operations
+				operations = append(operations, singleQuery)
+				// we weren't given an object
 			} else {
-				operations = batch
+				// but we could have been given a list
+				batch := []*HTTPOperation{}
+
+				if err = json.Unmarshal(body, &batch); err != nil {
+					payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
+				} else {
+					operations = batch
+				}
+
+				// we're in batch mode
+				batchMode = true
 			}
 
-			// we're in batch mode
-			batchMode = true
+			injectFiles(&operations, fileMap)
 		}
 	}
 
@@ -249,6 +256,55 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 
 	// send the result to the user
 	emitResponse(w, statusCode, string(response))
+}
+
+func extractBody(r *http.Request) (body []byte, fileMap map[File][]string, extractError error) {
+	fileMap = map[File][]string{}
+	contentType := strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0]
+	switch contentType {
+	case "text/plain", "application/json":
+		// read the full request body
+		bodyContent, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			extractError = fmt.Errorf("encountered error reading body: %s", err.Error())
+		}
+		body = bodyContent
+	case "multipart/form-data":
+		parseErr := r.ParseMultipartForm(32 << 20)
+		if parseErr != nil {
+			extractError = errors.New("error parse multipart request: " + parseErr.Error())
+			return
+		}
+
+		body = []byte(r.Form.Get("operations"))
+
+		var filePosMap map[string][]string
+		if err := json.Unmarshal([]byte(r.Form.Get("map")), &filePosMap); err != nil {
+			extractError = errors.New("error parsing file map " + err.Error() )
+		}
+
+		for filePos, paths := range filePosMap {
+			if file, header, err := r.FormFile(filePos); err != nil {
+				extractError = errors.New("file with index not found: " + filePos)
+			} else {
+				fileMeta := File{
+					File:     file,
+					Size:     header.Size,
+					Filename: header.Filename,
+				}
+				fileMap[fileMeta] = paths
+			}
+		}
+
+	default:
+		extractError = errors.New("unknown content-type: " + contentType)
+	}
+
+	return
+}
+
+func injectFiles(operations interface{}, fileMap map[File][]string) {
+	//todo inject file data
 }
 
 func emitResponse(w http.ResponseWriter, code int, response string) {
