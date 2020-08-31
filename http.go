@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -142,7 +143,9 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 				batchMode = true
 			}
 
-			injectFiles(&operations, fileMap)
+			if err := injectFiles(operations, fileMap, batchMode); err != nil {
+				payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
+			}
 		}
 	}
 
@@ -303,8 +306,62 @@ func extractBody(r *http.Request) (body []byte, fileMap map[File][]string, extra
 	return
 }
 
-func injectFiles(operations interface{}, fileMap map[File][]string) {
-	//todo inject file data
+func injectFiles(operations []*HTTPOperation, fileMap map[File][]string, batchMode bool) error {
+	for file, paths := range fileMap {
+		for _, path := range paths {
+			var idx = 0
+			parts := strings.Split(path, ".")
+			if batchMode {
+				idxVal, err := strconv.Atoi(parts[0])
+				if err != nil {
+					return err
+				}
+				idx = idxVal
+				parts = parts[1:]
+			}
+
+			if parts[0] != "variables" {
+				return errors.New("file locator doesn't have variables in it: " + path)
+			}
+
+			if len(parts) > 3 && len(parts) < 2 {
+				return errors.New("invalid number of parts in path: " + path)
+			}
+
+			if len(parts) == 2 { // means it is a single value
+				val, found := operations[idx].Variables[parts[1]]
+				if found && val != nil {
+					return errors.New("path duplicate: " + path)
+				}
+
+				operations[idx].Variables[parts[1]] = file
+			} else {
+				var fileSlice []File
+
+				val, found := operations[idx].Variables[parts[1]]
+
+				if found || val != nil {
+					fileSliceVal, ok := val.([]File)
+					if !ok {
+						return errors.New("expected slice of files")
+					}
+					fileSlice = fileSliceVal
+				} else {
+					fileSlice = make([]File, 0)
+				}
+
+				fileIndex, err := strconv.Atoi(parts[2])
+				if err != nil {
+					return err
+				}
+
+				fileSlice[fileIndex] = file
+				operations[idx].Variables[parts[1]] = fileSlice
+			}
+		}
+	}
+
+	return nil
 }
 
 func emitResponse(w http.ResponseWriter, code int, response string) {
