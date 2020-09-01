@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/nautilus/graphql"
 	"io/ioutil"
-	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,12 +14,6 @@ import (
 type PersistedQuerySpecification struct {
 	Version int    `json:"version"`
 	Hash    string `json:"sha256Hash"`
-}
-
-type File struct {
-	File     multipart.File
-	Filename string
-	Size     int64
 }
 
 // HTTPOperation is the incoming payload when sending POST requests to the gateway
@@ -261,8 +254,9 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	emitResponse(w, statusCode, string(response))
 }
 
-func extractBody(r *http.Request) (body []byte, fileMap map[File][]string, extractError error) {
-	fileMap = map[File][]string{}
+func extractBody(r *http.Request) (body []byte, fileMap map[graphql.Upload][]string, extractError error) {
+	fileMap = map[graphql.Upload][]string{}
+
 	contentType := strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0]
 	switch contentType {
 	case "text/plain", "application/json":
@@ -290,15 +284,14 @@ func extractBody(r *http.Request) (body []byte, fileMap map[File][]string, extra
 			if file, header, err := r.FormFile(filePos); err != nil {
 				extractError = errors.New("file with index not found: " + filePos)
 			} else {
-				fileMeta := File{
+				fileMeta := graphql.Upload{
 					File:     file,
-					Size:     header.Size,
-					Filename: header.Filename,
+					FileName: header.Filename,
+
 				}
 				fileMap[fileMeta] = paths
 			}
 		}
-
 	default:
 		extractError = errors.New("unknown content-type: " + contentType)
 	}
@@ -306,7 +299,7 @@ func extractBody(r *http.Request) (body []byte, fileMap map[File][]string, extra
 	return
 }
 
-func injectFiles(operations []*HTTPOperation, fileMap map[File][]string, batchMode bool) error {
+func injectFiles(operations []*HTTPOperation, fileMap map[graphql.Upload][]string, batchMode bool) error {
 	for file, paths := range fileMap {
 		for _, path := range paths {
 			var idx = 0
@@ -336,18 +329,18 @@ func injectFiles(operations []*HTTPOperation, fileMap map[File][]string, batchMo
 
 				operations[idx].Variables[parts[1]] = file
 			} else {
-				var fileSlice []File
+				var fileSlice []graphql.Upload
 
 				val, found := operations[idx].Variables[parts[1]]
 
 				if found || val != nil {
-					fileSliceVal, ok := val.([]File)
+					fileSliceVal, ok := val.([]graphql.Upload)
 					if !ok {
 						return errors.New("expected slice of files")
 					}
 					fileSlice = fileSliceVal
 				} else {
-					fileSlice = make([]File, 0)
+					fileSlice = make([]graphql.Upload, 0)
 				}
 
 				fileIndex, err := strconv.Atoi(parts[2])
