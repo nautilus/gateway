@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/graphql-go/graphql"
 	handler "github.com/jpascal/graphql-upload"
 	uuid "github.com/satori/go.uuid"
@@ -105,10 +106,10 @@ func main() {
 					Name: "Mutation",
 					Fields: graphql.Fields{
 						"upload": &graphql.Field{
-							Type: graphql.String,
+							Type: graphql.NewNonNull(graphql.String),
 							Args: graphql.FieldConfigArgument{
 								"file": &graphql.ArgumentConfig{
-									Type: UploadType,
+									Type: graphql.NewNonNull(UploadType),
 								},
 							},
 							Resolve: func(params graphql.ResolveParams) (interface{}, error) {
@@ -128,6 +129,47 @@ func main() {
 
 									log.Println("File saved nBytes: ", nBytes)
 									return id, nil
+								} else {
+									return nil, errors.New("no file found in request")
+								}
+
+							},
+						},
+						"uploadMulti": &graphql.Field{
+							Type: graphql.NewNonNull(graphql.NewList(graphql.NewNonNull(graphql.String))),
+							Args: graphql.FieldConfigArgument{
+								"files": &graphql.ArgumentConfig{
+									Type: graphql.NewNonNull(graphql.NewList(graphql.NewNonNull(UploadType))),
+								},
+							},
+							Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+								uploads, uploadPresent := params.Args["files"].([]interface{})
+								if uploadPresent {
+									var result []string
+									for i, uploadItem := range uploads {
+
+										upload, ok := uploadItem.(handler.File)
+										if !ok {
+											return nil, errors.New(fmt.Sprintf("type of file %d is wrong", i))
+										}
+
+										id := uuid.NewV4().String()
+										targetFile, err := os.Create("tmp/" + id)
+										if err != nil {
+											return nil, err
+										}
+
+										defer targetFile.Close()
+										nBytes, err := io.Copy(targetFile, upload.File)
+										if err != nil {
+											return nil, err
+										}
+
+										log.Println("File saved nBytes: ", nBytes)
+										result = append(result, id)
+									}
+
+									return result, nil
 								} else {
 									return nil, errors.New("no file found in request")
 								}
