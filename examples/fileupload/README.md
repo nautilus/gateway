@@ -59,7 +59,18 @@ ls -la examples/fileupload/tmp/
 > -rw-rw-r-- 1 user user 15089 Sep  3 00:12 a590196f-6450-4785-8998-8013ff7c8cf3
 ```
 
+7. Testing batch mode
+
+```
+curl localhost:4000/graphql \
+  -F operations='[{"query":"mutation ($someFile: Upload!) { upload(file: $someFile) }","variables":{"someFile":null}}, {"query":"mutation TestFileUpload(\n $someFile: Upload!,\n\t$allFiles: [Upload!]!\n) {\n  upload(file: $someFile)\n  uploadMulti(files: $allFiles)\n}","variables":{"someFile":null,"allFiles":[null,null]},"operationName":"TestFileUpload"}]' \
+  -F map='{"0":["0.variables.someFile"],"1":["1.variables.someFile"],"2":["1.variables.allFiles.0"],"3":["1.variables.allFiles.1"]}' \
+  -F 0=@.gitignore \
+  -F 1=@README.md \
+  -F 2=@go.mod \
+  -F 3=@go.sum
+```
+
 Todo:
 - [ ] Write unit tests
-- [ ] Test batch mode
 
