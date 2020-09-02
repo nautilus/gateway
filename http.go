@@ -329,27 +329,29 @@ func injectFiles(operations []*HTTPOperation, fileMap map[graphql.Upload][]strin
 
 				operations[idx].Variables[parts[1]] = file
 			} else {
-				var fileSlice []graphql.Upload
-
 				val, found := operations[idx].Variables[parts[1]]
 
-				if found || val != nil {
-					fileSliceVal, ok := val.([]graphql.Upload)
-					if !ok {
-						return errors.New("expected slice of files")
-					}
-					fileSlice = fileSliceVal
-				} else {
-					fileSlice = make([]graphql.Upload, 0)
+				if !found || val == nil {
+					return errors.New("key not found in variables: " + parts[1])
 				}
 
-				fileIndex, err := strconv.Atoi(parts[2])
+				fileSliceVal, ok := val.([]interface{})
+				if !ok {
+					return errors.New("expected slice of files")
+				}
+
+				index, err := strconv.Atoi(parts[2])
 				if err != nil {
-					return err
+					return errors.New("expected numeric index: "+err.Error())
 				}
 
-				fileSlice[fileIndex] = file
-				operations[idx].Variables[parts[1]] = fileSlice
+				fileVal := fileSliceVal[index]
+				if fileVal != nil {
+					return errors.New(fmt.Sprintf("expected nil value, got %v", val))
+				}
+
+				fileSliceVal[index] = file
+				operations[idx].Variables[parts[1]] = fileSliceVal
 			}
 		}
 	}
