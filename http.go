@@ -259,7 +259,7 @@ func extractBody(r *http.Request) (body []byte, fileMap map[graphql.Upload][]str
 
 	contentType := strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0]
 	switch contentType {
-	case "text/plain", "application/json":
+	case "text/plain", "application/json", "":
 		// read the full request body
 		bodyContent, err := ioutil.ReadAll(r.Body)
 		if err != nil {
