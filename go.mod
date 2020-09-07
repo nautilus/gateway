@@ -21,4 +21,4 @@ require (
 
 go 1.13
 
-replace github.com/nautilus/graphql => github.com/obukhov/graphql v0.0.11-0.20200902215018-66af38429dad
+replace github.com/nautilus/graphql => github.com/obukhov/graphql v0.0.11-0.20200907082515-4b587297070f
