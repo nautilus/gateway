@@ -1,13 +1,18 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -538,4 +543,229 @@ func TestPlaygroundHandler_getRequest(t *testing.T) {
 		t.Error(err.Error())
 		return
 	}
+}
+
+func TestGraphQLHandler_postWithFile(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		scalar Upload
+
+		type Query {
+			file(id: String!): String
+		}
+
+		type Mutation {
+			upload(file: Upload!): String!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"upload": "file-id",
+			}, nil
+		},
+	)))
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	request, err := createMultipartRequest(
+		[]byte(`{ 
+			"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+			"variables": { "someFile": null } 
+		}`),
+		[]byte(`{ "0": ["variables.someFile"] }`),
+		[]byte("Test file content1"),
+	)
+
+	if err!= nil {
+		t.Error(err)
+		return
+	}
+
+	// a recorder so we can check what the handler responded with
+	responseRecorder := httptest.NewRecorder()
+
+	// call the http hander
+	gateway.GraphQLHandler(responseRecorder, request)
+
+	// make sure we got an error code
+	assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+}
+
+func TestGraphQLHandler_postWithMultipleFiles(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		scalar Upload
+
+		type Query {
+			file(id: String!): String
+		}
+
+		type Mutation {
+			upload(file: Upload!): String!
+			uploadMulti(files: [Upload!]!): [String!]!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"upload": "file-id1",
+				"uploadMulti": []string{"file-id2", "file-id3"},
+			}, nil
+		},
+	)))
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	request, err := createMultipartRequest(
+		[]byte(`{
+			"query":"mutation TestFileUpload($someFile: Upload!, $allFiles: [Upload!]!) { upload(file: $someFile) uploadMulti(files: $allFiles)}",
+			"variables":{"someFile":null,"allFiles":[null,null]},"operationName":"TestFileUpload"
+		}`),
+		[]byte(`{"0":["variables.someFile"],"1":["variables.allFiles.0"],"2":["variables.allFiles.1"]}`),
+		[]byte("Test file content 1"),
+		[]byte("Test file content 2"),
+		[]byte("Test file content 3"),
+	)
+
+	if err!= nil {
+		t.Error(err)
+		return
+	}
+
+	// a recorder so we can check what the handler responded with
+	responseRecorder := httptest.NewRecorder()
+
+	// call the http hander
+	gateway.GraphQLHandler(responseRecorder, request)
+
+	// make sure we got an error code
+	assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+}
+
+func TestGraphQLHandler_postBatchWithMultipleFiles(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		scalar Upload
+
+		type Query {
+			file(id: String!): String
+		}
+
+		type Mutation {
+			upload(file: Upload!): String!
+			uploadMulti(files: [Upload!]!): [String!]!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"upload": "file-id1",
+				"uploadMulti": []string{"file-id2", "file-id3"},
+			}, nil
+		},
+	)))
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	request, err := createMultipartRequest(
+		[]byte(`[
+			{
+				"query":"mutation ($someFile: Upload!) { upload(file: $someFile) }",
+				"variables":{"someFile":null}
+			}, 
+			{
+				"query":"mutation TestFileUpload(\n $someFile: Upload!,\n\t$allFiles: [Upload!]!\n) {\n  upload(file: $someFile)\n  uploadMulti(files: $allFiles)\n}",
+				"variables":{"someFile":null,"allFiles":[null,null]},"operationName":"TestFileUpload"
+			}
+		]`),
+		[]byte(`{"0":["0.variables.someFile"],"1":["1.variables.someFile"],"2":["1.variables.allFiles.0"],"3":["1.variables.allFiles.1"]}`),
+		[]byte("Test file content 1"),
+		[]byte("Test file content 2"),
+		[]byte("Test file content 3"),
+		[]byte("Test file content 4"),
+	)
+
+	if err!= nil {
+		t.Error(err)
+		return
+	}
+
+	// a recorder so we can check what the handler responded with
+	responseRecorder := httptest.NewRecorder()
+
+	// call the http hander
+	gateway.GraphQLHandler(responseRecorder, request)
+
+	// make sure we got an error code
+	assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+}
+
+func createMultipartRequest(operations, fileMap []byte, filesContent ...[]byte) (*http.Request, error) {
+	var b = bytes.Buffer{}
+	var fw io.Writer
+	var err error
+
+	w := multipart.NewWriter(&b)
+
+	fw, err = w.CreateFormField("operations")
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = fw.Write(operations)
+	if err != nil {
+		return nil, err
+	}
+
+	fw, err = w.CreateFormField("map")
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = fw.Write(fileMap)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, fileContent := range filesContent {
+		fw, err = w.CreateFormFile(strconv.Itoa(i), fmt.Sprintf("file%d.txt", i))
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = fw.Write(fileContent)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err = w.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	// the incoming request
+	request := httptest.NewRequest("POST", "/graphql", &b)
+	request.Header.Set("Content-Type", w.FormDataContentType())
+
+	return request, nil
 }
