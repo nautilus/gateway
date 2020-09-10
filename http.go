@@ -55,92 +55,7 @@ func formatErrorsWithCode(data map[string]interface{}, err error, code string) m
 // a single object with { query, variables, operationName } or a list
 // of that object.
 func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
-	// this handler can handle multiple operations sent in the same query. Internally,
-	// it modules a single operation as a list of one.
-	operations := []*HTTPOperation{}
-
-	// the error we have encountered when extracting query input
-	var payloadErr error
-	// make our lives easier. track if we're in batch mode
-	batchMode := false
-
-	// if we got a GET request
-	if r.Method == http.MethodGet {
-		parameters := r.URL.Query()
-
-		// the operation we have to perform
-		operation := &HTTPOperation{}
-
-		// get the query parameter
-		query, hasQuery := parameters["query"]
-		if hasQuery {
-			// save the query
-			operation.Query = query[0]
-		}
-
-		// include operationName
-		if variableInput, ok := parameters["variables"]; ok {
-			variables := map[string]interface{}{}
-
-			err := json.Unmarshal([]byte(variableInput[0]), &variables)
-			if err != nil {
-				payloadErr = errors.New("variables must be a json object")
-			}
-
-			// assign the variables to the payload
-			operation.Variables = variables
-		}
-
-		// include operationName
-		if operationName, ok := parameters["operationName"]; ok {
-			operation.OperationName = operationName[0]
-		}
-
-		// if the request defined any extensions
-		if extensionString, hasExtensions := parameters["extensions"]; hasExtensions {
-			// copy the extension information into the operation
-			if err := json.NewDecoder(strings.NewReader(extensionString[0])).Decode(&operation.Extensions); err != nil {
-				payloadErr = err
-			}
-		}
-
-		// add the query to the list of operations
-		operations = append(operations, operation)
-		// or we got a POST request
-	} else if r.Method == http.MethodPost {
-		body, fileMap, extractError := extractBody(r)
-		if extractError != nil {
-			payloadErr = extractError
-		} else {
-			// there are two possible options for receiving information from a post request
-			// the first is that the user provides an object in the form of { query, variables, operationName }
-			// the second option is a list of that object
-
-			singleQuery := &HTTPOperation{}
-			// if we were given a single object
-			if err := json.Unmarshal(body, &singleQuery); err == nil {
-				// add it to the list of operations
-				operations = append(operations, singleQuery)
-				// we weren't given an object
-			} else {
-				// but we could have been given a list
-				batch := []*HTTPOperation{}
-
-				if err = json.Unmarshal(body, &batch); err != nil {
-					payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
-				} else {
-					operations = batch
-				}
-
-				// we're in batch mode
-				batchMode = true
-			}
-
-			if err := injectFiles(operations, fileMap, batchMode); err != nil {
-				payloadErr = fmt.Errorf("encountered error parsing body: %s", err.Error())
-			}
-		}
-	}
+	operations, batchMode, payloadErr := parseRequest(r)
 
 	// if there was an error retrieving the payload
 	if payloadErr != nil {
@@ -254,105 +169,214 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	emitResponse(w, statusCode, string(response))
 }
 
-func extractBody(r *http.Request) (body []byte, fileMap map[graphql.Upload][]string, extractError error) {
-	fileMap = map[graphql.Upload][]string{}
+// Parses request to operations (single or batch mode)
+func parseRequest(r *http.Request) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
+	// this handler can handle multiple operations sent in the same query. Internally,
+	// it modules a single operation as a list of one.
+	operations = []*HTTPOperation{}
 
-	contentType := strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0]
-	switch contentType {
-	case "text/plain", "application/json", "":
-		// read the full request body
-		bodyContent, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			extractError = fmt.Errorf("encountered error reading body: %s", err.Error())
-		}
-		body = bodyContent
-	case "multipart/form-data":
-		parseErr := r.ParseMultipartForm(32 << 20)
-		if parseErr != nil {
-			extractError = errors.New("error parse multipart request: " + parseErr.Error())
-			return
-		}
+	// the error we have encountered when extracting query input
 
-		body = []byte(r.Form.Get("operations"))
+	// make our lives easier. track if we're in batch mode
+	batchMode = false
 
-		var filePosMap map[string][]string
-		if err := json.Unmarshal([]byte(r.Form.Get("map")), &filePosMap); err != nil {
-			extractError = errors.New("error parsing file map " + err.Error() )
-		}
+	if r.Method == http.MethodGet {
+		// if we got a GET request
+		operations, payloadErr = parseGetRequest(r)
 
-		for filePos, paths := range filePosMap {
-			if file, header, err := r.FormFile(filePos); err != nil {
-				extractError = errors.New("file with index not found: " + filePos)
-			} else {
-				fileMeta := graphql.Upload{
-					File:     file,
-					FileName: header.Filename,
-
-				}
-				fileMap[fileMeta] = paths
-			}
-		}
-	default:
-		extractError = errors.New("unknown content-type: " + contentType)
+	} else if r.Method == http.MethodPost {
+		// or we got a POST request
+		operations, batchMode, payloadErr = parsePostRequest(r)
 	}
 
 	return
 }
 
-func injectFiles(operations []*HTTPOperation, fileMap map[graphql.Upload][]string, batchMode bool) error {
-	for file, paths := range fileMap {
-		for _, path := range paths {
-			var idx = 0
-			parts := strings.Split(path, ".")
-			if batchMode {
-				idxVal, err := strconv.Atoi(parts[0])
-				if err != nil {
-					return err
-				}
-				idx = idxVal
-				parts = parts[1:]
+// Parses get request to list of operations
+func parseGetRequest(r *http.Request) (operations []*HTTPOperation, payloadErr error) {
+	parameters := r.URL.Query()
+
+	// the operation we have to perform
+	operation := &HTTPOperation{}
+
+	// get the query parameter
+	query, hasQuery := parameters["query"]
+	if hasQuery {
+		// save the query
+		operation.Query = query[0]
+	}
+
+	// include operationName
+	if variableInput, ok := parameters["variables"]; ok {
+		variables := map[string]interface{}{}
+
+		err := json.Unmarshal([]byte(variableInput[0]), &variables)
+		if err != nil {
+			payloadErr = errors.New("variables must be a json object")
+		}
+
+		// assign the variables to the payload
+		operation.Variables = variables
+	}
+
+	// include operationName
+	if operationName, ok := parameters["operationName"]; ok {
+		operation.OperationName = operationName[0]
+	}
+
+	// if the request defined any extensions
+	if extensionString, hasExtensions := parameters["extensions"]; hasExtensions {
+		// copy the extension information into the operation
+		if err := json.NewDecoder(strings.NewReader(extensionString[0])).Decode(&operation.Extensions); err != nil {
+			payloadErr = err
+		}
+	}
+
+	// add the query to the list of operations
+	operations = append(operations, operation)
+
+	return
+}
+
+// Parses post request (plain or multipart) to list of operations
+func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
+	contentType := strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0]
+	switch contentType {
+	case "text/plain", "application/json", "":
+		// read the full request body
+		operationsJson, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			payloadErr = fmt.Errorf("encountered error reading body: %s", err.Error())
+			return
+		}
+
+		operations, batchMode, payloadErr = parseOperations(operationsJson)
+		break
+	case "multipart/form-data":
+
+		parseErr := r.ParseMultipartForm(32 << 20)
+		if parseErr != nil {
+			payloadErr = errors.New("error parse multipart request: " + parseErr.Error())
+			return
+		}
+
+		operationsJson := []byte(r.Form.Get("operations"))
+		operations, batchMode, payloadErr = parseOperations(operationsJson)
+
+		var filePosMap map[string][]string
+		if err := json.Unmarshal([]byte(r.Form.Get("map")), &filePosMap); err != nil {
+			payloadErr = errors.New("error parsing file map " + err.Error())
+			return
+		}
+
+		for filePos, paths := range filePosMap {
+			file, header, err := r.FormFile(filePos)
+			if err != nil {
+				payloadErr = errors.New("file with index not found: " + filePos)
+				return
 			}
 
-			if parts[0] != "variables" {
-				return errors.New("file locator doesn't have variables in it: " + path)
+			fileMeta := graphql.Upload{
+				File:     file,
+				FileName: header.Filename,
 			}
 
-			if len(parts) > 3 && len(parts) < 2 {
-				return errors.New("invalid number of parts in path: " + path)
+			if err := injectFile(operations, fileMeta, paths, batchMode); err != nil {
+				payloadErr = err
+				return
+			}
+		}
+		break
+	default:
+		payloadErr = errors.New("unknown content-type: " + contentType)
+		return
+	}
+
+	return
+}
+
+// Parses json operations string
+func parseOperations(operationsJson []byte) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
+	// there are two possible options for receiving information from a post request
+	// the first is that the user provides an object in the form of { query, variables, operationName }
+	// the second option is a list of that object
+
+	singleQuery := &HTTPOperation{}
+	// if we were given a single object
+	if err := json.Unmarshal(operationsJson, &singleQuery); err == nil {
+		// add it to the list of operations
+		operations = append(operations, singleQuery)
+		// we weren't given an object
+	} else {
+		// but we could have been given a list
+		batch := []*HTTPOperation{}
+
+		if err = json.Unmarshal(operationsJson, &batch); err != nil {
+			payloadErr = fmt.Errorf("encountered error parsing operationsJson: %s", err.Error())
+		} else {
+			operations = batch
+		}
+
+		// we're in batch mode
+		batchMode = true
+	}
+
+	return operations, batchMode, payloadErr
+}
+
+// Adds file object to variables of respective operations in case of multipart request
+func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string, batchMode bool) error {
+	for _, path := range paths {
+		var idx = 0
+		parts := strings.Split(path, ".")
+		if batchMode {
+			idxVal, err := strconv.Atoi(parts[0])
+			if err != nil {
+				return err
+			}
+			idx = idxVal
+			parts = parts[1:]
+		}
+
+		if parts[0] != "variables" {
+			return errors.New("file locator doesn't have variables in it: " + path)
+		}
+
+		if len(parts) > 3 && len(parts) < 2 {
+			return errors.New("invalid number of parts in path: " + path)
+		}
+
+		if len(parts) == 2 { // means it is a single value
+			val, found := operations[idx].Variables[parts[1]]
+			if found && val != nil {
+				return errors.New("path duplicate: " + path)
 			}
 
-			if len(parts) == 2 { // means it is a single value
-				val, found := operations[idx].Variables[parts[1]]
-				if found && val != nil {
-					return errors.New("path duplicate: " + path)
-				}
+			operations[idx].Variables[parts[1]] = file
+		} else {
+			val, found := operations[idx].Variables[parts[1]]
 
-				operations[idx].Variables[parts[1]] = file
-			} else {
-				val, found := operations[idx].Variables[parts[1]]
-
-				if !found || val == nil {
-					return errors.New("key not found in variables: " + parts[1])
-				}
-
-				fileSliceVal, ok := val.([]interface{})
-				if !ok {
-					return errors.New("expected slice of files")
-				}
-
-				index, err := strconv.Atoi(parts[2])
-				if err != nil {
-					return errors.New("expected numeric index: "+err.Error())
-				}
-
-				fileVal := fileSliceVal[index]
-				if fileVal != nil {
-					return errors.New(fmt.Sprintf("expected nil value, got %v", val))
-				}
-
-				fileSliceVal[index] = file
-				operations[idx].Variables[parts[1]] = fileSliceVal
+			if !found || val == nil {
+				return errors.New("key not found in variables: " + parts[1])
 			}
+
+			fileSliceVal, ok := val.([]interface{})
+			if !ok {
+				return errors.New("expected slice of files")
+			}
+
+			index, err := strconv.Atoi(parts[2])
+			if err != nil {
+				return errors.New("expected numeric index: " + err.Error())
+			}
+
+			fileVal := fileSliceVal[index]
+			if fileVal != nil {
+				return errors.New(fmt.Sprintf("expected nil value, got %v", val))
+			}
+
+			fileSliceVal[index] = file
+			operations[idx].Variables[parts[1]] = fileSliceVal
 		}
 	}
 
