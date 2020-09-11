@@ -348,7 +348,11 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 
 		if len(parts) == 2 { // means it is a single value
 			val, found := operations[idx].Variables[parts[1]]
-			if found && val != nil {
+			if !found {
+				return errors.New("key not found in variables: " + parts[1])
+			}
+
+			if val != nil {
 				return errors.New("path duplicate: " + path)
 			}
 
@@ -368,6 +372,10 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 			index, err := strconv.Atoi(parts[2])
 			if err != nil {
 				return errors.New("expected numeric index: " + err.Error())
+			}
+
+			if index >= len(fileSliceVal) {
+				return errors.New(fmt.Sprintf("file index %d out of bound %d", index, len(fileSliceVal)))
 			}
 
 			fileVal := fileSliceVal[index]
