@@ -342,7 +342,7 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 			return errors.New("file locator doesn't have variables in it: " + path)
 		}
 
-		if len(parts) > 3 && len(parts) < 2 {
+		if len(parts) > 3 || len(parts) < 2 {
 			return errors.New("invalid number of parts in path: " + path)
 		}
 

@@ -719,6 +719,251 @@ func TestGraphQLHandler_postBatchWithMultipleFiles(t *testing.T) {
 	assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
 }
 
+func TestGraphQLHandler_postFilesWithError(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		scalar Upload
+
+		type Query {
+			file(id: String!): String
+		}
+
+		type Mutation {
+			upload(file: Upload!): String!
+			uploadMulti(files: [Upload!]!): [String!]!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	})
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	t.Run("Missing file", func(t *testing.T) {
+		request, err := createMultipartRequest(
+			[]byte(`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`),
+			[]byte(`{ "0": ["variables.someFile"] }`),
+		)
+
+		if err!= nil {
+			t.Error(err)
+			return
+		}
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Broken operations json", func(t *testing.T) {
+		request, err := createMultipartRequest(
+			[]byte(`{"query"`),
+			[]byte(`{ "0": ["variables.someFile"] }`),
+		)
+
+		if err!= nil {
+			t.Error(err)
+			return
+		}
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Broken file map json", func(t *testing.T) {
+		request, err := createMultipartRequest(
+			[]byte(`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`),
+			[]byte(`{ "0"`),
+		)
+
+		if err!= nil {
+			t.Error(err)
+			return
+		}
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Wrong file map format - no variables", func(t *testing.T) {
+		request, err := createMultipartRequest(
+			[]byte(`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`),
+			[]byte(`{ "0": ["someFile"] }`),
+			[]byte("File content"),
+		)
+
+		if err!= nil {
+			t.Error(err)
+			return
+		}
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Wrong file map format - invalid number of parts", func(t *testing.T) {
+		request, err := createMultipartRequest(
+			[]byte(`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`),
+			[]byte(`{ "0": ["variables.someFile.1.1"] }`),
+			[]byte("File content"),
+		)
+
+		if err!= nil {
+			t.Error(err)
+			return
+		}
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Not multipart request", func(t *testing.T) {
+		// the incoming request
+		request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`))
+		request.Header.Set("Content-Type", "multipart/form-data")
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Unknown content-type", func(t *testing.T) {
+		// the incoming request
+		request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`))
+		request.Header.Set("Content-Type", "foobar/form-data")
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Wrong batch index", func(t *testing.T) {
+		request, err := createMultipartRequest(
+			[]byte(`[
+				{ 
+					"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+					"variables": { "someFile": null } 
+				},
+				{ 
+					"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+					"variables": { "someFile": null } 
+				}
+			]`),
+			[]byte(`{ "0": ["ololo.variables.someFile"], "1": ["1.variables.someFile"] }`),
+			[]byte("File content 1"),
+			[]byte("File content 2"),
+		)
+
+		if err!= nil {
+			t.Error(err)
+			return
+		}
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Different files mapped to same path", func(t *testing.T) {
+		request, err := createMultipartRequest(
+			[]byte(`[
+				{ 
+					"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+					"variables": { "someFile": null } 
+				},
+				{ 
+					"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+					"variables": { "someFile": null } 
+				}
+			]`),
+			[]byte(`{ "0": ["0.variables.someFile"], "1": ["0.variables.someFile"] }`),
+			[]byte("File content 1"),
+			[]byte("File content 2"),
+		)
+
+		if err!= nil {
+			t.Error(err)
+			return
+		}
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+}
+
 func createMultipartRequest(operations, fileMap []byte, filesContent ...[]byte) (*http.Request, error) {
 	var b = bytes.Buffer{}
 	var fw io.Writer
