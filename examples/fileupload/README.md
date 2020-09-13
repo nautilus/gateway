@@ -70,7 +70,3 @@ curl localhost:4000/graphql \
   -F 2=@go.mod \
   -F 3=@go.sum
 ```
-
-Todo:
-- [ ] Write unit tests
-
