@@ -6,7 +6,7 @@ require (
 	github.com/graphql-go/graphql v0.7.9 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/mitchellh/mapstructure v1.2.2
-	github.com/nautilus/graphql v0.0.10
+	github.com/nautilus/graphql v0.0.11
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.5
@@ -18,5 +18,3 @@ require (
 )
 
 go 1.13
-
-replace github.com/nautilus/graphql => github.com/obukhov/graphql v0.0.11-0.20200907082515-4b587297070f

@@ -68,8 +68,8 @@ github.com/mitchellh/mapstructure v1.1.2 h1:fmNYVwqnSfB9mZU6OS2O6GsXM+wcskZDuKQz
 github.com/mitchellh/mapstructure v1.1.2/go.mod h1:FVVH3fgwuzCH5S8UJGiWEs2h04kUh9fWfEaFds41c1Y=
 github.com/mitchellh/mapstructure v1.2.2 h1:dxe5oCinTXiTIcfgmZecdCzPmAJKd46KsCWc35r0TV4=
 github.com/mitchellh/mapstructure v1.2.2/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
-github.com/obukhov/graphql v0.0.11-0.20200907082515-4b587297070f h1:XfIaQwlV1ru2PIaW/7LpQfQdstqF+O5kliDdSttfOdM=
-github.com/obukhov/graphql v0.0.11-0.20200907082515-4b587297070f/go.mod h1:MQDucBpBRbhwZfeE59tS1DFg7VXS3NvwQpLkgHBmQkg=
+github.com/nautilus/graphql v0.0.11 h1:uMNeE7zmQF7YrhKOhSLS1RBznkeiZBMYKeo2WZREue0=
+github.com/nautilus/graphql v0.0.11/go.mod h1:MQDucBpBRbhwZfeE59tS1DFg7VXS3NvwQpLkgHBmQkg=
 github.com/opentracing/basictracer-go v1.0.0/go.mod h1:QfBfYuafItcjQuMwinw9GhYKwFXS9KnPs5lxoYwgW74=
 github.com/opentracing/opentracing-go v1.0.2 h1:3jA2P6O1F9UOrWVpwrIo17pu01KWvNWg4X946/Y5Zwg=
 github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
