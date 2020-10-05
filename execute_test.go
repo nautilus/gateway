@@ -949,7 +949,6 @@ func TestExecutor_insertIntoInlineFragmentsList(t *testing.T) {
 								},
 								Queryer: graphql.QueryerFunc(
 									func(input *graphql.QueryInput) (interface{}, error) {
-										t.Log("HELLOOO")
 										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
 										return map[string]interface{}{
 											"node": map[string]interface{}{
