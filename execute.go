@@ -502,6 +502,13 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 	return oldBranch, nil
 }
 
+func isListElement(path string) bool {
+	if hashLocation:=strings.Index(path,"#"); hashLocation>0 {
+		path = path[:hashLocation]
+	}
+	return strings.Contains(path, ":")
+}
+
 func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex, path []string) (interface{}, error) {
 	// a pointer to the objects we are modifying
 	var recent interface{} = source
@@ -509,7 +516,7 @@ func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex,
 
 	for i, point := range path[:] {
 		// if the point designates an element in the list
-		if strings.Contains(point, ":") {
+		if isListElement(point) {
 			pointData, err := executorGetPointData(point)
 			if err != nil {
 				return nil, err
