@@ -1942,6 +1942,8 @@ func TestExecutorGetPointData(t *testing.T) {
 		{"foo:2", &extractorPointData{Field: "foo", Index: 2, ID: ""}},
 		{"foo#3", &extractorPointData{Field: "foo", Index: -1, ID: "3"}},
 		{"foo:2#3", &extractorPointData{Field: "foo", Index: 2, ID: "3"}},
+		{"foo#Thing:1337", &extractorPointData{Field: "foo", Index: -1, ID: "Thing:1337"}},
+		{"foo:2#Thing:1337", &extractorPointData{Field: "foo", Index: 2, ID: "Thing:1337"}},
 	}
 
 	for _, row := range table {
@@ -2073,4 +2075,23 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 
 func TestFindInsertionPoint_handlesNullObjects(t *testing.T) {
 	t.Skip("Not yet implemented")
+}
+
+func TestSingleObjectWithColonInID(t *testing.T) {
+	var source = make(map[string]interface{})
+	_ = json.Unmarshal([]byte(
+		// language=JSON
+		`{"hello": {"id": "Thing:1337", "firstName": "Foo", "lastName": "bar"}}`),
+		&source,
+	)
+
+	value, err := executorExtractValue(source, &sync.Mutex{}, []string{"hello#Thing:1337"})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	assert.Equal(t, map[string]interface{}{
+		"id": "Thing:1337", "firstName": "Foo", "lastName": "bar",
+	}, value)
 }
