@@ -266,23 +266,6 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 			`,
 		},
 		{
-			"Conflicting Implements",
-			`
-				interface Foo {
-					firstName: String
-				}
-
-				type User implements Foo {
-					firstName: String
-				}
-			`,
-			`
-				type User {
-					firstName: String
-				}
-			`,
-		},
-		{
 			"Conflicting declaration directives",
 			`
 				directive @foo(url: String!) on OBJECT
