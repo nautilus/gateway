@@ -232,11 +232,6 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 
 	}
 
-	// make sure the 2 implement the same number of interfaces
-	if err := mergeStringSliceEquivalent(previousDefinition.Interfaces, newDefinition.Interfaces); err != nil {
-		return fmt.Errorf("object type does not implement a consistent set of interfaces. %s", err.Error())
-	}
-
 	// make sure that the 2 directive lists are the same
 	if err := mergeDirectiveListsEqual(previousDefinition.Directives, newDefinition.Directives); err != nil {
 		return err
