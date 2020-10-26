@@ -266,23 +266,6 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 			`,
 		},
 		{
-			"Conflicting Implements",
-			`
-				interface Foo {
-					firstName: String
-				}
-
-				type User implements Foo {
-					firstName: String
-				}
-			`,
-			`
-				type User {
-					firstName: String
-				}
-			`,
-		},
-		{
 			"Conflicting declaration directives",
 			`
 				directive @foo(url: String!) on OBJECT
@@ -921,4 +904,57 @@ func testMergeSchemas(t *testing.T, schema1 *ast.Schema, schema2Str string) (*as
 	}
 
 	return gateway.schema, err
+}
+
+func TestMergeSchemaDifferentSetsOfInterfaces(t *testing.T) {
+	// Thing of schema1 implements one interface
+	// Thing of schema2 implements two interfaces
+
+	schema1, err := graphql.LoadSchema(
+		//language=GRAPHQL
+		`
+		type Query {
+			node(id: ID!): Node
+			Thing(id: ID!): Thing
+		}
+
+		interface Node {
+			id: ID!
+		}
+				
+		type Thing implements Node {
+			id: ID!
+			foo: String!
+		}
+	`)
+	assert.Nil(t, err)
+	schema2, err := graphql.LoadSchema(
+		//language=GRAPHQL
+		`
+		type Query {
+			node(id: ID!): Node
+			Thing(id: ID!): Thing
+		}
+				
+		interface Node {
+			id: ID!
+		}
+		
+		interface MetaData {
+			created_at: String!
+		}
+		
+		type Thing implements Node & MetaData {
+			id: ID!
+			bar: String!
+			created_at: String!
+		}
+	`)
+	assert.Nil(t, err)
+
+	_, err = New([]*graphql.RemoteSchema{
+		{Schema: schema2, URL: "url1"},
+		{Schema: schema1, URL: "url2"},
+	})
+	assert.Nil(t, err)
 }
