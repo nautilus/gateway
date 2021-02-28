@@ -819,7 +819,7 @@ func (p *MinQueriesPlanner) generateScrubFieldsWalk(step *QueryPlanStep, selecti
 		// look over the points in the selection
 		for _, field := range graphql.SelectedFields(targetSelection) {
 			// if the field name is what we expected
-			if field.Name == point {
+			if field.Name == point || field.Alias == point {
 				// our next selection set is the fields selection set
 				targetSelection = field.SelectionSet
 
