@@ -143,7 +143,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 		plans = append(plans, plan)
 
 		// a channel to register new steps
-		stepCh := make(chan *newQueryPlanStepPayload, 10)
+		stepCh := make(chan *newQueryPlanStepPayload, 50)
 
 		// a chan to get errors
 		errCh := make(chan error)
