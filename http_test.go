@@ -931,6 +931,17 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 			[][]byte{},
 		},
 		{
+			"Missing path variables",
+			`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`,
+			`{ "0": ["variables"] }`,
+			[][]byte{
+				[]byte("File content"),
+			},
+		},
+		{
 			"Broken operations json",
 			`{"query"`,
 			`{ "0": ["variables.someFile"] }`,
