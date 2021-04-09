@@ -503,7 +503,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 }
 
 func isListElement(path string) bool {
-	if hashLocation:=strings.Index(path,"#"); hashLocation>0 {
+	if hashLocation := strings.Index(path, "#"); hashLocation > 0 {
 		path = path[:hashLocation]
 	}
 	return strings.Contains(path, ":")

@@ -342,52 +342,43 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 			return errors.New("file locator doesn't have variables in it: " + path)
 		}
 
-		if len(parts) > 3 || len(parts) < 2 {
+		if len(parts) < 2 {
 			return errors.New("invalid number of parts in path: " + path)
 		}
 
-		if len(parts) == 2 { // means it is a single value
-			val, found := operations[idx].Variables[parts[1]]
-			if !found {
-				return errors.New("key not found in variables: " + parts[1])
-			}
-
-			if val != nil {
-				return errors.New("path duplicate: " + path)
-			}
-
-			operations[idx].Variables[parts[1]] = file
-		} else {
-			val, found := operations[idx].Variables[parts[1]]
-
-			if !found || val == nil {
-				return errors.New("key not found in variables: " + parts[1])
-			}
-
-			fileSliceVal, ok := val.([]interface{})
+		variables := operations[idx].Variables
+		for i := 1; i < len(parts); i++ { // step through the path to find the file variable
+			val, ok := variables[parts[i]]
 			if !ok {
-				return errors.New("expected slice of files")
+				return fmt.Errorf("key not found in variables: %s", parts[i])
 			}
-
-			index, err := strconv.Atoi(parts[2])
-			if err != nil {
-				return errors.New("expected numeric index: " + err.Error())
+			switch v := val.(type) {
+			case map[string]interface{}: //If the path part is a map, then keep stepping through it
+				variables = v
+			case nil: //If we hit nil, then we have found the variable to replace with the file and have hit the end of parts
+				variables[parts[i]] = file
+			case []interface{}: // If we find a list then find the the variable to replace at the parts index (supports: [Upload!]!)
+				if i+1 >= len(parts) { // make sure the path contains another part before looking for an index
+					return fmt.Errorf("invalid number of parts in path: " + path)
+				}
+				index, err := strconv.Atoi(parts[i+1]) // The next part in the path must be an index (ex: the "2" in: variables.input.files.2)
+				if err != nil {
+					return fmt.Errorf("expected numeric index: " + err.Error())
+				}
+				if index >= len(v) { //Index is not within the bounds
+					return fmt.Errorf("file index %d out of bound %d", index, len(v))
+				}
+				fileVal := v[index]
+				if fileVal != nil {
+					return fmt.Errorf("expected nil value, got %v", fileVal)
+				}
+				v[index] = file
+				i++ //skip the final iteration through parts (skips the index definition, ex: the "2" in: variables.input.files.2)
+			default:
+				return fmt.Errorf("expected nil value, got %v", v) // possibly duplicate path or path to non-null variable
 			}
-
-			if index >= len(fileSliceVal) {
-				return errors.New(fmt.Sprintf("file index %d out of bound %d", index, len(fileSliceVal)))
-			}
-
-			fileVal := fileSliceVal[index]
-			if fileVal != nil {
-				return errors.New(fmt.Sprintf("expected nil value, got %v", val))
-			}
-
-			fileSliceVal[index] = file
-			operations[idx].Variables[parts[1]] = fileSliceVal
 		}
 	}
-
 	return nil
 }
 
