@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/nautilus/graphql"
 	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/nautilus/graphql"
 )
 
 type PersistedQuerySpecification struct {
@@ -347,25 +348,35 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 		}
 
 		variables := operations[idx].Variables
-		for i := 1; i < len(parts); i++ { // step through the path to find the file variable
+
+		// step through the path to find the file variable
+		for i := 1; i < len(parts); i++ { 
 			val, ok := variables[parts[i]]
 			if !ok {
 				return fmt.Errorf("key not found in variables: %s", parts[i])
 			}
 			switch v := val.(type) {
-			case map[string]interface{}: //If the path part is a map, then keep stepping through it
+			// if the path part is a map, then keep stepping through it
+			case map[string]interface{}: 
 				variables = v
-			case nil: //If we hit nil, then we have found the variable to replace with the file and have hit the end of parts
+			// if we hit nil, then we have found the variable to replace with the file and have hit the end of parts
+			case nil: 
 				variables[parts[i]] = file
-			case []interface{}: // If we find a list then find the the variable to replace at the parts index (supports: [Upload!]!)
-				if i+1 >= len(parts) { // make sure the path contains another part before looking for an index
+			// if we find a list then find the the variable to replace at the parts index (supports: [Upload!]!)
+			case []interface{}: 
+				// make sure the path contains another part before looking for an index
+				if i+1 >= len(parts) { 
 					return fmt.Errorf("invalid number of parts in path: " + path)
 				}
-				index, err := strconv.Atoi(parts[i+1]) // The next part in the path must be an index (ex: the "2" in: variables.input.files.2)
+
+				// the next part in the path must be an index (ex: the "2" in: variables.input.files.2)
+				index, err := strconv.Atoi(parts[i+1]) 
 				if err != nil {
 					return fmt.Errorf("expected numeric index: " + err.Error())
 				}
-				if index >= len(v) { //Index is not within the bounds
+
+				// index might not be within the bounds
+				if index >= len(v) { 
 					return fmt.Errorf("file index %d out of bound %d", index, len(v))
 				}
 				fileVal := v[index]
@@ -373,7 +384,9 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 					return fmt.Errorf("expected nil value, got %v", fileVal)
 				}
 				v[index] = file
-				i++ //skip the final iteration through parts (skips the index definition, ex: the "2" in: variables.input.files.2)
+
+				// skip the final iteration through parts (skips the index definition, ex: the "2" in: variables.input.files.2)
+				i++ 
 			default:
 				return fmt.Errorf("expected nil value, got %v", v) // possibly duplicate path or path to non-null variable
 			}
