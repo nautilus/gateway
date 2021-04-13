@@ -2095,3 +2095,181 @@ func TestSingleObjectWithColonInID(t *testing.T) {
 		"id": "Thing:1337", "firstName": "Foo", "lastName": "bar",
 	}, value)
 }
+
+// TestExecutor_plansWithManyDeepDependencies test that two `Then` works without races
+// Test provides quite deep query to illustrate problem with
+// reused memory during slice `appends`
+func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
+
+	// the query we want to execute is
+	//	{
+	//		user {						<- serviceA
+	//			parent {				<- serviceA
+	//				parent {			<- serviceA
+	//					id  			<- serviceA
+	//					house {			<- serviceB
+	//						address		<- serviceC
+	//						cats {		<- serviceC
+	//							id  	<- serviceC
+	//							name	<- serviceD
+	//						}
+	//					}
+	//				}
+	//			}
+	//		}
+	//	}
+
+	// test helpers
+	definitionFactory := func(s string) *ast.FieldDefinition {
+		return &ast.FieldDefinition{
+			Type: ast.NamedType(s, &ast.Position{}),
+		}
+	}
+	definitionListFactory := func(s string) *ast.FieldDefinition {
+		return &ast.FieldDefinition{
+			Type: ast.ListType(ast.NamedType(s, &ast.Position{}), &ast.Position{}),
+		}
+	}
+	idFieldFactory := func() *ast.Field {
+		return &ast.Field{
+			Name:       "id",
+			Definition: definitionFactory("ID"),
+		}
+	}
+
+	// build a query plan that the executor will follow
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
+						ParentType:     "Query",
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name:       "user",
+								Definition: definitionFactory("User"),
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name:       "parent",
+										Definition: definitionFactory("User"),
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name:       "parent",
+												Definition: definitionFactory("User"),
+												SelectionSet: ast.SelectionSet{
+													idFieldFactory(),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Queryer: &graphql.MockSuccessQueryer{
+							map[string]interface{}{
+								"user": map[string]interface{}{
+									"parent": map[string]interface{}{
+										"parent": map[string]interface{}{
+											"id": "1",
+										},
+									},
+								},
+							},
+						},
+						Then: []*QueryPlanStep{
+							{
+								ParentType:     "House",
+								InsertionPoint: []string{"user", "parent", "parent"},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name:       "house",
+										Definition: definitionFactory("House"),
+										SelectionSet: ast.SelectionSet{
+											idFieldFactory(),
+											&ast.Field{
+												Name:       "cats",
+												Definition: definitionListFactory("Cat"),
+												SelectionSet: ast.SelectionSet{
+													idFieldFactory(),
+												},
+											},
+										},
+									},
+								},
+								Queryer: &graphql.MockSuccessQueryer{
+									map[string]interface{}{"node": map[string]interface{}{
+										"house": map[string]interface{}{
+											"id": "2",
+											"cats": []interface{}{
+												map[string]interface{}{"id": "3"},
+											},
+										},
+									}},
+								},
+								Then: []*QueryPlanStep{
+									{
+										ParentType:     "House",
+										InsertionPoint: []string{"user", "parent", "parent", "house"},
+										SelectionSet: ast.SelectionSet{
+											idFieldFactory(),
+											&ast.Field{
+												Name:       "address",
+												Definition: definitionFactory("String"),
+											},
+										},
+										Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+											"node": map[string]interface{}{
+												"id": "2",
+												"address": "Cats street",
+											},
+										}}},
+									{
+										ParentType:     "User",
+										InsertionPoint: []string{"user", "parent", "parent", "house", "cats"},
+										SelectionSet: ast.SelectionSet{
+											idFieldFactory(),
+											&ast.Field{
+												Name:       "name",
+												Definition: definitionFactory("String"),
+											},
+										},
+										Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+											"node": map[string]interface{}{
+												"id": "3", "name": "kitty",
+											}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error executing plan: %v", err.Error())
+		return
+	}
+
+	// make sure we got the right values back
+	assert.NotNil(t, result)
+	assert.Equal(t, map[string]interface{}{
+		"user": map[string]interface{}{
+			"parent": map[string]interface{}{
+				"parent": map[string]interface{}{
+					"id": "1",
+					"house": map[string]interface{}{
+						"id": "2",
+						"address": "Cats street",
+						"cats": []interface{}{
+							map[string]interface{}{"id": "3", "name": "kitty"},
+						},
+					},
+				},
+			},
+		},
+	}, result)
+}
