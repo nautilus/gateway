@@ -4,9 +4,8 @@ require (
 	github.com/99designs/gqlgen v0.13.0
 	github.com/agnivade/levenshtein v1.1.0 // indirect
 	github.com/graph-gophers/graphql-go v0.0.0-20190108123631-d5b7dc6be53b
-	github.com/graphql-go/graphql v0.7.9 // indirect
 	github.com/mitchellh/mapstructure v1.4.1
-	github.com/nautilus/graphql v0.0.15
+	github.com/nautilus/graphql v0.0.16
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v0.0.5
