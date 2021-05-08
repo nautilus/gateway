@@ -403,7 +403,9 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 				log.Debug("Adding ", entryPoint, " to list")
 
 				newBranchSet := make([][]string, len(oldBranch))
-				copy(newBranchSet, oldBranch)
+				for i, c := range oldBranch {
+					newBranchSet[i] = append(newBranchSet[i], c...)
+				}
 
 				// if we are adding to an existing branch
 				if len(newBranchSet) > 0 {
