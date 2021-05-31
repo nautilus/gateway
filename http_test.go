@@ -178,6 +178,40 @@ func TestGraphQLHandler(t *testing.T) {
 		}
 		assert.Equal(t, result.Errors[0].Extensions["code"], "UNKNOWN_ERROR")
 	})
+
+	t.Run("internal server error response", func(t *testing.T) {
+		// create gateway schema we can test against
+		innerGateway, err := New([]*graphql.RemoteSchema{
+			{Schema: schema, URL: "url1"},
+		}, WithExecutor(ExecutorFunc(
+			func(*ExecutionContext) (map[string]interface{}, error) {
+				return nil, errors.New("error string")
+			},
+		)))
+
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// the incoming request
+		request := httptest.NewRequest("GET", `/graphql?query={allUsers}`, strings.NewReader(""))
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		innerGateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+
+		// verify the graphql error code
+		result, err := readResultWithErrors(responseRecorder, t)
+		if err != nil {
+			assert.Error(t, err)
+		}
+		assert.Equal(t, result.Errors[0].Extensions["code"], "INTERNAL_SERVER_ERROR")
+	})
 }
 
 func readResultWithErrors(responseRecorder *httptest.ResponseRecorder, t *testing.T) (*resultWithErrors, error) {

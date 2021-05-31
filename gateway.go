@@ -89,6 +89,9 @@ func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]
 	// execute the plan and return the results
 	result, err := g.executor.Execute(executionContext)
 	if err != nil {
+		if len(result) == 0 {
+			return nil, err
+		}
 		return result, err
 	}
 
