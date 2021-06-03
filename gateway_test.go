@@ -197,6 +197,39 @@ func TestGateway(t *testing.T) {
 		}
 	})
 
+	t.Run("Response Middleware Error Empty Data", func(t *testing.T) {
+		// create a new schema with the sources and some configuration
+		gateway, err := New(sources,
+			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
+				return map[string]interface{}{}, errors.New("error string")
+			})),
+			WithMiddlewares(
+				ResponseMiddleware(func(ctx *ExecutionContext, response map[string]interface{}) error {
+					return errors.New("this string")
+				}),
+			))
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// build a query plan that the executor will follow
+		reqCtx := &RequestContext{
+			Context: context.Background(),
+			Query:   "{ allUsers { firstName } }",
+		}
+		plans, err := gateway.GetPlans(reqCtx)
+		if err != nil {
+			t.Errorf("Encountered error building plan.")
+		}
+
+		res, err := gateway.Execute(reqCtx, plans)
+		if err == nil {
+			t.Errorf("Did not encounter error executing plan.")
+		}
+		assert.Nil(t, res)
+	})
+
 	t.Run("Response Middleware Success", func(t *testing.T) {
 		// create a new schema with the sources and some configuration
 		gateway, err := New(sources,
