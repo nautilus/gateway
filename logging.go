@@ -27,37 +27,49 @@ type DefaultLogger struct {
 type LoggerFields map[string]interface{}
 
 func (l *DefaultLogger) Trace(args ...interface{}) {
-	entry := newLogEntry()
-	// if there are fields
-	if l.fields != nil {
-		entry = entry.WithFields(l.fields)
+	if globalLogLevel >= logrus.TraceLevel {
+		entry := newLogEntry(logrus.TraceLevel)
+		// if there are fields
+		if l.fields != nil {
+			entry = entry.WithFields(l.fields)
+		}
+		entry.Trace(args...)
 	}
 }
 
 // Debug should be used for any logging that would be useful for debugging
 func (l *DefaultLogger) Debug(args ...interface{}) {
-	entry := newLogEntry()
-	// if there are fields
-	if l.fields != nil {
-		entry = entry.WithFields(l.fields)
+	if globalLogLevel >= logrus.DebugLevel {
+		entry := newLogEntry(logrus.TraceLevel)
+		// if there are fields
+		if l.fields != nil {
+			entry = entry.WithFields(l.fields)
+		}
+		entry.Debug(args...)
 	}
 }
 
 // Info should be used for any logging that doesn't necessarily need attention but is nice to see by default
 func (l *DefaultLogger) Info(args ...interface{}) {
-	entry := newLogEntry()
-	// if there are fields
-	if l.fields != nil {
-		entry = entry.WithFields(l.fields)
+	if globalLogLevel >= logrus.InfoLevel {
+		entry := newLogEntry(logrus.InfoLevel)
+		// if there are fields
+		if l.fields != nil {
+			entry = entry.WithFields(l.fields)
+		}
+		entry.Info(args...)
 	}
 }
 
 // Warn should be used for logging that needs attention
 func (l *DefaultLogger) Warn(args ...interface{}) {
-	entry := newLogEntry()
-	// if there are fields
-	if l.fields != nil {
-		entry = entry.WithFields(l.fields)
+	if globalLogLevel >= logrus.WarnLevel {
+		entry := newLogEntry(logrus.WarnLevel)
+		// if there are fields
+		if l.fields != nil {
+			entry = entry.WithFields(l.fields)
+		}
+		entry.Warn(args...)
 	}
 }
 
@@ -81,13 +93,12 @@ func (l *DefaultLogger) QueryPlanStep(step *QueryPlanStep) {
 	l.Info(graphql.FormatSelectionSet(step.SelectionSet))
 }
 
-var level logrus.Level
+var globalLogLevel logrus.Level
 var log Logger = &DefaultLogger{}
 
-func newLogEntry() *logrus.Entry {
+func newLogEntry(level logrus.Level) *logrus.Entry {
 	entry := logrus.New()
 
-	// only log LOGLEVEL
 	entry.SetLevel(level)
 
 	// configure the formatter
@@ -103,12 +114,12 @@ func newLogEntry() *logrus.Entry {
 func init() {
 	switch os.Getenv("LOGLEVEL") {
 	case "Trace":
-		level = logrus.TraceLevel
+		globalLogLevel = logrus.TraceLevel
 	case "Debug":
-		level = logrus.DebugLevel
+		globalLogLevel = logrus.DebugLevel
 	case "Info":
-		level = logrus.InfoLevel
+		globalLogLevel = logrus.InfoLevel
 	default:
-		level = logrus.WarnLevel
+		globalLogLevel = logrus.WarnLevel
 	}
 }

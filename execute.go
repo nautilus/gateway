@@ -248,7 +248,7 @@ func executeStep(
 		return
 	}
 
-	if level == logrus.InfoLevel {
+	if globalLogLevel == logrus.InfoLevel {
 		node, nodeOk := queryResult["node"].(map[string]interface{})
 		var predicates []string
 		if nodeOk {
