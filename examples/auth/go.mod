@@ -5,6 +5,7 @@ require (
 	github.com/nautilus/gateway v0.1.4
 	github.com/nautilus/graphql v0.0.9
 	github.com/vektah/gqlparser v1.1.0
+	github.com/vektah/gqlparser/v2 v2.0.1
 )
 
 go 1.13
