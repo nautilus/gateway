@@ -85,12 +85,14 @@ func (l *DefaultLogger) WithFields(fields LoggerFields) Logger {
 
 // QueryPlanStep formats and logs a query plan step for human consumption
 func (l *DefaultLogger) QueryPlanStep(step *QueryPlanStep) {
-	l.WithFields(LoggerFields{
-		"id":              step.ParentID,
-		"insertion point": step.InsertionPoint,
-	}).Info(step.ParentType)
+	if globalLogLevel >= logrus.DebugLevel {
+		l.WithFields(LoggerFields{
+			"id":              step.ParentID,
+			"insertion point": step.InsertionPoint,
+		}).Debug(step.ParentType)
 
-	l.Info(graphql.FormatSelectionSet(step.SelectionSet))
+		l.Debug(graphql.FormatSelectionSet(step.SelectionSet))
+	}
 }
 
 var globalLogLevel logrus.Level
