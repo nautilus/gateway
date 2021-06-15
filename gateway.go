@@ -89,6 +89,9 @@ func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]
 	// execute the plan and return the results
 	result, err := g.executor.Execute(executionContext)
 	if err != nil {
+		if len(result) == 0 {
+			return nil, err
+		}
 		return result, err
 	}
 
@@ -268,6 +271,13 @@ func WithQueryerFactory(factory *QueryerFactory) Option {
 func WithLocationPriorities(priorities []string) Option {
 	return func(g *Gateway) {
 		g.locationPriorities = priorities
+	}
+}
+
+// WithLogger returns an Option that sets the logger of the gateway
+func WithLogger(l Logger) Option {
+	return func(g *Gateway) {
+		log = l
 	}
 }
 

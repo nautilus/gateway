@@ -1,0 +1,6 @@
+github.com/graphql-go/graphql v0.7.9 h1:5Va/Rt4l5g3YjwDnid3vFfn43faaQBq7rMcIZ0VnV34=
+github.com/graphql-go/graphql v0.7.9/go.mod h1:k6yrAYQaSP59DC5UVxbgxESlmVyojThKdORUqGDGmrI=
+github.com/jpascal/graphql-upload v0.0.0-20200219114743-2a693c100233 h1:6tY2KAHlytnGu9s7ceFZURenjqmxbVHwGembFi6sz+c=
+github.com/jpascal/graphql-upload v0.0.0-20200219114743-2a693c100233/go.mod h1:I/WT/Xwt4isoRE43Sr1LG8T0bGkxmYEaQRvKbXSdVSo=
+github.com/satori/go.uuid v1.2.0 h1:0uYX9dsZ2yD7q2RtLRtPSdGDWzjeM3TbMJP9utgA0ww=
+github.com/satori/go.uuid v1.2.0/go.mod h1:dA0hQrYB0VpLJoorglMZABFdXlWrHn1NEOzdhQKdks0=
