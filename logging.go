@@ -7,98 +7,100 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Logger handles the logging in the gateway library
-type Logger struct {
+// Logger logs messages
+type Logger interface {
+	Trace(args ...interface{})
+	Debug(args ...interface{})
+	Info(args ...interface{})
+	Warn(args ...interface{})
+
+	WithFields(fields LoggerFields) Logger
+	QueryPlanStep(step *QueryPlanStep)
+}
+
+// DefaultLogger handles the logging in the gateway library
+type DefaultLogger struct {
 	fields logrus.Fields
 }
 
 // LoggerFields is a wrapper over a map of key,value pairs to associate with the log
 type LoggerFields map[string]interface{}
 
-func (l *Logger) Trace(args ...interface{}) {
-	if level >= logrus.TraceLevel {
-		entry := newLogEntry()
+func (l *DefaultLogger) Trace(args ...interface{}) {
+	if globalLogLevel >= logrus.TraceLevel {
+		entry := newLogEntry(logrus.TraceLevel)
 		// if there are fields
 		if l.fields != nil {
 			entry = entry.WithFields(l.fields)
 		}
-
-		// finally log
 		entry.Trace(args...)
 	}
 }
 
 // Debug should be used for any logging that would be useful for debugging
-func (l *Logger) Debug(args ...interface{}) {
-	if level >= logrus.DebugLevel {
-		entry := newLogEntry()
+func (l *DefaultLogger) Debug(args ...interface{}) {
+	if globalLogLevel >= logrus.DebugLevel {
+		entry := newLogEntry(logrus.TraceLevel)
 		// if there are fields
 		if l.fields != nil {
 			entry = entry.WithFields(l.fields)
 		}
-
-		// finally log
 		entry.Debug(args...)
 	}
 }
 
 // Info should be used for any logging that doesn't necessarily need attention but is nice to see by default
-func (l *Logger) Info(args ...interface{}) {
-	if level >= logrus.InfoLevel {
-		entry := newLogEntry()
+func (l *DefaultLogger) Info(args ...interface{}) {
+	if globalLogLevel >= logrus.InfoLevel {
+		entry := newLogEntry(logrus.InfoLevel)
 		// if there are fields
 		if l.fields != nil {
 			entry = entry.WithFields(l.fields)
 		}
-
-		// finally log
 		entry.Info(args...)
 	}
 }
 
 // Warn should be used for logging that needs attention
-func (l *Logger) Warn(args ...interface{}) {
-	if level >= logrus.WarnLevel {
-		entry := newLogEntry()
+func (l *DefaultLogger) Warn(args ...interface{}) {
+	if globalLogLevel >= logrus.WarnLevel {
+		entry := newLogEntry(logrus.WarnLevel)
 		// if there are fields
 		if l.fields != nil {
 			entry = entry.WithFields(l.fields)
 		}
-
-		// finally log
 		entry.Warn(args...)
 	}
 }
 
 // WithFields adds the provided fields to the Log
-func (l *Logger) WithFields(fields LoggerFields) *Logger {
+func (l *DefaultLogger) WithFields(fields LoggerFields) Logger {
 	// build up the logrus fields
 	logrusFields := logrus.Fields{}
 	for key, value := range fields {
 		logrusFields[key] = value
 	}
-	return &Logger{fields: logrusFields}
+	return &DefaultLogger{fields: logrusFields}
 }
 
 // QueryPlanStep formats and logs a query plan step for human consumption
-func (l *Logger) QueryPlanStep(step *QueryPlanStep) {
-	if level >= logrus.DebugLevel {
-		log.WithFields(LoggerFields{
+func (l *DefaultLogger) QueryPlanStep(step *QueryPlanStep) {
+	if globalLogLevel >= logrus.DebugLevel {
+		l.WithFields(LoggerFields{
 			"id":              step.ParentID,
 			"insertion point": step.InsertionPoint,
 		}).Debug(step.ParentType)
 
-		log.Debug(graphql.FormatSelectionSet(step.SelectionSet))
+		l.Debug(graphql.FormatSelectionSet(step.SelectionSet))
 	}
 }
 
-var log *Logger
-var level logrus.Level
+var globalLogLevel logrus.Level
+var log Logger = &DefaultLogger{}
 
-func newLogEntry() *logrus.Entry {
+func newLogEntry(level logrus.Level) *logrus.Entry {
 	entry := logrus.New()
 
-	// only log the warning severity or above.
 	entry.SetLevel(level)
 
 	// configure the formatter
@@ -110,17 +112,16 @@ func newLogEntry() *logrus.Entry {
 
 	return logrus.NewEntry(entry)
 }
-func init() {
-	log = &Logger{}
 
+func init() {
 	switch os.Getenv("LOGLEVEL") {
 	case "Trace":
-		level = logrus.TraceLevel
+		globalLogLevel = logrus.TraceLevel
 	case "Debug":
-		level = logrus.DebugLevel
+		globalLogLevel = logrus.DebugLevel
 	case "Info":
-		level = logrus.InfoLevel
+		globalLogLevel = logrus.InfoLevel
 	default:
-		level = logrus.WarnLevel
+		globalLogLevel = logrus.WarnLevel
 	}
 }

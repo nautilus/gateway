@@ -2,12 +2,14 @@ name: Upload Executables
 
 # run this workflow when a release is published
 on:
-  release:
-    types: [published]
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
 
 jobs:
   build:
-    name: Run Tests
+    name: Build and Upload
     runs-on: ubuntu-latest
 
     steps:
@@ -30,9 +32,39 @@ jobs:
       - name: Get the version
         id: get_version
         run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        shell: bash
 
       - name: Build and deploy binaries
         run: |
           export PATH=${PATH}:`go env GOPATH`/bin
           run build
-          VERSION=${{ steps.get_version.outputs.VERSION }} run deploy
+
+      - name: Upload Darwin Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+          asset_path: ./bin/gateway_darwin_amd64
+          asset_name: gateway_darwin_amd64
+          asset_content_type: application/x-binary
+
+      - name: Upload Linux Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+          asset_path: ./bin/gateway_linux_amd64
+          asset_name: gateway_linux_amd64
+          asset_content_type: application/x-binary
+
+      - name: Upload Windows Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+          asset_path: ./bin/gateway_windows_amd64.exe
+          asset_name: gateway_windows_amd64.exe
+          asset_content_type: application/x-binary

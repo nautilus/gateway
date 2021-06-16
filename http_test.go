@@ -1,13 +1,18 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -172,6 +177,40 @@ func TestGraphQLHandler(t *testing.T) {
 			assert.Error(t, err)
 		}
 		assert.Equal(t, result.Errors[0].Extensions["code"], "UNKNOWN_ERROR")
+	})
+
+	t.Run("internal server error response", func(t *testing.T) {
+		// create gateway schema we can test against
+		innerGateway, err := New([]*graphql.RemoteSchema{
+			{Schema: schema, URL: "url1"},
+		}, WithExecutor(ExecutorFunc(
+			func(*ExecutionContext) (map[string]interface{}, error) {
+				return nil, errors.New("error string")
+			},
+		)))
+
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		// the incoming request
+		request := httptest.NewRequest("GET", `/graphql?query={allUsers}`, strings.NewReader(""))
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		innerGateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+
+		// verify the graphql error code
+		result, err := readResultWithErrors(responseRecorder, t)
+		if err != nil {
+			assert.Error(t, err)
+		}
+		assert.Equal(t, result.Errors[0].Extensions["code"], "INTERNAL_SERVER_ERROR")
 	})
 }
 
@@ -538,4 +577,754 @@ func TestPlaygroundHandler_getRequest(t *testing.T) {
 		t.Error(err.Error())
 		return
 	}
+}
+
+func TestGraphQLHandler_postWithFile(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		scalar Upload
+
+		input FileInput {
+			file: Upload!
+		}
+
+		type Query {
+			file(id: String!): String
+		}
+
+		type Mutation {
+			upload(file: Upload!): String!
+			uploadInput(input: FileInput!): String!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"upload":      "file-id",
+				"uploadInput": "file-id",
+			}, nil
+		},
+	)))
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	for _, queryTest := range []struct {
+		mess       string
+		operations string
+		fileMap    string
+		file       []byte
+	}{
+		{
+			"Raw Upload Variable",
+			`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`,
+			`{ "0": ["variables.someFile"] }`,
+			[]byte("Test file content1"),
+		},
+		{
+			"Input Variable",
+			`{ 
+				"query": "mutation ($input: FileInput!) { uploadInput(input: $input) }", 
+				"variables": { "input": { "file": null } } 
+			}`,
+			`{ "0": ["variables.input.file"] }`,
+			[]byte("Test file content1"),
+		},
+	} {
+		t.Run(queryTest.mess, func(t *testing.T) {
+			request, err := createMultipartRequest(
+				[]byte(queryTest.operations),
+				[]byte(queryTest.fileMap),
+				queryTest.file,
+			)
+
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			// a recorder so we can check what the handler responded with
+			responseRecorder := httptest.NewRecorder()
+
+			// call the http hander
+			gateway.GraphQLHandler(responseRecorder, request)
+
+			// make sure we got a response code (200)
+			assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+		})
+	}
+}
+
+func TestGraphQLHandler_DeeplyNestedFileInput(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		scalar Upload
+
+		input WrapperOne {
+			wrapperOne: WrapperTwo!
+		}
+
+		input WrapperTwo {
+			wrapperTwo: FileInput!
+		}
+
+		input FileInput {
+			file: Upload!
+			files: [Upload!]!
+		}
+
+		type Query {
+			file(id: String!): String
+		}
+
+		type Mutation {
+			uploadInputWrapper(input: WrapperOne!): String!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"uploadInputWrapper": "file-id",
+			}, nil
+		},
+	)))
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	for _, queryTest := range []struct {
+		mess       string
+		operations string
+		fileMap    string
+		file       []byte
+	}{
+		{
+			"Raw Upload Variable",
+			`{ 
+				"query": "mutation ($input: WrapperOne!) { uploadInputWrapper(input: $input) }", 
+				"variables": { "input": { "wrapperOne": { "wrapperTwo": { "file": null } } } }
+			}`,
+			`{ "0": ["variables.input.wrapperOne.wrapperTwo.file"] }`,
+			[]byte("Test file content1"),
+		},
+	} {
+		t.Run(queryTest.mess, func(t *testing.T) {
+			request, err := createMultipartRequest(
+				[]byte(queryTest.operations),
+				[]byte(queryTest.fileMap),
+				queryTest.file,
+			)
+
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			// a recorder so we can check what the handler responded with
+			responseRecorder := httptest.NewRecorder()
+
+			// call the http hander
+			gateway.GraphQLHandler(responseRecorder, request)
+
+			fmt.Println(responseRecorder.Body)
+
+			// make sure we got a response code (200)
+			assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+		})
+	}
+}
+
+func TestGraphQLHandler_postWithMultipleFiles(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		scalar Upload
+
+		input FilesInput {
+			files: [Upload!]!
+		}
+
+		type Query {
+			file(id: String!): String
+		}
+
+		type Mutation {
+			upload(file: Upload!): String!
+			uploadMulti(files: [Upload!]!): [String!]!
+			uploadMultiInput(input: FilesInput!): [String!]!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"upload":           "file-id1",
+				"uploadMulti":      []string{"file-id2", "file-id3"},
+				"uploadMultiInput": []string{"file-id1", "file-id2", "file-id3"},
+			}, nil
+		},
+	)))
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	for _, queryTest := range []struct {
+		mess       string
+		operations string
+		fileMap    string
+		files      [][]byte
+	}{
+		{
+			"Multiple File Upload Raw Variable",
+			`{
+				"query":"mutation TestFileUpload($someFile: Upload!, $allFiles: [Upload!]!) { upload(file: $someFile) uploadMulti(files: $allFiles)}",
+				"variables":{"someFile":null,"allFiles":[null,null]},"operationName":"TestFileUpload"
+			}`,
+			`{"0":["variables.someFile"],"1":["variables.allFiles.0"],"2":["variables.allFiles.1"]}`,
+			[][]byte{
+				[]byte("Test file content 1"),
+				[]byte("Test file content 2"),
+				[]byte("Test file content 3"),
+			},
+		},
+		{
+			"Multiple File Upload Input Variable",
+			`{ 
+				"query": "mutation ($input: FilesInput!) { uploadMultiInput(input: $input) }", 
+				"variables": { "input": { "files": [null, null, null] } } 
+			}`,
+			`{"0":["variables.input.files.0"],"1":["variables.input.files.1"],"2":["variables.input.files.2"]}`,
+			[][]byte{
+				[]byte("Test file content 0"),
+				[]byte("Test file content 1"),
+				[]byte("Test file content 2"),
+			},
+		},
+	} {
+		t.Run(queryTest.mess, func(t *testing.T) {
+			request, err := createMultipartRequest(
+				[]byte(queryTest.operations),
+				[]byte(queryTest.fileMap),
+				queryTest.files...,
+			)
+
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			// a recorder so we can check what the handler responded with
+			responseRecorder := httptest.NewRecorder()
+
+			// call the http handler
+			gateway.GraphQLHandler(responseRecorder, request)
+
+			// make sure we got a response code (200)
+			assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+		})
+	}
+}
+
+func TestGraphQLHandler_postBatchWithMultipleFiles(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		scalar Upload
+
+		input FilesInput {
+			files: [Upload!]!
+		}
+
+		type Query {
+			file(id: String!): String
+		}
+
+		type Mutation {
+			upload(file: Upload!): String!
+			uploadMulti(files: [Upload!]!): [String!]!
+			uploadMultiInput(input: FilesInput!): [String!]!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"upload":           "file-id1",
+				"uploadMulti":      []string{"file-id2", "file-id3"},
+				"uploadMultiInput": []string{"file-id4", "file-id5", "file-id6"},
+			}, nil
+		},
+	)))
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	request, err := createMultipartRequest(
+		[]byte(`[
+			{
+				"query":"mutation ($someFile: Upload!) { upload(file: $someFile) }",
+				"variables":{"someFile":null}
+			}, 
+			{
+				"query":"mutation TestFileUpload(\n $someFile: Upload!,\n\t$allFiles: [Upload!]!\n) {\n  upload(file: $someFile)\n  uploadMulti(files: $allFiles)\n}",
+				"variables":{"someFile":null,"allFiles":[null,null]},"operationName":"TestFileUpload"
+			},
+			{ 
+				"query": "mutation ($input: FilesInput!) { uploadMultiInput(input: $input) }", 
+				"variables": { "input": { "files": [null, null, null] } } 
+			}
+		]`),
+		[]byte(`{"0":["0.variables.someFile"],"1":["1.variables.someFile"],"2":["1.variables.allFiles.0"],"3":["1.variables.allFiles.1"],"4":["2.variables.input.files.0"],"5":["2.variables.input.files.1"],"6":["2.variables.input.files.2"]}`),
+		[]byte("Test file content 0"),
+		[]byte("Test file content 1"),
+		[]byte("Test file content 2"),
+		[]byte("Test file content 3"),
+		[]byte("Test file content 4"),
+		[]byte("Test file content 5"),
+		[]byte("Test file content 6"),
+	)
+
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	// a recorder so we can check what the handler responded with
+	responseRecorder := httptest.NewRecorder()
+
+	// call the http hander
+	gateway.GraphQLHandler(responseRecorder, request)
+
+	// make sure we got an error code
+	assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+}
+
+func TestGraphQLHandler_postFilesWithError(t *testing.T) {
+	schema, err := graphql.LoadSchema(`
+		scalar Upload
+
+		input FileInput {
+			file: Upload!
+		}
+
+		input FilesInput {
+			files: [Upload!]!
+		}
+
+		type Query {
+			file(id: String!): String
+		}
+
+		type Mutation {
+			upload(file: Upload!): String!
+			uploadInput(input: FileInput!): String!
+			uploadMulti(files: [Upload!]!): [String!]!
+			uploadMultiInput(input: FilesInput!): [String!]!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	})
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	for _, queryTest := range []struct {
+		mess       string
+		operations string
+		fileMap    string
+		files      [][]byte
+	}{
+		{
+			"Missing file",
+			`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`,
+			`{ "0": ["variables.someFile"] }`,
+			[][]byte{},
+		},
+		{
+			"Missing path variables",
+			`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`,
+			`{ "0": ["variables"] }`,
+			[][]byte{
+				[]byte("File content"),
+			},
+		},
+		{
+			"Broken operations json",
+			`{"query"`,
+			`{ "0": ["variables.someFile"] }`,
+			[][]byte{},
+		},
+		{
+			"Broken file map json",
+			`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`,
+			`{ "0"`,
+			[][]byte{},
+		},
+		{
+			"Wrong file map format - no variables",
+			`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`,
+			`{ "0": ["someFile"] }`,
+			[][]byte{
+				[]byte("File content"),
+			},
+		},
+		{
+			"Wrong file map format - invalid number of parts",
+			`{ 
+					"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+					"variables": { "someFile": null } 
+				}`,
+			`{ "0": ["variables.someFile.1.1"] }`,
+			[][]byte{
+				[]byte("File content"),
+			},
+		},
+		{
+			"Wrong batch index",
+			`[
+				{ 
+					"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+					"variables": { "someFile": null } 
+				},
+				{ 
+					"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+					"variables": { "someFile": null } 
+				}
+			]`,
+			`{ "0": ["ololo.variables.someFile"], "1": ["1.variables.someFile"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Different files mapped to same path",
+			`[
+				{ 
+					"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+					"variables": { "someFile": null } 
+				},
+				{ 
+					"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+					"variables": { "someFile": null } 
+				}
+			]`,
+			`{ "0": ["0.variables.someFile"], "1": ["0.variables.someFile"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Missing variables field for file",
+			`{
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }",
+				"variables": { "foo": "bar" }
+			}`,
+			`{ "0": ["variables.someFile"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+			},
+		},
+		{
+			"Missing variables for multi upload",
+			`{
+				"query": "mutation ($allFiles: [Upload!]!) { uploadMulti(files: $allFiles) }",
+				"variables": {}
+			}`,
+			`{ "0": ["variables.allFiles.0"], "1": ["variables.allFiles.1"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Wrong variable field type for multi upload",
+			`{
+				"query": "mutation ($allFiles: [Upload!]!) { uploadMulti(files: $allFiles) }",
+				"variables": { "allFiles": 50 }
+			}`,
+			`{ "0": ["variables.allFiles.0"], "1": ["variables.allFiles.1"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Wrong file index in file map",
+			`{
+				"query": "mutation ($allFiles: [Upload!]!) { uploadMulti(files: $allFiles) }",
+				"variables": { "allFiles": [null, null] }
+			}`,
+			`{ "0": ["variables.allFiles.foo"], "1": ["variables.allFiles.1"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Wrong file placeholders count",
+			`{
+				"query": "mutation ($allFiles: [Upload!]!) { uploadMulti(files: $allFiles) }",
+				"variables": { "allFiles": [null] }
+			}`,
+			`{ "0": ["variables.allFiles.0"], "1": ["variables.allFiles.1"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Wrong file placeholder value",
+			`{
+				"query": "mutation ($allFiles: [Upload!]!) { uploadMulti(files: $allFiles) }",
+				"variables": { "allFiles": [null, 50] }
+			}`,
+			`{ "0": ["variables.allFiles.0"], "1": ["variables.allFiles.1"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Missing file with input type",
+			`{ 
+				"query": "mutation ($input: FileInput!) { uploadInput(input: $input) }", 
+				"variables": { "input": { "file": null } } 
+			}`,
+			`{ "0": ["variables.input.file"] }`,
+			[][]byte{},
+		},
+		{
+			"Different files mapped to same path using input type",
+			`[
+				{ 
+					"query": "mutation ($input: FileInput!) { uploadInput(input: $input) }", 
+					"variables": { "input": { "file": null } } 
+				},
+				{ 
+					"query": "mutation ($input: FileInput!) { uploadInput(input: $input) }", 
+					"variables": { "input": { "file": null } } 
+				}
+			]`,
+			`{ "0": ["0.variables.input.file"], "1": ["0.variables.input.file"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Missing variables field for file using input type",
+			`{
+					"query": "mutation ($input: FileInput!) { uploadInput(input: $input) }", 
+					"variables": { "input": { "foo": bar } } 
+			}`,
+			`{ "0": ["variables.input.file"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+			},
+		},
+		{
+			"Missing variables for multi upload using input type",
+			`{
+				"query": "mutation ($input: FilesInput!) { uploadMultiInput(input: $input) }",
+				"variables": {}
+			}`,
+			`{ "0": ["variables.input.files.0"], "1": ["variables.input.files.1"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Wrong variable field type for multi upload using input type",
+			`{
+				"query": "mutation ($input: FilesInput!) { uploadMultiInput(input: $input) }",
+				"variables": { "input": { "files": true } }
+			}`,
+			`{ "0": ["variables.allFiles.0"], "1": ["variables.allFiles.1"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Wrong or missing file index in file map using input type",
+			`{
+				"query": "mutation ($input: FilesInput!) { uploadMultiInput(input: $input) }",
+				"variables": { "input": { "files": [null, null] } }
+			}`,
+			`{ "0": ["variables.input.files"], "1": ["variables.input.files.one"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Wrong file placeholders count using input type",
+			`{
+				"query": "mutation ($input: FilesInput!) { uploadMultiInput(input: $input) }",
+				"variables": { "input": { "files": [null] } }
+			}`,
+			`{ "0": ["variables.input.files.0"], "1": ["variables.input.files.1"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+		{
+			"Wrong file placeholder value using input type",
+			`{
+				"query": "mutation ($input: FilesInput!) { uploadMultiInput(input: $input) }",
+				"variables": { "input": { "files": [null, 50] } }
+			}`,
+			`{ "0": ["variables.input.files.0"], "1": ["variables.input.files.1"] }`,
+			[][]byte{
+				[]byte("File content 1"),
+				[]byte("File content 2"),
+			},
+		},
+	} {
+		t.Run(queryTest.mess, func(t *testing.T) {
+			request, err := createMultipartRequest(
+				[]byte(queryTest.operations),
+				[]byte(queryTest.fileMap),
+				queryTest.files...,
+			)
+
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			// a recorder so we can check what the handler responded with
+			responseRecorder := httptest.NewRecorder()
+
+			// call the http hander
+			gateway.GraphQLHandler(responseRecorder, request)
+
+			// make sure we got an error code
+			assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+		})
+	}
+
+	t.Run("Not multipart request", func(t *testing.T) {
+		// the incoming request
+		request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`))
+		request.Header.Set("Content-Type", "multipart/form-data")
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+
+	t.Run("Unknown content-type", func(t *testing.T) {
+		// the incoming request
+		request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`{ 
+				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
+				"variables": { "someFile": null } 
+			}`))
+		request.Header.Set("Content-Type", "foobar/form-data")
+
+		// a recorder so we can check what the handler responded with
+		responseRecorder := httptest.NewRecorder()
+
+		// call the http hander
+		gateway.GraphQLHandler(responseRecorder, request)
+
+		// make sure we got an error code
+		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	})
+}
+
+func createMultipartRequest(operations, fileMap []byte, filesContent ...[]byte) (*http.Request, error) {
+	var b = bytes.Buffer{}
+	var fw io.Writer
+	var err error
+
+	w := multipart.NewWriter(&b)
+
+	fw, err = w.CreateFormField("operations")
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = fw.Write(operations)
+	if err != nil {
+		return nil, err
+	}
+
+	fw, err = w.CreateFormField("map")
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = fw.Write(fileMap)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, fileContent := range filesContent {
+		fw, err = w.CreateFormFile(strconv.Itoa(i), fmt.Sprintf("file%d.txt", i))
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = fw.Write(fileContent)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err = w.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	// the incoming request
+	request := httptest.NewRequest("POST", "/graphql", &b)
+	request.Header.Set("Content-Type", w.FormDataContentType())
+
+	return request, nil
 }

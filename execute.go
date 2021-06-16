@@ -248,7 +248,7 @@ func executeStep(
 		return
 	}
 
-	if level == logrus.InfoLevel {
+	if globalLogLevel == logrus.InfoLevel {
 		node, nodeOk := queryResult["node"].(map[string]interface{})
 		var predicates []string
 		if nodeOk {
@@ -308,7 +308,9 @@ func executeStep(
 		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
 		// insertion point. For lists, insertion points look like: ["user", "friends:0", "catPhotos:0", "owner"]
 		for _, dependent := range step.Then {
-			insertPoints, err := executorFindInsertionPoints(resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{insertionPoint}, step.FragmentDefinitions)
+			copiedInsertionPoint := make([]string, len(insertionPoint))
+			copy(copiedInsertionPoint, insertionPoint)
+			insertPoints, err := executorFindInsertionPoints(resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{copiedInsertionPoint}, step.FragmentDefinitions)
 			if err != nil {
 				errCh <- err
 				return
@@ -434,6 +436,16 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		// get the type of the object in question
 		selectionType := foundSelection.Definition.Type
 
+		if rootValue == nil {
+			if selectionType.NonNull {
+				err := fmt.Errorf("Received null for required field: %v", foundSelection.Name)
+				log.Warn(err)
+				return nil, err
+			} else {
+				return nil, nil
+			}
+		}
+
 		// if the type is a list
 		if selectionType.Elem != nil {
 			log.Trace("Selection should be a list")
@@ -457,7 +469,9 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 				log.Trace("Adding ", entryPoint, " to list")
 
 				newBranchSet := make([][]string, len(oldBranch))
-				copy(newBranchSet, oldBranch)
+				for i, c := range oldBranch {
+					newBranchSet[i] = append(newBranchSet[i], c...)
+				}
 
 				// if we are adding to an existing branch
 				if len(newBranchSet) > 0 {
@@ -549,6 +563,13 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 	return oldBranch, nil
 }
 
+func isListElement(path string) bool {
+	if hashLocation := strings.Index(path, "#"); hashLocation > 0 {
+		path = path[:hashLocation]
+	}
+	return strings.Contains(path, ":")
+}
+
 func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex, path []string) (interface{}, error) {
 	// a pointer to the objects we are modifying
 	var recent interface{} = source
@@ -556,7 +577,7 @@ func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex,
 
 	for i, point := range path[:] {
 		// if the point designates an element in the list
-		if strings.Contains(point, ":") {
+		if isListElement(point) {
 			pointData, err := executorGetPointData(point)
 			if err != nil {
 				return nil, err

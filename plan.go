@@ -144,7 +144,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 		plans = append(plans, plan)
 
 		// a channel to register new steps
-		stepCh := make(chan *newQueryPlanStepPayload, 10)
+		stepCh := make(chan *newQueryPlanStepPayload, 50)
 
 		// a chan to get errors
 		errCh := make(chan error)
@@ -821,7 +821,7 @@ func (p *MinQueriesPlanner) generateScrubFieldsWalk(step *QueryPlanStep, selecti
 		// look over the points in the selection
 		for _, field := range graphql.SelectedFields(targetSelection) {
 			// if the field name is what we expected
-			if field.Name == point {
+			if field.Name == point || field.Alias == point {
 				// our next selection set is the fields selection set
 				targetSelection = field.SelectionSet
 

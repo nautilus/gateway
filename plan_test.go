@@ -1687,3 +1687,69 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 	assert.Equal(t, "lastName", lastNameField.Name)
 	assert.Equal(t, location2, lastNameStep.Queryer.(*graphql.SingleRequestQueryer).URL())
 }
+
+func TestPlanQuery_scrubWithAlias(t *testing.T) {
+	schema, _ := graphql.LoadSchema(`
+		type User {
+			firstName: String!
+			catPhotos: [CatPhoto!]!
+		}
+
+		type CatPhoto {
+			URL: String!
+		}
+
+		type Query {
+			allUsers: [User!]!
+		}
+	`)
+
+	// the location of the user service
+	userLocation := "user-location"
+	// the location of the cat service
+	catLocation := "cat-location"
+
+	// the location map for fields for this query
+	locations := FieldURLMap{}
+	locations.RegisterURL("Query", "allUsers", userLocation)
+	locations.RegisterURL("User", "firstName", userLocation)
+	locations.RegisterURL("User", "catPhotos", catLocation)
+	locations.RegisterURL("CatPhoto", "URL", catLocation)
+	locations.RegisterURL("CatPhoto", "name", catLocation)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			{
+				users: allUsers {
+					firstName
+					catPhotos {
+						URL
+					}
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+	})
+	// if something went wrong planning the query
+	if err != nil {
+		// the test is over
+		t.Errorf("encountered error when building schema: %s", err.Error())
+		return
+	}
+
+	// the first step should have all users
+	firstStep := plans[0].RootStep.Then[0]
+	// make sure we are grabbing values off of Query since its the root
+	assert.Equal(t, "Query", firstStep.ParentType)
+
+	// make sure there's a selection set
+	if len(firstStep.SelectionSet) != 1 {
+		t.Error("first step did not have a selection set")
+		return
+	}
+	// check that allUsers selected and alias presented
+	firstField := graphql.SelectedFields(firstStep.SelectionSet)[0]
+	assert.Equal(t, "allUsers", firstField.Name)
+	assert.Equal(t, "users", firstField.Alias)
+}
