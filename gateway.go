@@ -274,13 +274,6 @@ func WithLocationPriorities(priorities []string) Option {
 	}
 }
 
-// WithLogger returns an Option that sets the logger of the gateway
-func WithLogger(l Logger) Option {
-	return func(g *Gateway) {
-		log = l
-	}
-}
-
 var nodeField = &QueryField{
 	Name: "node",
 	Type: ast.NamedType("Node", &ast.Position{}),

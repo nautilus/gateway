@@ -139,17 +139,6 @@ func TestGateway(t *testing.T) {
 		assert.Equal(t, priorities, gateway.locationPriorities)
 	})
 
-	t.Run("WithLogger", func(t *testing.T) {
-		logger := &DefaultLogger{}
-		_, err := New(sources, WithLogger(logger))
-		if err != nil {
-			t.Error(err.Error())
-			return
-		}
-
-		assert.Equal(t, logger, log)
-	})
-
 	t.Run("fieldURLs ignore introspection", func(t *testing.T) {
 		locations := fieldURLs(sources, true)
 
