@@ -190,7 +190,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
 	// descriptions
 	if previousDefinition.Description != "An object with an ID" && newDefinition.Description != "An object with an ID" && previousDefinition.Description != newDefinition.Description {
-		return fmt.Errorf("conflict in interface descriptions: \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
+		log.Warn(fmt.Sprintf("conflict in interface descriptions: \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description))
 	}
 
 	// fields
@@ -288,7 +288,7 @@ func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefin
 	}
 
 	if previousDefinition.Description != newDefinition.Description {
-		return fmt.Errorf("enum %s has an inconsistent descriptions: %s and %s", previousDefinition.Name, previousDefinition.Description, newDefinition.Description)
+		log.Warn(fmt.Sprintf("enum %s has an inconsistent descriptions: %s and %s", previousDefinition.Name, previousDefinition.Description, newDefinition.Description))
 	}
 
 	// if the two definitions dont have the same length
@@ -332,7 +332,7 @@ func mergeDirectivesEqual(previousDefinition *ast.DirectiveDefinition, newDefini
 
 	// if the 2 descriptions don't match
 	if previousDefinition.Description != newDefinition.Description {
-		return fmt.Errorf("conflict in directive descriptions. Found \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
+		log.Warn(fmt.Sprintf("conflict in directive descriptions. Found \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description))
 	}
 
 	// make sure the 2 directives can be placed on the same locations
@@ -352,7 +352,7 @@ func mergeDirectivesEqual(previousDefinition *ast.DirectiveDefinition, newDefini
 func mergeEnumValuesEqual(value1, value2 *ast.EnumValueDefinition) error {
 	// if the 2 descriptions don't match
 	if value1.Description != value2.Description {
-		return fmt.Errorf("conflict in enum value descriptions. Found \"%v\" and \"%v\"", value1.Description, value2.Description)
+		log.Warn(fmt.Sprintf("conflict in enum value descriptions. Found \"%v\" and \"%v\"", value1.Description, value2.Description))
 	}
 
 	// if the 2 directives dont match
@@ -522,7 +522,7 @@ func mergeArgumentDefinitionListEqual(list1, list2 ast.ArgumentDefinitionList) e
 func mergeArgumentDefinitionsEqual(arg1 *ast.ArgumentDefinition, arg2 *ast.ArgumentDefinition) error {
 	// if the 2 descriptions are not the same
 	if arg1.Description != arg2.Description {
-		return errors.New("descriptions were not the same")
+		log.Warn(fmt.Sprintf("descriptions were not the same. \"%v\" and \"%v\"", arg1.Description, arg2.Description))
 	}
 
 	// check that the 2 types are equal
