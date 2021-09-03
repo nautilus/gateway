@@ -29,6 +29,7 @@ github.com/gorilla/mux v1.6.1/go.mod h1:1lud6UwP+6orDFRuTfBEV8e9/aOM/c4fVVCaMa2z
 github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/graph-gophers/dataloader v5.0.0+incompatible h1:R+yjsbrNq1Mo3aPG+Z/EKYrXrXXUNJHOgbRt+U6jOug=
 github.com/graph-gophers/dataloader v5.0.0+incompatible/go.mod h1:jk4jk0c5ZISbKaMe8WsVopGB5/15GvGHMdMdPtwlRp4=
+github.com/graph-gophers/graphql-go v0.0.0-20190108123631-d5b7dc6be53b/go.mod h1:aRnZGurV3LlZ1Y+ygyx1mAV6OUfq+nu6OgpJ6jKgZ3g=
 github.com/graphql-go/graphql v0.7.10-0.20210411022516-8a92e977c10b h1:pFOI7cDz2wI+MwaoDqqrhFCXkwvpvkWpYQCXvQVAlfs=
 github.com/graphql-go/graphql v0.7.10-0.20210411022516-8a92e977c10b/go.mod h1:k6yrAYQaSP59DC5UVxbgxESlmVyojThKdORUqGDGmrI=
 github.com/hashicorp/golang-lru v0.5.0/go.mod h1:/m3WP610KZHVQ1SGc6re/UDhFvYD7pJ4Ao+sR/qLZy8=
@@ -51,6 +52,8 @@ github.com/mitchellh/mapstructure v0.0.0-20180203102830-a4e142e9c047/go.mod h1:F
 github.com/mitchellh/mapstructure v1.1.2/go.mod h1:FVVH3fgwuzCH5S8UJGiWEs2h04kUh9fWfEaFds41c1Y=
 github.com/mitchellh/mapstructure v1.4.1 h1:CpVNEelQCZBooIPDn+AR3NpivK/TIKU8bDxdASFVQag=
 github.com/mitchellh/mapstructure v1.4.1/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
+github.com/nautilus/gateway v0.1.19 h1:TLjDZMAafun6RIPS8erDaFR0QRp0ZJDNvsfUaTs14ic=
+github.com/nautilus/gateway v0.1.19/go.mod h1:HVdN9Rvma7X2wmBWm6+4OY8CURSmK8uBFwJuJ4dy1pM=
 github.com/nautilus/graphql v0.0.16 h1:4QKusOU+U6nVd0OrWntToIkNBohw4o0GzIS37bfUmgY=
 github.com/nautilus/graphql v0.0.16/go.mod h1:UYcs/gBtuFrZyX591SuYboby4xFNG9ZkaTYk7BBSRak=
 github.com/opentracing/basictracer-go v1.0.0/go.mod h1:QfBfYuafItcjQuMwinw9GhYKwFXS9KnPs5lxoYwgW74=
