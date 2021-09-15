@@ -16,6 +16,12 @@ your machine:
 $ ./gateway start --port 4000 --services http://localhost:3000,http://localhost:3001
 ```
 
+Alternatively, install it with the `go` command to your Go bin and run it:
+```bash
+$ go install github.com/nautilus/gateway/cmd/gateway@latest
+$ gateway start --port 4000 --services http://localhost:3000,http://localhost:3001
+```
+
 This will start a server on port 4000 that wraps over the services
 running at `http://localhost:3000` and `http://localhost:3001`. For more information on possible
 arguments to pass the executable, run `./gateway --help`.
