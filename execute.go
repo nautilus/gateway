@@ -151,7 +151,6 @@ func executeStep(
 	errCh chan error,
 	stepWg *sync.WaitGroup,
 ) {
-	log.Debug("")
 	log.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
 
 	log.Debug(step.SelectionSet)
