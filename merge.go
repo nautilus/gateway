@@ -131,18 +131,19 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 
 			switch definition.Kind {
 			case ast.Object:
-				err = mergeObjectTypes(result, previousDefinition, definition)
+				previousDefinition, err = mergeObjectTypes(result, previousDefinition, definition)
 			case ast.InputObject:
-				err = mergeInputObjects(result, previousDefinition, definition)
+				previousDefinition, err = mergeInputObjects(result, previousDefinition, definition)
 			case ast.Enum:
-				err = mergeEnums(result, previousDefinition, definition)
+				previousDefinition, err = mergeEnums(result, previousDefinition, definition)
 			case ast.Union:
-				err = mergeUnions(result, previousDefinition, definition)
+				previousDefinition, err = mergeUnions(result, previousDefinition, definition)
 			}
 
 			if err != nil {
 				return nil, err
 			}
+			result.Types[name] = previousDefinition
 		}
 	}
 
@@ -209,7 +210,7 @@ func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, new
 	return nil
 }
 
-func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	// the fields in the aggregate
 	previousFields := previousDefinition.Fields
 
@@ -223,7 +224,7 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 			// and they aren't equal
 			if err := mergeFieldsEqual(field, newField); err != nil {
 				//  we don't allow 2 fields that have different types
-				return fmt.Errorf("encountered error merging object %v: %v", previousDefinition.Name, err.Error())
+				return nil, fmt.Errorf("encountered error merging object %v: %v", previousDefinition.Name, err.Error())
 			}
 		} else {
 			// its safe to copy over the definition
@@ -234,27 +235,28 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 
 	// make sure that the 2 directive lists are the same
 	if err := mergeDirectiveListsEqual(previousDefinition.Directives, newDefinition.Directives); err != nil {
-		return err
+		return nil, err
 	}
 
 	// copy over the new fields for this type definition
-	previousDefinition.Fields = previousFields
+	prevCopy := *previousDefinition
+	prevCopy.Fields = previousFields
 
-	return nil
+	return &prevCopy, nil
 }
 
-func mergeInputObjects(result *ast.Schema, object1, object2 *ast.Definition) error {
+func mergeInputObjects(result *ast.Schema, object1, object2 *ast.Definition) (*ast.Definition, error) {
 	// if the field list isn't the same
 	if err := mergeFieldListEqual(object1.Fields, object2.Fields); err != nil {
-		return err
+		return nil, err
 	}
 
 	// check directives
 	if err := mergeDirectiveListsEqual(object1.Directives, object2.Directives); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return object1, nil
 }
 
 func mergeStringSliceEquivalent(slice1, slice2 []string) error {
@@ -280,20 +282,20 @@ func mergeStringSliceEquivalent(slice1, slice2 []string) error {
 	return nil
 }
 
-func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	// if we are merging an internal enums
 	if strings.HasPrefix(previousDefinition.Name, "__") {
 		// let it through without changing
-		return nil
+		return previousDefinition, nil
 	}
 
 	if previousDefinition.Description != newDefinition.Description {
-		return fmt.Errorf("enum %s has an inconsistent descriptions: %s and %s", previousDefinition.Name, previousDefinition.Description, newDefinition.Description)
+		return nil, fmt.Errorf("enum %s has an inconsistent descriptions: %s and %s", previousDefinition.Name, previousDefinition.Description, newDefinition.Description)
 	}
 
 	// if the two definitions dont have the same length
 	if len(previousDefinition.EnumValues) != len(newDefinition.EnumValues) {
-		return fmt.Errorf("enum %s has an inconsistent definition in different services", newDefinition.Name)
+		return nil, fmt.Errorf("enum %s has an inconsistent definition in different services", newDefinition.Name)
 	}
 	// a set of values
 	for _, value := range previousDefinition.EnumValues {
@@ -302,28 +304,28 @@ func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefin
 
 		// if the 2 values have different description
 		if err := mergeEnumValuesEqual(value, newValue); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	// we're done
-	return nil
+	return previousDefinition, nil
 }
 
-func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	// unions are defined by a list of strings that name the sub types
 
 	// if the length of the 2 lists is not the same
 	if len(previousDefinition.Types) != len(newDefinition.Types) {
-		return fmt.Errorf("union %s did not have a consistent number of sub types", previousDefinition.Name)
+		return nil, fmt.Errorf("union %s did not have a consistent number of sub types", previousDefinition.Name)
 	}
 
 	if err := mergeStringSliceEquivalent(previousDefinition.Types, newDefinition.Types); err != nil {
-		return err
+		return nil, err
 	}
 
 	// nothing is wrong
-	return nil
+	return previousDefinition, nil
 }
 
 func mergeDirectivesEqual(previousDefinition *ast.DirectiveDefinition, newDefinition *ast.DirectiveDefinition) error {
