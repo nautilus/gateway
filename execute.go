@@ -36,6 +36,7 @@ type queryExecutionResult struct {
 // ExecutionContext is a well-type alternative to context.Context and provides the context
 // for a particular execution.
 type ExecutionContext struct {
+	logger             Logger
 	Plan               *QueryPlan
 	Variables          map[string]interface{}
 	RequestContext     context.Context
@@ -89,18 +90,18 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				if payload == nil {
 					continue
 				}
-				log.Debug("Inserting result into ", payload.InsertionPoint)
-				log.Debug("Result: ", payload.Result)
+				ctx.logger.Debug("Inserting result into ", payload.InsertionPoint)
+				ctx.logger.Debug("Result: ", payload.Result)
 
 				// we have to grab the value in the result and write it to the appropriate spot in the
 				// acumulator.
-				err := executorInsertObject(result, resultLock, payload.InsertionPoint, payload.Result)
+				err := executorInsertObject(ctx, result, resultLock, payload.InsertionPoint, payload.Result)
 				if err != nil {
 					errCh <- err
 					continue
 				}
 
-				log.Debug("Done. ", result)
+				ctx.logger.Debug("Done. ", result)
 				// one of the queries is done
 				stepWg.Done()
 
@@ -151,12 +152,12 @@ func executeStep(
 	errCh chan error,
 	stepWg *sync.WaitGroup,
 ) {
-	log.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
+	ctx.logger.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
 
-	log.Debug(step.SelectionSet)
+	ctx.logger.Debug(step.SelectionSet)
 
 	// log the query
-	log.QueryPlanStep(step)
+	ctx.logger.QueryPlanStep(step)
 
 	// the list of variables and their definitions that pertain to this query
 	variables := map[string]interface{}{}
@@ -222,7 +223,7 @@ func executeStep(
 		OperationName: operationName,
 	}, &queryResult)
 	if err != nil {
-		log.Warn("Network Error: ", err)
+		ctx.logger.Warn("Network Error: ", err)
 		errCh <- err
 		return
 	}
@@ -235,9 +236,9 @@ func executeStep(
 	// underneath the `node` field as the result for the query
 	stripNode := step.ParentType != "Query" && step.ParentType != "Subscription" && step.ParentType != "Mutation"
 	if stripNode {
-		log.Debug("Should strip node")
+		ctx.logger.Debug("Should strip node")
 		// get the result from the response that we have to stitch there
-		extractedResult, err := executorExtractValue(queryResult, resultLock, []string{"node"})
+		extractedResult, err := executorExtractValue(ctx, queryResult, resultLock, []string{"node"})
 		if err != nil {
 			errCh <- err
 			return
@@ -263,20 +264,20 @@ func executeStep(
 	// defer the execution of the dependent steps after the main step has been published
 	defer func() {
 		for _, sr := range dependentSteps {
-			log.Info("Spawn ", sr.insertionPoint)
+			ctx.logger.Info("Spawn ", sr.insertionPoint)
 			go executeStep(ctx, plan, sr.step, sr.insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
 		}
 	}()
 
 	// if there are next steps
 	if len(step.Then) > 0 {
-		log.Debug("Kicking off child queries")
+		ctx.logger.Debug("Kicking off child queries")
 		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
 		// insertion point. For lists, insertion points look like: ["user", "friends:0", "catPhotos:0", "owner"]
 		for _, dependent := range step.Then {
 			copiedInsertionPoint := make([]string, len(insertionPoint))
 			copy(copiedInsertionPoint, insertionPoint)
-			insertPoints, err := executorFindInsertionPoints(resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{copiedInsertionPoint}, step.FragmentDefinitions)
+			insertPoints, err := executorFindInsertionPoints(ctx, resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{copiedInsertionPoint}, step.FragmentDefinitions)
 			if err != nil {
 				// reset dependent steps - result would be discarded anyways
 				dependentSteps = nil
@@ -296,7 +297,7 @@ func executeStep(
 
 	// before publishing the current result, tell the wait-group about the dependent steps to wait for
 	stepWg.Add(len(dependentSteps))
-	log.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
+	ctx.logger.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	// send the result to be stitched in with our accumulator
 	resultCh <- &queryExecutionResult{
 		InsertionPoint: insertionPoint,
@@ -330,8 +331,8 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 }
 
 // executorFindInsertionPoints returns the list of insertion points where this step should be executed.
-func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) ([][]string, error) {
-	log.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
+func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) ([][]string, error) {
+	ctx.logger.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
 	oldBranch := startingPoints
 
 	// track the root of the selection set while  we walk
@@ -350,8 +351,8 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		}
 	}
 
-	log.Debug("First meaningful path point: ", targetPoints[startingIndex])
-	log.Debug("result ", resultChunk)
+	ctx.logger.Debug("First meaningful path point: ", targetPoints[startingIndex])
+	ctx.logger.Debug("result ", resultChunk)
 
 	// if our starting point is []string{"users:0"} then we know everything so far
 	// is along the path of the steps insertion point
@@ -363,19 +364,18 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		var foundSelection *ast.Field
 		foundSelection, err := findSelection(point, selectionSetRoot, fragmentDefs)
 		if err != nil {
-			log.Debug("Error looking for selection")
+			ctx.logger.Debug("Error looking for selection")
 			return [][]string{}, err
 		}
 
 		// if we didn't find a selection
 		if foundSelection == nil {
-			log.Debug("No selection")
+			ctx.logger.Debug("No selection")
 			return [][]string{}, nil
 		}
 
-		log.Debug("")
-		log.Debug("Found Selection for: ", point)
-		log.Debug("Result Chunk: ", resultChunk)
+		ctx.logger.Debug("Found Selection for: ", point)
+		ctx.logger.Debug("Result Chunk: ", resultChunk)
 		// make sure we are looking at the top of the selection set next time
 		selectionSetRoot = foundSelection.SelectionSet
 
@@ -393,7 +393,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 		if rootValue == nil {
 			if selectionType.NonNull {
 				err := fmt.Errorf("Received null for required field: %v", foundSelection.Name)
-				log.Warn(err)
+				ctx.logger.Warn(err)
 				return nil, err
 			} else {
 				return nil, nil
@@ -402,7 +402,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 		// if the type is a list
 		if selectionType.Elem != nil {
-			log.Debug("Selection should be a list")
+			ctx.logger.Debug("Selection should be a list")
 			// make sure the root value is a list
 			rootList, ok := rootValue.([]interface{})
 			if !ok {
@@ -420,7 +420,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 
 				// the point we are going to add to the list
 				entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
-				log.Debug("Adding ", entryPoint, " to list")
+				ctx.logger.Debug("Adding ", entryPoint, " to list")
 
 				newBranchSet := make([][]string, len(oldBranch))
 				for i, c := range oldBranch {
@@ -452,7 +452,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 				}
 
 				// compute the insertion points for that entry
-				entryInsertionPoints, err := executorFindInsertionPoints(resultLock, targetPoints, selectionSetRoot, resultEntry, newBranchSet, fragmentDefs)
+				entryInsertionPoints, err := executorFindInsertionPoints(ctx, resultLock, targetPoints, selectionSetRoot, resultEntry, newBranchSet, fragmentDefs)
 				if err != nil {
 					return nil, err
 				}
@@ -497,7 +497,7 @@ func executorFindInsertionPoints(resultLock *sync.Mutex, targetPoints []string, 
 						return nil, errors.New("Could not find the id for the object")
 					}
 
-					// log.Debug("Adding id to ", oldBranch[i][pointI])
+					// ctx.logger.Debug("Adding id to ", oldBranch[i][pointI])
 
 					oldBranch[i][pointI] = fmt.Sprintf("%s:%v#%v", oldBranch[i][pointI], i, id)
 
@@ -533,10 +533,10 @@ func isListElement(path string) bool {
 	return strings.Contains(path, ":")
 }
 
-func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex, path []string) (interface{}, error) {
+func executorExtractValue(ctx *ExecutionContext, source map[string]interface{}, resultLock *sync.Mutex, path []string) (interface{}, error) {
 	// a pointer to the objects we are modifying
 	var recent interface{} = source
-	log.Debug("Pulling ", path, " from ", source)
+	ctx.logger.Debug("Pulling ", path, " from ", source)
 
 	for i, point := range path[:] {
 		// if the point designates an element in the list
@@ -621,11 +621,11 @@ func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex,
 	return recent, nil
 }
 
-func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}) error {
-	// log.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
+func executorInsertObject(ctx *ExecutionContext, target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}) error {
+	// ctx.logger.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
 	if len(path) > 0 {
 		// a pointer to the objects we are modifying
-		obj, err := executorExtractValue(target, resultLock, path)
+		obj, err := executorExtractValue(ctx, target, resultLock, path)
 		if err != nil {
 			return err
 		}

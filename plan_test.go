@@ -28,6 +28,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 		Query:     "{ foo }",
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	// if something went wrong planning the query
 	if err != nil {
@@ -83,6 +84,7 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 		`,
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	// if something went wrong planning the query
 	if err != nil {
@@ -198,6 +200,7 @@ func TestPlanQuery_includeFragmentsBoundaryTypes(t *testing.T) {
 			`,
 			Schema:    schema,
 			Locations: locations,
+			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		},
 	)
 	if err != nil {
@@ -242,6 +245,7 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 			`,
 			Schema:    schema,
 			Locations: locations,
+			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
 	// if something went wrong planning the query
 	if err != nil {
@@ -328,6 +332,7 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 			`,
 			Schema:    schema,
 			Locations: locations,
+			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
 	// if something went wrong planning the query
 	if err != nil {
@@ -421,6 +426,7 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 			`,
 			Schema:    schema,
 			Locations: locations,
+			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
 	// if something went wrong planning the query
 	if err != nil {
@@ -558,6 +564,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 		`,
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	// if something went wrong planning the query
 	if err != nil {
@@ -670,6 +677,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 		`,
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	// if something went wrong planning the query
 	if err != nil {
@@ -823,6 +831,7 @@ func TestPlanQuery_preferParentLocation(t *testing.T) {
 		`,
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	// if something went wrong planning the query
 	if err != nil {
@@ -894,6 +903,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 			`,
 			Schema:    schema,
 			Locations: locations,
+			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
 		if err != nil {
 			t.Error(err.Error())
@@ -921,6 +931,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 			`,
 			Schema:    schema,
 			Locations: locations,
+			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
 		if err != nil {
 			t.Error(err.Error())
@@ -950,6 +961,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 			`,
 			Schema:    schema,
 			Locations: locations,
+			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
 		if err != nil {
 			t.Error(err.Error())
@@ -1007,6 +1019,7 @@ func TestPlanQuery_groupSiblings(t *testing.T) {
 		`,
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	// if something went wrong planning the query
 	if err != nil {
@@ -1082,6 +1095,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 		`,
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	if err != nil {
 		t.Error(err.Error())
@@ -1210,6 +1224,7 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 		`,
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	// if something went wrong planning the query
 	if err != nil {
@@ -1286,6 +1301,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	`,
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	// if something went wrong planning the query
 	if err != nil {
@@ -1458,7 +1474,8 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 	}
 
 	// the query we're building goes to the top level Query object
-	operation := plannerBuildQuery("hoopla", "Query", variables, selection, ast.FragmentDefinitionList{})
+	ctx := &PlanningContext{Gateway: &Gateway{logger: &DefaultLogger{}}}
+	operation := plannerBuildQuery(ctx, "hoopla", "Query", variables, selection, ast.FragmentDefinitionList{})
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -1497,7 +1514,8 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 	}
 
 	// the query we're building goes to the User object
-	operation := plannerBuildQuery("", objType, ast.VariableDefinitionList{}, selection, ast.FragmentDefinitionList{})
+	ctx := &PlanningContext{Gateway: &Gateway{logger: &DefaultLogger{}}}
+	operation := plannerBuildQuery(ctx, "", objType, ast.VariableDefinitionList{}, selection, ast.FragmentDefinitionList{})
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -1614,6 +1632,7 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 			`,
 			Schema:    schema,
 			Locations: locations,
+			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
 
 		if err != nil {
@@ -1730,6 +1749,7 @@ func TestPlanQuery_scrubWithAlias(t *testing.T) {
 		`,
 		Schema:    schema,
 		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
 	})
 	// if something went wrong planning the query
 	if err != nil {

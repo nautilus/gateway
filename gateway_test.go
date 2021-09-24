@@ -155,7 +155,7 @@ func TestGateway(t *testing.T) {
 			return
 		}
 
-		assert.Equal(t, logger, log)
+		assert.Equal(t, logger, g.logger)
 	})
 
 	t.Run("fieldURLs ignore introspection", func(t *testing.T) {

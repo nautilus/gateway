@@ -26,6 +26,7 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestExecutor_plansOfOne(t *testing.T) {
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger: &DefaultLogger{},
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
 				Then: []*QueryPlanStep{
@@ -81,6 +82,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -176,6 +178,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -250,6 +253,7 @@ func TestExecutor_insertIntoFragmentSpread(t *testing.T) {
 	//   }
 	// }
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -375,6 +379,7 @@ func TestExecutor_insertIntoListFragmentSpreads(t *testing.T) {
 	// 	  }
 	//   }
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -516,6 +521,7 @@ func TestExecutor_insertIntoFragmentSpreadLists(t *testing.T) {
 	// 	}
 	//   }
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -653,6 +659,7 @@ func TestExecutor_insertIntoInlineFragment(t *testing.T) {
 	//  }
 	// }
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -760,6 +767,7 @@ func TestExecutor_insertIntoListInlineFragments(t *testing.T) {
 	//  }
 	// }
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -881,6 +889,7 @@ func TestExecutor_insertIntoInlineFragmentsList(t *testing.T) {
 	// 	}
 	// }
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -1010,6 +1019,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -1249,6 +1259,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	_, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -1325,6 +1336,7 @@ func TestExecutor_includeIf(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -1532,6 +1544,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	_, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Variables:      fullVariables,
 		Plan: &QueryPlan{
@@ -1699,7 +1712,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
+	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -1757,7 +1770,7 @@ func TestFindObject(t *testing.T) {
 		},
 	}
 
-	value, err := executorExtractValue(source, &sync.Mutex{}, []string{"hello:0", "friends:1", "friends:0"})
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello:0", "friends:1", "friends:0"})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -1797,7 +1810,7 @@ func TestFindString(t *testing.T) {
 		},
 	}
 
-	value, err := executorExtractValue(source, &sync.Mutex{}, []string{"hello:0", "friends:1", "firstName"})
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello:0", "friends:1", "firstName"})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -1814,7 +1827,7 @@ func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
 	inserted := map[string]interface{}{"hello": "world"}
 
 	// insert the string deeeeep down
-	err := executorInsertObject(source, &sync.Mutex{}, []string{"hello:5#1", "message", "body:2"}, inserted)
+	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello:5#1", "message", "body:2"}, inserted)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1893,7 +1906,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 	}
 
 	// insert the object deeeeep down
-	err := executorInsertObject(source, &sync.Mutex{}, []string{"hello", "objects:5"}, inserted)
+	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello", "objects:5"}, inserted)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1988,7 +2001,7 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, [][]string{}, nil)
+	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, [][]string{}, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -2064,7 +2077,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
+	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -2085,7 +2098,7 @@ func TestSingleObjectWithColonInID(t *testing.T) {
 		&source,
 	)
 
-	value, err := executorExtractValue(source, &sync.Mutex{}, []string{"hello#Thing:1337"})
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello#Thing:1337"})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -2139,6 +2152,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
 		RequestContext: context.Background(),
 		Plan: &QueryPlan{
 			RootStep: &QueryPlanStep{
@@ -2221,7 +2235,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 										},
 										Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 											"node": map[string]interface{}{
-												"id": "2",
+												"id":      "2",
 												"address": "Cats street",
 											},
 										}}},
@@ -2262,7 +2276,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 				"parent": map[string]interface{}{
 					"id": "1",
 					"house": map[string]interface{}{
-						"id": "2",
+						"id":      "2",
 						"address": "Cats street",
 						"cats": []interface{}{
 							map[string]interface{}{"id": "3", "name": "kitty"},
