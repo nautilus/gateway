@@ -29,6 +29,7 @@ type queryExecutionResult struct {
 	InsertionPoint []string
 	Result         map[string]interface{}
 	StripNode      bool
+	SelectionSet   ast.SelectionSet
 }
 
 // execution is broken up into two phases:
@@ -90,11 +91,12 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				if len(payload.InsertionPoint) > 0 {
 					log.Trace("Inserting result into ", payload.InsertionPoint)
 					log.Trace("Result: ", payload.Result)
+					log.Trace("SelectionSet: ", payload.SelectionSet)
 				}
 
 				// we have to grab the value in the result and write it to the appropriate spot in the
 				// acumulator.
-				err := executorInsertObject(result, resultLock, payload.InsertionPoint, payload.Result)
+				err := executorInsertObject(result, resultLock, payload.InsertionPoint, payload.Result, payload.SelectionSet)
 				if err != nil {
 					errCh <- err
 					continue
@@ -192,6 +194,7 @@ func executeStep(
 			resultCh <- &queryExecutionResult{
 				InsertionPoint: insertionPoint,
 				Result:         nil,
+				SelectionSet:   step.SelectionSet,
 			}
 			return
 		}
@@ -326,6 +329,7 @@ func executeStep(
 	resultCh <- &queryExecutionResult{
 		InsertionPoint: insertionPoint,
 		Result:         queryResult,
+		SelectionSet:   step.SelectionSet,
 	}
 
 	// if there are next steps
@@ -658,12 +662,8 @@ func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex,
 	return recent, nil
 }
 
-func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}) error {
+func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}, selectionSet ast.SelectionSet) error {
 	// log.Trace("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
-
-	if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil {
-		return nil
-	}
 
 	if len(path) > 0 {
 		// a pointer to the objects we are modifying
@@ -675,6 +675,17 @@ func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex,
 		targetObj, ok := obj.(map[string]interface{})
 		if !ok {
 			return errors.New("target object is not an object")
+		}
+
+		if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil {
+			for _, selection := range selectionSet {
+				if field, ok := selection.(*ast.Field); ok && field != nil {
+					if _, exists := targetObj[field.Name]; !exists {
+						targetObj[field.Name] = nil
+					}
+				}
+			}
+			return nil
 		}
 
 		// if the value we are assigning is an object
