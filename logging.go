@@ -89,9 +89,9 @@ func (l *DefaultLogger) QueryPlanStep(step *QueryPlanStep) {
 		l.WithFields(LoggerFields{
 			"id":              step.ParentID,
 			"insertion point": step.InsertionPoint,
-		}).Debug(step.ParentType)
+		}).Debug("QueryPlanStep.ParentType: ", step.ParentType)
 
-		l.Debug(graphql.FormatSelectionSet(step.SelectionSet))
+		l.Debug("QueryPlanStep.SelectionSet: ", graphql.FormatSelectionSet(step.SelectionSet))
 	}
 }
 
