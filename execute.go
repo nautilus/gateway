@@ -678,7 +678,7 @@ func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex,
 			return errors.New("target object is not an object")
 		}
 
-		if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil {
+		if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil || len(checkNil) == 0 {
 			for _, selection := range selectionSet {
 				if field, ok := selection.(*ast.Field); ok && field != nil {
 					if _, exists := targetObj[field.Name]; !exists {
