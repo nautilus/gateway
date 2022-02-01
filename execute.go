@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -663,6 +664,19 @@ func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex,
 	return recent, nil
 }
 
+func testWorkaround(pattern string, path []string) bool {
+	testPattern := regexp.MustCompile(pattern)
+	needsWorkaround := false
+	for _, name := range path {
+		if testPattern.MatchString(name) {
+			needsWorkaround = true
+		} else {
+			needsWorkaround = false
+		}
+	}
+	return needsWorkaround
+}
+
 func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}, selectionSet ast.SelectionSet) error {
 	// log.Trace("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
 
@@ -679,13 +693,35 @@ func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex,
 		}
 
 		if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil || len(checkNil) == 0 {
-			for _, selection := range selectionSet {
-				if field, ok := selection.(*ast.Field); ok && field != nil {
-					if _, exists := targetObj[field.Name]; !exists {
-						targetObj[field.Name] = nil
+			if testWorkaround("manufacturers|nodes:|initiative#", path) || testWorkaround("requestForQuotes|nodes:|intermediatorSession|shareFile#", path) {
+				for _, selection := range selectionSet {
+					if field, ok := selection.(*ast.Field); ok && field != nil {
+						if _, exists := targetObj[field.Name]; !exists {
+							if field.Definition != nil && field.Definition.Type != nil && field.Definition.Type.NonNull {
+								switch field.Definition.Type.NamedType {
+								case "String":
+									targetObj[field.Name] = ""
+								case "Boolean":
+									targetObj[field.Name] = false
+								case "Int":
+									targetObj[field.Name] = 0
+								case "Float":
+									targetObj[field.Name] = 0.0
+								case "ID":
+									targetObj[field.Name] = ""
+								case "DateTime":
+									targetObj[field.Name] = time.Unix(0, 0)
+								default:
+									targetObj[field.Name] = nil
+								}
+							} else {
+								targetObj[field.Name] = nil
+							}
+						}
 					}
 				}
 			}
+
 			return nil
 		}
 
