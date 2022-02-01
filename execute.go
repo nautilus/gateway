@@ -274,6 +274,7 @@ func executeStep(
 	}
 	log.Debug("Query:", step.QueryString)
 	log.Debug("Variables:", variables)
+	log.Debug("Result:", queryResult)
 
 	// NOTE: this insertion point could point to a list of values. If it did, we have to have
 	//       passed it to the this invocation of this function. It is safe to trust this
