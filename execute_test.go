@@ -1814,7 +1814,7 @@ func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
 	inserted := map[string]interface{}{"hello": "world"}
 
 	// insert the string deeeeep down
-	err := executorInsertObject(source, &sync.Mutex{}, []string{"hello:5#1", "message", "body:2"}, inserted)
+	err := executorInsertObject(source, &sync.Mutex{}, []string{"hello:5#1", "message", "body:2"}, inserted, ast.SelectionSet{&ast.Field{Name: "hello"}})
 	if err != nil {
 		t.Error(err)
 		return
@@ -1893,7 +1893,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 	}
 
 	// insert the object deeeeep down
-	err := executorInsertObject(source, &sync.Mutex{}, []string{"hello", "objects:5"}, inserted)
+	err := executorInsertObject(source, &sync.Mutex{}, []string{"hello", "objects:5"}, inserted, ast.SelectionSet{&ast.Field{Name: "hello"}})
 	if err != nil {
 		t.Error(err)
 		return
@@ -2221,7 +2221,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 										},
 										Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
 											"node": map[string]interface{}{
-												"id": "2",
+												"id":      "2",
 												"address": "Cats street",
 											},
 										}}},
@@ -2262,7 +2262,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 				"parent": map[string]interface{}{
 					"id": "1",
 					"house": map[string]interface{}{
-						"id": "2",
+						"id":      "2",
 						"address": "Cats street",
 						"cats": []interface{}{
 							map[string]interface{}{"id": "3", "name": "kitty"},

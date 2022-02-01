@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +30,7 @@ type queryExecutionResult struct {
 	InsertionPoint []string
 	Result         map[string]interface{}
 	StripNode      bool
+	SelectionSet   ast.SelectionSet
 }
 
 // execution is broken up into two phases:
@@ -90,11 +92,12 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				if len(payload.InsertionPoint) > 0 {
 					log.Trace("Inserting result into ", payload.InsertionPoint)
 					log.Trace("Result: ", payload.Result)
+					log.Trace("SelectionSet: ", payload.SelectionSet)
 				}
 
 				// we have to grab the value in the result and write it to the appropriate spot in the
 				// acumulator.
-				err := executorInsertObject(result, resultLock, payload.InsertionPoint, payload.Result)
+				err := executorInsertObject(result, resultLock, payload.InsertionPoint, payload.Result, payload.SelectionSet)
 				if err != nil {
 					errCh <- err
 					continue
@@ -192,6 +195,7 @@ func executeStep(
 			resultCh <- &queryExecutionResult{
 				InsertionPoint: insertionPoint,
 				Result:         nil,
+				SelectionSet:   step.SelectionSet,
 			}
 			return
 		}
@@ -271,6 +275,7 @@ func executeStep(
 	}
 	log.Debug("Query:", step.QueryString)
 	log.Debug("Variables:", variables)
+	log.Debug("Result:", queryResult)
 
 	// NOTE: this insertion point could point to a list of values. If it did, we have to have
 	//       passed it to the this invocation of this function. It is safe to trust this
@@ -326,6 +331,7 @@ func executeStep(
 	resultCh <- &queryExecutionResult{
 		InsertionPoint: insertionPoint,
 		Result:         queryResult,
+		SelectionSet:   step.SelectionSet,
 	}
 
 	// if there are next steps
@@ -658,12 +664,21 @@ func executorExtractValue(source map[string]interface{}, resultLock *sync.Mutex,
 	return recent, nil
 }
 
-func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}) error {
-	// log.Trace("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
-
-	if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil {
-		return nil
+func testWorkaround(pattern string, path []string) bool {
+	testPattern := regexp.MustCompile(pattern)
+	needsWorkaround := false
+	for _, name := range path {
+		if testPattern.MatchString(name) {
+			needsWorkaround = true
+		} else {
+			needsWorkaround = false
+		}
 	}
+	return needsWorkaround
+}
+
+func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}, selectionSet ast.SelectionSet) error {
+	// log.Trace("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
 
 	if len(path) > 0 {
 		// a pointer to the objects we are modifying
@@ -675,6 +690,39 @@ func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex,
 		targetObj, ok := obj.(map[string]interface{})
 		if !ok {
 			return errors.New("target object is not an object")
+		}
+
+		if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil || len(checkNil) == 0 {
+			if testWorkaround("manufacturers|nodes:|initiative#", path) || testWorkaround("requestForQuotes|nodes:|intermediatorSession|shareFile#", path) {
+				for _, selection := range selectionSet {
+					if field, ok := selection.(*ast.Field); ok && field != nil {
+						if _, exists := targetObj[field.Name]; !exists {
+							if field.Definition != nil && field.Definition.Type != nil && field.Definition.Type.NonNull {
+								switch field.Definition.Type.NamedType {
+								case "String":
+									targetObj[field.Name] = ""
+								case "Boolean":
+									targetObj[field.Name] = false
+								case "Int":
+									targetObj[field.Name] = 0
+								case "Float":
+									targetObj[field.Name] = 0.0
+								case "ID":
+									targetObj[field.Name] = ""
+								case "DateTime":
+									targetObj[field.Name] = time.Unix(0, 0)
+								default:
+									targetObj[field.Name] = nil
+								}
+							} else {
+								targetObj[field.Name] = nil
+							}
+						}
+					}
+				}
+			}
+
+			return nil
 		}
 
 		// if the value we are assigning is an object
