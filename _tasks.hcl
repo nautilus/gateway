@@ -14,13 +14,13 @@ task "install" {
 
 task "tests" {
     description = "Run the tests"
-    command     = "go test {% .files %}"
+    command     = "go test -race {% .files %}"
 }
 
 task "tests:coverage" {
     description = "Run the tests, generate a coverage report, and report it to coveralls"
     pipeline    = [
-        "go test -v -covermode=atomic -coverprofile=coverage.out {% .files %}",
+        "go test -v -covermode=atomic -coverprofile=coverage.out -race {% .files %}",
     ]
 }
 

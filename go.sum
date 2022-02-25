@@ -42,6 +42,8 @@ github.com/mitchellh/mapstructure v1.4.1 h1:CpVNEelQCZBooIPDn+AR3NpivK/TIKU8bDxd
 github.com/mitchellh/mapstructure v1.4.1/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/nautilus/graphql v0.0.16 h1:4QKusOU+U6nVd0OrWntToIkNBohw4o0GzIS37bfUmgY=
 github.com/nautilus/graphql v0.0.16/go.mod h1:UYcs/gBtuFrZyX591SuYboby4xFNG9ZkaTYk7BBSRak=
+github.com/nautilus/graphql v0.0.17 h1:yEgrd2zmsTI6sFneleKA5abS9RPB1aXAUxL+iyeGwJA=
+github.com/nautilus/graphql v0.0.17/go.mod h1:UYcs/gBtuFrZyX591SuYboby4xFNG9ZkaTYk7BBSRak=
 github.com/opentracing/basictracer-go v1.0.0/go.mod h1:QfBfYuafItcjQuMwinw9GhYKwFXS9KnPs5lxoYwgW74=
 github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=

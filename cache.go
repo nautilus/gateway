@@ -3,6 +3,7 @@ package gateway
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"crypto/sha256"
@@ -73,14 +74,14 @@ func WithAutomaticQueryPlanCache() Option {
 }
 
 type queryPlanCacheItem struct {
-	LastUsed time.Time
+	LastUsed atomic.Value // time.Time
 	Value    QueryPlanList
 }
 
 // AutomaticQueryPlanCache is a QueryPlanCache that will use the hash if it points to a known query plan,
 // otherwise it will compute the plan and save it for later, to be referenced by the designated hash.
 type AutomaticQueryPlanCache struct {
-	cache map[string]*queryPlanCacheItem
+	cache sync.Map // map[string]*queryPlanCacheItem
 	ttl   time.Duration
 	// the automatic query plan cache needs to clear itself of query plans that have been used
 	// recently. This coordination requires a channel over which events can be trigger whenever
@@ -106,7 +107,6 @@ func (c *AutomaticQueryPlanCache) WithCacheTTL(duration time.Duration) *Automati
 // NewAutomaticQueryPlanCache returns a fresh instance of
 func NewAutomaticQueryPlanCache() *AutomaticQueryPlanCache {
 	return &AutomaticQueryPlanCache{
-		cache: map[string]*queryPlanCacheItem{},
 		// default cache lifetime of 3 days
 		ttl:           10 * 24 * time.Hour,
 		retrievedPlan: make(chan bool),
@@ -159,13 +159,16 @@ func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, p
 					c.timeMutex.Unlock()
 
 					// loop over every time in the cache
-					for key, cacheItem := range c.cache {
+					c.cache.Range(func(key, value interface{}) bool {
+						key, cacheItem := key.(string), value.(*queryPlanCacheItem)
 						// if the cached query hasn't been used recently enough
-						if cacheItem.LastUsed.Before(time.Now().Add(-c.ttl)) {
+						lastUsed := cacheItem.LastUsed.Load().(time.Time)
+						if lastUsed.Before(time.Now().Add(-c.ttl)) {
 							// delete it from the cache
-							delete(c.cache, key)
+							c.cache.Delete(key)
 						}
-					}
+						return true
+					})
 
 					// stop consuming
 					break TRUE_LOOP
@@ -176,9 +179,10 @@ func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, p
 	}()
 
 	// if we have a cached value for the hash
-	if cached, hasCachedValue := c.cache[*hash]; hasCachedValue {
+	if value, hasCachedValue := c.cache.Load(*hash); hasCachedValue {
+		cached := value.(*queryPlanCacheItem)
 		// update the last used
-		cached.LastUsed = time.Now()
+		cached.LastUsed.Store(time.Now())
 		// return it
 		return cached.Value, nil
 	}
@@ -205,9 +209,12 @@ func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, p
 	}
 
 	// save it for later
-	c.cache[*hash] = &queryPlanCacheItem{
-		LastUsed: time.Now(),
-		Value:    plan,
+	cacheItem := &queryPlanCacheItem{
+		Value: plan,
+	}
+	cacheItem.LastUsed.Store(time.Now())
+	if actual, exists := c.cache.LoadOrStore(*hash, cacheItem); exists {
+		actual.(*queryPlanCacheItem).LastUsed.Store(cacheItem.LastUsed.Load())
 	}
 
 	// we're done

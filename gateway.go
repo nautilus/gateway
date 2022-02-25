@@ -19,6 +19,7 @@ type Gateway struct {
 	schema             *ast.Schema
 	planner            QueryPlanner
 	executor           Executor
+	logger             Logger
 	merger             Merger
 	middlewares        MiddlewareList
 	queryFields        []*QueryField
@@ -79,6 +80,7 @@ func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]
 
 	// build up the execution context
 	executionContext := &ExecutionContext{
+		logger:             g.logger,
 		RequestContext:     ctx.Context,
 		RequestMiddlewares: g.requestMiddlewares,
 		Plan:               plan,
@@ -146,6 +148,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 		sources:        sources,
 		planner:        &MinQueriesPlanner{},
 		executor:       &ParallelExecutor{},
+		logger:         &DefaultLogger{},
 		merger:         MergerFunc(mergeSchemas),
 		queryFields:    []*QueryField{nodeField},
 		queryPlanCache: &NoQueryPlanCache{},
@@ -291,7 +294,7 @@ func WithLocationPriorities(priorities []string) Option {
 // WithLogger returns an Option that sets the logger of the gateway
 func WithLogger(l Logger) Option {
 	return func(g *Gateway) {
-		log = l
+		g.logger = l
 	}
 }
 

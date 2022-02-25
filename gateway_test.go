@@ -141,13 +141,21 @@ func TestGateway(t *testing.T) {
 
 	t.Run("WithLogger", func(t *testing.T) {
 		logger := &DefaultLogger{}
-		_, err := New(sources, WithLogger(logger))
+
+		go func() { // verify no race condition between Gateway instances (singleton): https://github.com/nautilus/gateway/issues/154
+			_, err := New(sources, WithLogger(logger))
+			if err != nil {
+				t.Error(err.Error())
+			}
+		}()
+
+		g, err := New(sources, WithLogger(logger))
 		if err != nil {
 			t.Error(err.Error())
 			return
 		}
 
-		assert.Equal(t, logger, log)
+		assert.Equal(t, logger, g.logger)
 	})
 
 	t.Run("fieldURLs ignore introspection", func(t *testing.T) {

@@ -79,8 +79,6 @@ func (l *DefaultLogger) QueryPlanStep(step *QueryPlanStep) {
 	l.Info(graphql.FormatSelectionSet(step.SelectionSet))
 }
 
-var log Logger = &DefaultLogger{}
-
 func newLogEntry() *logrus.Entry {
 	entry := logrus.New()
 
