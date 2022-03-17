@@ -693,7 +693,7 @@ func executorInsertObject(target map[string]interface{}, resultLock *sync.Mutex,
 		}
 
 		if checkNil, ok := value.(map[string]interface{}); ok && checkNil == nil || len(checkNil) == 0 {
-			if testWorkaround("manufacturers|nodes:|initiative#", path) || testWorkaround("requestForQuotes|nodes:|intermediatorSession|shareFile#", path) {
+			if testWorkaround("manufacturers|nodes:|initiative#", path) {
 				for _, selection := range selectionSet {
 					if field, ok := selection.(*ast.Field); ok && field != nil {
 						if _, exists := targetObj[field.Name]; !exists {
