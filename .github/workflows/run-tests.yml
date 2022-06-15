@@ -21,7 +21,7 @@ jobs:
 
       - name: Install runner and dependencies
         run: |
-          go get github.com/alecaivazis/run
+          go install github.com/alecaivazis/run@latest
           export PATH=${PATH}:`go env GOPATH`/bin
           run install:ci
 
