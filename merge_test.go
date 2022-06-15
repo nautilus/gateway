@@ -1,12 +1,15 @@
 package gateway
 
 import (
+	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/formatter"
 )
 
 func TestMergeSchema_assignQueryType(t *testing.T) {
@@ -294,21 +297,6 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 
 				type User {
 					firstName: String! @foo(url: "2")
-				}
-			`,
-		},
-		{
-			"Conflicting field descriptions",
-			`
-				type User {
-					"description"
-					firstName: String!
-				}
-			`,
-			`
-				type User {
-					"other-description"
-					firstName: String!
 				}
 			`,
 		},
@@ -957,4 +945,99 @@ func TestMergeSchemaDifferentSetsOfInterfaces(t *testing.T) {
 		{Schema: schema1, URL: "url2"},
 	})
 	assert.Nil(t, err)
+}
+
+func TestMergeSchema_flexibleDeterministicMerges(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name         string
+		schemas      []string
+		expectSchema string
+	}{
+		{
+			name: "Conflicting field descriptions",
+			schemas: []string{
+				`
+				type User {
+					"description"
+					firstName: String!
+				}
+			`,
+				`
+				type User {
+					"other-description"
+					firstName: String!
+				}
+			`,
+			},
+			expectSchema: `
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+type User {
+	"""
+	description
+	"""
+	firstName: String!
+}
+`,
+		},
+		{
+			name: "Conflicting type descriptions",
+			schemas: []string{
+				`
+				"User represents a customer"
+				type User {
+					firstName: String!
+				}
+			`,
+				`
+				"User represents a customer or a bot"
+				type User {
+					firstName: String!
+				}
+			`,
+			},
+			expectSchema: `
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+"""
+User represents a customer
+"""
+type User {
+	firstName: String!
+}
+`,
+		},
+	} {
+		tc := tc // enable parallel sub-tests
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if len(tc.schemas) < 1 {
+				t.Fatal("Test case must include 1 or more schemas")
+			}
+			currentSchema, err := graphql.LoadSchema(tc.schemas[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, s := range tc.schemas[1:] {
+				currentSchema, err = testMergeSchemas(t, currentSchema, s)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			var currentSchemaBuf bytes.Buffer
+			formatter.NewFormatter(&currentSchemaBuf).FormatSchema(currentSchema)
+			currentSchemaStr := strings.TrimSpace(currentSchemaBuf.String())
+			assert.Equal(t, strings.TrimSpace(tc.expectSchema), currentSchemaStr)
+		})
+	}
 }
