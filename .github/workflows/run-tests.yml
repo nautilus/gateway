@@ -9,10 +9,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Use Go 1.13
-        uses: actions/setup-go@v1
+      - name: Use Go 1.18
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.13
+          go-version: 1.18.x
 
       - name: Checkout source
         uses: actions/checkout@master
