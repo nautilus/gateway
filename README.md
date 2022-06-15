@@ -34,3 +34,5 @@ arguments to pass the executable, run `./gateway --help`.
 This project is built as a go module and follows the practices outlined in the [spec](https://github.com/golang/go/wiki/Modules). Please consider all APIs experimental and subject
 to change until v1 has been released at which point semantic versioning will be strictly followed. Before
 then, minor version bumps denote an API breaking change.
+
+Currently supports Go Modules using Go 1.13 and above.
