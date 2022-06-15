@@ -304,14 +304,12 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 			"Conflicting field argument default value",
 			`
 				type User {
-					"description"
-					firstName: String!
+					firstName(arg: String = "abc"): String!
 				}
 			`,
 			`
 				type User {
-					"other-description"
-					firstName: String!
+					firstName(arg: String = "def"): String!
 				}
 			`,
 		},
@@ -416,36 +414,6 @@ func TestMergeSchema_enums(t *testing.T) {
 				}
 			`,
 		},
-		{
-			"Conflicting value descriptions",
-			`
-				enum Foo {
-					"description"
-					Bar
-					Baz
-				}
-			`,
-			`
-				enum Foo {
-					Bar
-				}
-			`,
-		},
-		{
-			"Conflicting descriptions",
-			`
-				"description"
-				enum Foo {
-					Bar
-					Baz
-				}
-			`,
-			`
-				enum Foo {
-					Bar
-				}
-			`,
-		},
 	})
 }
 
@@ -453,7 +421,6 @@ func TestMergeSchema_directives(t *testing.T) {
 	t.Run("Matching", func(t *testing.T) {
 		// the directive that we are always comparing to
 		originalSchema, err := graphql.LoadSchema(`
-			"description"
 			directive @foo(url: String = "url") on FIELD_DEFINITION
 		`)
 		// make sure nothing went wrong
@@ -463,7 +430,6 @@ func TestMergeSchema_directives(t *testing.T) {
 
 		// merge the schema with one that should work
 		_, err = testMergeSchemas(t, originalSchema, `
-			"description"
 			directive @foo(url: String = "url") on FIELD_DEFINITION
 		`)
 		if err != nil {
@@ -501,23 +467,11 @@ func TestMergeSchema_directives(t *testing.T) {
 			`,
 		},
 		{
-			"Different description",
-			`
-				"other-desription"
-				directive @foo on FIELD_DEFINITION
-			`,
-			`
-				"desription"
-				directive @foo on FIELD_DEFINITION
-			`,
-		},
-		{
 			"Different field types",
 			`
 				directive @foo(foo: String) on FIELD_DEFINITION
 			`,
 			`
-				"desription"
 				directive @foo(foo: [String]) on FIELD_DEFINITION
 			`,
 		},
@@ -528,17 +482,6 @@ func TestMergeSchema_directives(t *testing.T) {
 			`,
 			`
 				directive @foo on FRAGMENT_SPREAD | FIELD_DEFINITION
-			`,
-		},
-		{
-			"Different Description",
-			`
-				"description"
-				directive @foo on FIELD_DEFINITION
-			`,
-			`
-				"other description"
-				directive @foo on FIELD_DEFINITION
 			`,
 		},
 		{
@@ -806,15 +749,13 @@ func TestMergeSchema_interfaces(t *testing.T) {
 			`,
 		},
 		{
-			"Different Descriptions",
+			"Different interface types",
 			`
-				"description"
 				interface Foo {
 					name: String!
 				}
 			`,
 			`
-				"not-description"
 				interface Foo {
 					name: String
 				}
@@ -986,6 +927,36 @@ type User {
 `,
 		},
 		{
+			name: "Conflicting field descriptions, first non-empty wins",
+			schemas: []string{
+				`
+				type User {
+					firstName: String!
+				}
+			`,
+				`
+				type User {
+					"description"
+					firstName: String!
+				}
+			`,
+			},
+			expectSchema: `
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+type User {
+	"""
+	description
+	"""
+	firstName: String!
+}
+`,
+		},
+		{
 			name: "Conflicting type descriptions",
 			schemas: []string{
 				`
@@ -1013,6 +984,268 @@ User represents a customer
 """
 type User {
 	firstName: String!
+}
+`,
+		},
+		{
+			name: "Conflicting type descriptions, first non-empty wins",
+			schemas: []string{
+				`
+				type User {
+					firstName: String!
+				}
+			`,
+				`
+				"User represents a customer"
+				type User {
+					firstName: String!
+				}
+			`,
+			},
+			expectSchema: `
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+"""
+User represents a customer
+"""
+type User {
+	firstName: String!
+}
+`,
+		},
+		{
+			name: "Different directive description",
+			schemas: []string{
+				`
+				"other-description"
+				directive @foo on FIELD_DEFINITION
+			`,
+				`
+				"description"
+				directive @foo on FIELD_DEFINITION
+			`,
+			},
+			expectSchema: `
+"""
+other-description
+"""
+directive @foo on FIELD_DEFINITION
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			name: "Different directive description, first non-empty wins",
+			schemas: []string{
+				`
+				directive @foo on FIELD_DEFINITION
+			`,
+				`
+				"description"
+				directive @foo on FIELD_DEFINITION
+			`,
+			},
+			expectSchema: `
+"""
+description
+"""
+directive @foo on FIELD_DEFINITION
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			name: "Conflicting enum value descriptions",
+			schemas: []string{
+				`
+				enum Foo {
+					"description"
+					Bar
+				}
+			`,
+				`
+				enum Foo {
+					"other-description"
+					Bar
+				}
+			`,
+			},
+			expectSchema: `
+enum Foo {
+	"""
+	description
+	"""
+	Bar
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			name: "Conflicting enum value descriptions, first non-empty wins",
+			schemas: []string{
+				`
+				enum Foo {
+					Bar
+				}
+			`,
+				`
+				enum Foo {
+					"description"
+					Bar
+				}
+			`,
+			},
+			expectSchema: `
+enum Foo {
+	"""
+	description
+	"""
+	Bar
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			name: "Conflicting enum descriptions",
+			schemas: []string{
+				`
+				"description"
+				enum Foo {
+					Bar
+				}
+			`,
+				`
+				"other-description"
+				enum Foo {
+					Bar
+				}
+			`,
+			},
+			expectSchema: `
+"""
+description
+"""
+enum Foo {
+	Bar
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			name: "Conflicting enum descriptions, first non-empty wins",
+			schemas: []string{
+				`
+				enum Foo {
+					Bar
+				}
+			`,
+				`
+				"description"
+				enum Foo {
+					Bar
+				}
+			`,
+			},
+			expectSchema: `
+"""
+description
+"""
+enum Foo {
+	Bar
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			name: "Conflicting interface descriptions",
+			schemas: []string{
+				`
+				"description"
+				interface Foo {
+					name: String
+				}
+			`,
+				`
+				"other-description"
+				interface Foo {
+					name: String
+				}
+			`,
+			},
+			expectSchema: `
+"""
+description
+"""
+interface Foo {
+	name: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			name: "Conflicting interface descriptions, first non-empty wins",
+			schemas: []string{
+				`
+				interface Foo {
+					name: String
+				}
+			`,
+				`
+				"description"
+				interface Foo {
+					name: String
+				}
+			`,
+			},
+			expectSchema: `
+"""
+description
+"""
+interface Foo {
+	name: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
 }
 `,
 		},
