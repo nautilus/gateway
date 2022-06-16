@@ -35,3 +35,8 @@ task "deploy" {
     description = "Push the built artifacts to the release. assumes its running in CI"
     command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway $VERSION ./bin"
 }
+
+config {
+    // have to change the template delimiters to support gox
+    delimiters = ["{%", "%}"]
+}
