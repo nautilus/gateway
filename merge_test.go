@@ -1249,6 +1249,75 @@ type Query {
 }
 `,
 		},
+		{
+			name: "Conflicting argument descriptions",
+			schemas: []string{
+				`
+				type Foo {
+					name(
+						"description"
+						arg1: String
+					): String
+				}
+			`,
+				`
+				type Foo {
+					name(
+						"other-description"
+						arg1: String
+					): String
+				}
+			`,
+			},
+			expectSchema: `
+type Foo {
+	name("""
+	description
+	"""
+	arg1: String): String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			name: "Conflicting argument descriptions, first non-empty wins",
+			schemas: []string{
+				`
+				type Foo {
+					name(
+						arg1: String
+					): String
+				}
+			`,
+				`
+				type Foo {
+					name(
+						"description"
+						arg1: String
+					): String
+				}
+			`,
+			},
+			expectSchema: `
+type Foo {
+	name("""
+	description
+	"""
+	arg1: String): String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
 	} {
 		tc := tc // enable parallel sub-tests
 		t.Run(tc.name, func(t *testing.T) {
