@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Use Go 1.18
+      - name: Use latest Go version
         uses: actions/setup-go@v3
         with:
-          go-version: 1.18.x
+          go-version: ^1.18
 
       - name: Checkout source
         uses: actions/checkout@master
@@ -25,9 +25,8 @@ jobs:
 
       - name: Install runner and dependencies
         run: |
-          go get github.com/alecaivazis/run
-          export PATH=${PATH}:`go env GOPATH`/bin
-          run install:ci
+          go install github.com/alecaivazis/run@latest
+          run install:cd
 
       - name: Get the version
         id: get_version
@@ -36,7 +35,6 @@ jobs:
 
       - name: Build and deploy binaries
         run: |
-          export PATH=${PATH}:`go env GOPATH`/bin
           run build
 
       - name: Upload Darwin Release Assets

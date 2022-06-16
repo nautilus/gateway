@@ -11,13 +11,21 @@ For a guide to getting started read [this post](https://medium.com/@aaivazis/a-g
 
 ## Running the Executable
 
-The simplest way to run a gateway is to download the executable
-from the latest release on GitHub and then run it directly on
-your machine:
+The simplest way to run a gateway is to download an executable for your operating system
+from the [latest release][latest] on GitHub and then run it directly on your machine:
 
 ```bash
 $ ./gateway start --port 4000 --services http://localhost:3000,http://localhost:3001
 ```
+
+**Note:** Instead of `./gateway`, use the file path to the release you downloaded.
+macOS users should use the `darwin` release file.
+
+For more information on possible arguments to pass the executable, run `./gateway --help`.
+
+[latest]: https://github.com/nautilus/gateway/releases/latest
+
+## Build from source
 
 Alternatively, install it with the `go` command to your Go bin and run it:
 ```bash
@@ -26,8 +34,9 @@ $ gateway start --port 4000 --services http://localhost:3000,http://localhost:30
 ```
 
 This will start a server on port 4000 that wraps over the services
-running at `http://localhost:3000` and `http://localhost:3001`. For more information on possible
-arguments to pass the executable, run `./gateway --help`.
+running at `http://localhost:3000` and `http://localhost:3001`.
+
+For more information on possible arguments to pass the executable, run `gateway --help`.
 
 ## Versioning
 
