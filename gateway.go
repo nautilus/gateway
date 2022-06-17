@@ -125,11 +125,13 @@ func (g *Gateway) internalSchema() (*ast.Schema, error) {
 
 	// then we have to add any query fields we have
 	for _, field := range g.queryFields {
-		schema.Query.Fields = append(schema.Query.Fields, &ast.FieldDefinition{
-			Name:      field.Name,
-			Type:      field.Type,
-			Arguments: field.Arguments,
-		})
+		if field.Name != "node" { // skip internal Query field name
+			schema.Query.Fields = append(schema.Query.Fields, &ast.FieldDefinition{
+				Name:      field.Name,
+				Type:      field.Type,
+				Arguments: field.Arguments,
+			})
+		}
 	}
 
 	// we're done

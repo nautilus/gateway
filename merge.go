@@ -75,9 +75,11 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				continue
 			}
 
-			if err := mergeInterfaces(result, previousDefinition, definition); err != nil {
+			previousDefinition, err := mergeInterfaces(result, previousDefinition, definition)
+			if err != nil {
 				return nil, err
 			}
+			result.Types[name] = previousDefinition
 		}
 	}
 
@@ -168,10 +170,11 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			}
 
 			// we have to merge the 2 directives
-			err := mergeDirectivesEqual(previousDefinition, definition)
+			previousDefinition, err := mergeDirectives(previousDefinition, definition)
 			if err != nil {
 				return nil, err
 			}
+			result.Directives[name] = previousDefinition
 		}
 	}
 
@@ -188,49 +191,57 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	return result, nil
 }
 
-func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) error {
+func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+	prevCopy := *previousDefinition
 	// descriptions
-	if previousDefinition.Description != newDefinition.Description {
-		return fmt.Errorf("conflict in interface descriptions: \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
+	if prevCopy.Description == "" {
+		prevCopy.Description = newDefinition.Description
 	}
 
 	// fields
 	if len(previousDefinition.Fields) != len(newDefinition.Fields) {
-		return fmt.Errorf("inconsistent number of fields")
+		return nil, fmt.Errorf("inconsistent number of fields")
 	}
-	for _, field := range previousDefinition.Fields {
+	prevCopy.Fields = append(ast.FieldList{}, previousDefinition.Fields...)
+	for ix, field := range prevCopy.Fields {
 		// get the corresponding field in the other definition
 		otherField := newDefinition.Fields.ForName(field.Name)
 
-		if err := mergeFieldsEqual(field, otherField); err != nil {
-			return fmt.Errorf("encountered error merging interface %v: %v", previousDefinition.Name, err.Error())
+		var err error
+		prevCopy.Fields[ix], err = mergeFields(field, otherField)
+		if err != nil {
+			return nil, fmt.Errorf("encountered error merging interface %v: %v", previousDefinition.Name, err.Error())
 		}
 	}
 
-	return nil
+	return &prevCopy, nil
 }
 
 func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
-	// the fields in the aggregate
-	previousFields := previousDefinition.Fields
+	prevCopy := *previousDefinition
+	// descriptions
+	if prevCopy.Description == "" {
+		prevCopy.Description = newDefinition.Description
+	}
 
 	// we have to add the fields in the source definition with the one in the aggregate
+	prevCopy.Fields = append(ast.FieldList{}, previousDefinition.Fields...)
 	for _, newField := range newDefinition.Fields {
 		// look up if we already know about this field
-		field := previousFields.ForName(newField.Name)
-
+		prevIndex, prevField := findField(prevCopy.Fields, newField.Name)
 		// if we already know about the field
-		if field != nil {
+		if prevField != nil {
 			// and they aren't equal
-			if err := mergeFieldsEqual(field, newField); err != nil {
+			var err error
+			prevCopy.Fields[prevIndex], err = mergeFields(prevField, newField)
+			if err != nil {
 				//  we don't allow 2 fields that have different types
 				return nil, fmt.Errorf("encountered error merging object %v: %v", previousDefinition.Name, err.Error())
 			}
 		} else {
 			// its safe to copy over the definition
-			previousFields = append(previousFields, newField)
+			prevCopy.Fields = append(prevCopy.Fields, newField)
 		}
-
 	}
 
 	// make sure that the 2 directive lists are the same
@@ -238,16 +249,25 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 		return nil, err
 	}
 
-	// copy over the new fields for this type definition
-	prevCopy := *previousDefinition
-	prevCopy.Fields = previousFields
-
 	return &prevCopy, nil
 }
 
+func findField(fields ast.FieldList, fieldName string) (int, *ast.FieldDefinition) {
+	for ix, field := range fields {
+		if field.Name == fieldName {
+			return ix, field
+		}
+	}
+	return -1, nil
+}
+
 func mergeInputObjects(result *ast.Schema, object1, object2 *ast.Definition) (*ast.Definition, error) {
+	object1Copy := *object1
+
 	// if the field list isn't the same
-	if err := mergeFieldListEqual(object1.Fields, object2.Fields); err != nil {
+	var err error
+	object1Copy.Fields, err = mergeFieldList(object1.Fields, object2.Fields)
+	if err != nil {
 		return nil, err
 	}
 
@@ -283,14 +303,16 @@ func mergeStringSliceEquivalent(slice1, slice2 []string) error {
 }
 
 func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+	prevCopy := *previousDefinition
+
 	// if we are merging an internal enums
 	if strings.HasPrefix(previousDefinition.Name, "__") {
 		// let it through without changing
-		return previousDefinition, nil
+		return &prevCopy, nil
 	}
 
-	if previousDefinition.Description != newDefinition.Description {
-		return nil, fmt.Errorf("enum %s has an inconsistent descriptions: %s and %s", previousDefinition.Name, previousDefinition.Description, newDefinition.Description)
+	if prevCopy.Description == "" {
+		prevCopy.Description = newDefinition.Description
 	}
 
 	// if the two definitions dont have the same length
@@ -298,18 +320,19 @@ func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefin
 		return nil, fmt.Errorf("enum %s has an inconsistent definition in different services", newDefinition.Name)
 	}
 	// a set of values
-	for _, value := range previousDefinition.EnumValues {
+	for ix, value := range prevCopy.EnumValues {
 		// look up the valuein the new definition
 		newValue := newDefinition.EnumValues.ForName(value.Name)
 
-		// if the 2 values have different description
-		if err := mergeEnumValuesEqual(value, newValue); err != nil {
+		var err error
+		prevCopy.EnumValues[ix], err = mergeEnumValues(value, newValue)
+		if err != nil {
 			return nil, err
 		}
 	}
 
 	// we're done
-	return previousDefinition, nil
+	return &prevCopy, nil
 }
 
 func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
@@ -328,90 +351,97 @@ func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefi
 	return previousDefinition, nil
 }
 
-func mergeDirectivesEqual(previousDefinition *ast.DirectiveDefinition, newDefinition *ast.DirectiveDefinition) error {
-	// currently, the only meaning to merging directives is to ignore the second one as long as it has the same definition
-	// as the first
-
-	// if the 2 descriptions don't match
-	if previousDefinition.Description != newDefinition.Description {
-		return fmt.Errorf("conflict in directive descriptions. Found \"%v\" and \"%v\"", previousDefinition.Description, newDefinition.Description)
+func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition *ast.DirectiveDefinition) (*ast.DirectiveDefinition, error) {
+	prevCopy := *previousDefinition
+	// keep the first description
+	if prevCopy.Description == "" {
+		prevCopy.Description = newDefinition.Description
 	}
 
 	// make sure the 2 directives can be placed on the same locations
 	if err := mergeDirectiveLocationsEqual(previousDefinition.Locations, newDefinition.Locations); err != nil {
-		return fmt.Errorf("conflict in locations for directive %s. %s", previousDefinition.Name, err.Error())
+		return nil, fmt.Errorf("conflict in locations for directive %s. %s", previousDefinition.Name, err.Error())
 	}
 
 	// make sure the 2 definitions take the same arguments
-	if err := mergeArgumentDefinitionListEqual(previousDefinition.Arguments, newDefinition.Arguments); err != nil {
-		return fmt.Errorf("conflict in argument definitions for directive %s. %s", previousDefinition.Name, err.Error())
+	var err error
+	prevCopy.Arguments, err = mergeArgumentDefinitionList(previousDefinition.Arguments, newDefinition.Arguments)
+	if err != nil {
+		return nil, fmt.Errorf("conflict in argument definitions for directive %s. %s", previousDefinition.Name, err.Error())
 	}
 
 	// the 2 directives can coexist
-	return nil
+	return &prevCopy, nil
 }
 
-func mergeEnumValuesEqual(value1, value2 *ast.EnumValueDefinition) error {
-	// if the 2 descriptions don't match
-	if value1.Description != value2.Description {
-		return fmt.Errorf("conflict in enum value descriptions. Found \"%v\" and \"%v\"", value1.Description, value2.Description)
+func mergeEnumValues(value1, value2 *ast.EnumValueDefinition) (*ast.EnumValueDefinition, error) {
+	value1Copy := *value1
+	if value1Copy.Description == "" {
+		value1Copy.Description = value2.Description
 	}
 
 	// if the 2 directives dont match
 	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
-		return fmt.Errorf("conflict in enum value directives. %s", err.Error())
+		return nil, fmt.Errorf("conflict in enum value directives. %s", err.Error())
 	}
 
-	return nil
+	return &value1Copy, nil
 }
 
-func mergeFieldListEqual(list1, list2 ast.FieldList) error {
+func mergeFieldList(list1, list2 ast.FieldList) (ast.FieldList, error) {
 	if len(list1) != len(list2) {
-		return fmt.Errorf("inconsistent number of fields")
+		return nil, fmt.Errorf("inconsistent number of fields")
 	}
+
+	var list1Copy ast.FieldList
 	for _, field := range list1 {
 		// get the corresponding field in the other definition
 		otherField := list2.ForName(field.Name)
 		if otherField == nil {
-			return fmt.Errorf("could not find field %s", field.Name)
+			return nil, fmt.Errorf("could not find field %s", field.Name)
 		}
 
-		if err := mergeFieldsEqual(field, otherField); err != nil {
-			return err
+		newField, err := mergeFields(field, otherField)
+		if err != nil {
+			return nil, err
 		}
+		list1Copy = append(list1Copy, newField)
 	}
 
-	return nil
+	return list1Copy, nil
 }
 
-func mergeFieldsEqual(field1, field2 *ast.FieldDefinition) error {
-	// if the 2 descriptions don't match
-	if field1.Description != field2.Description {
-		return fmt.Errorf("conflict in field descriptions. Found \"%v\" and \"%v\"", field1.Description, field2.Description)
+func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, error) {
+	field1Copy := *field1
+	// descriptions
+	if field1Copy.Description == "" {
+		field1Copy.Description = field2.Description
 	}
 
 	// fields
 	if err := mergeTypesEqual(field1.Type, field2.Type); err != nil {
-		return fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// arguments
-	if err := mergeArgumentDefinitionListEqual(field1.Arguments, field2.Arguments); err != nil {
-		return fmt.Errorf("fields are not equal: %v", err.Error())
+	var err error
+	field1Copy.Arguments, err = mergeArgumentDefinitionList(field1.Arguments, field2.Arguments)
+	if err != nil {
+		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// default values
 	if err := mergeValuesEqual(field1.DefaultValue, field2.DefaultValue); err != nil {
-		return fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// directives
 	if err := mergeDirectiveListsEqual(field1.Directives, field2.Directives); err != nil {
-		return fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
 	}
 
 	// nothing went wrong
-	return nil
+	return &field1Copy, nil
 }
 
 func mergeDirectiveListsEqual(list1, list2 ast.DirectiveList) error {
@@ -490,46 +520,50 @@ func mergeArgumentsEqual(arg1, arg2 *ast.Argument) error {
 	return nil
 }
 
-func mergeArgumentDefinitionListEqual(list1, list2 ast.ArgumentDefinitionList) error {
+func mergeArgumentDefinitionList(list1, list2 ast.ArgumentDefinitionList) (ast.ArgumentDefinitionList, error) {
+	list1Copy := append(ast.ArgumentDefinitionList{}, list1...)
 	// if the 2 lists are not the same length
 	if len(list1) != len(list2) {
 		// they will never be the same
-		return errors.New("there were an inconsistent number of arguments")
+		return nil, errors.New("there were an inconsistent number of arguments")
 	}
 
 	// compare each argument to its counterpart in the other list
-	for _, arg1 := range list1 {
+	for ix, arg1 := range list1Copy {
 		arg2 := list2.ForName(arg1.Name)
 		if arg2 == nil {
-			return fmt.Errorf("could not find the argument with name %s", arg1.Name)
+			return nil, fmt.Errorf("could not find the argument with name %s", arg1.Name)
 		}
 
 		// if the 2 arguments are not the same
-		if err := mergeArgumentDefinitionsEqual(arg1, arg2); err != nil {
-			return err
+		var err error
+		list1Copy[ix], err = mergeArgumentDefinitions(arg1, arg2)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	return list1Copy, nil
 }
 
-func mergeArgumentDefinitionsEqual(arg1 *ast.ArgumentDefinition, arg2 *ast.ArgumentDefinition) error {
-	// if the 2 descriptions are not the same
-	if arg1.Description != arg2.Description {
-		return errors.New("descriptions were not the same")
+func mergeArgumentDefinitions(arg1 *ast.ArgumentDefinition, arg2 *ast.ArgumentDefinition) (*ast.ArgumentDefinition, error) {
+	arg1Copy := *arg1
+	// descriptions
+	if arg1Copy.Description == "" {
+		arg1Copy.Description = arg2.Description
 	}
 
 	// check that the 2 types are equal
 	if err := mergeTypesEqual(arg1.Type, arg2.Type); err != nil {
-		return err
+		return nil, err
 	}
 
 	// check that the 2 default values are equal
 	if err := mergeValuesEqual(arg1.DefaultValue, arg2.DefaultValue); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return &arg1Copy, nil
 }
 
 func mergeValuesEqual(value1, value2 *ast.Value) error {
