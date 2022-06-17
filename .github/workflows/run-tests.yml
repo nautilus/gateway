@@ -1,9 +1,39 @@
 name: CI Checks
 
 # run this workflow on commits and pull requests
-on: [push, pull_request]
+on:
+  push:
+    branches: [ master ]
+  pull_request:
 
 jobs:
+  build:
+    name: Build release binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Use latest Go version
+        uses: actions/setup-go@v3
+        with:
+          go-version: ^1.18
+
+      - name: Checkout source
+        uses: actions/checkout@master
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Install runner and dependencies
+        run: |
+          if [[ "$(go version)" =~ go1\.([0-9]+) ]] && (( "${BASH_REMATCH[1]}" >= 16 )); then
+              go install github.com/alecaivazis/run@latest
+          else
+              go get github.com/alecaivazis/run
+          fi
+
+      - name: Build
+        run: |
+          run install:cd
+          run build
+
   tests:
     name: Test with Go ${{ matrix.go }}
     runs-on: ubuntu-latest
@@ -34,12 +64,9 @@ jobs:
           else
               go get github.com/alecaivazis/run
           fi
-          export PATH=${PATH}:`go env GOPATH`/bin
-          run install:ci
 
       - name: Run tests
         run: |
-          export PATH=${PATH}:`go env GOPATH`/bin
           run tests:coverage
 
       - name: Report to Coveralls

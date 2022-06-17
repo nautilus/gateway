@@ -1,43 +1,39 @@
-task "install:ci" {
+task "install:cd" {
     description = "Install the necessary dependencies to run in CI. does not run `install`"
     command     = <<EOF
-    go get \
-        github.com/tcnksm/ghr \
-        github.com/mitchellh/gox
+    go install github.com/tcnksm/ghr@latest
+    go install github.com/mitchellh/gox@latest
     EOF
 }
 
 task "install" {
     description = "Install the dependencies to develop locally"
-    command     = "go get -v {% .files %}"
+    command     = "go mod download all"
 }
 
 task "tests" {
     description = "Run the tests"
-    command     = "go test -race {% .files %}"
+    command     = "go test -race ./..."
 }
 
 task "tests:coverage" {
     description = "Run the tests, generate a coverage report, and report it to coveralls"
     pipeline    = [
-        "go test -v -covermode=atomic -coverprofile=coverage.out -race {% .files %}",
+        "go test -v -coverprofile=coverage.out -race ./...",
+        "cd ./cmd/gateway && go test -v -race ./...",
     ]
 }
 
 task "build" {
     description = "Build executable in all supported architectures"
     command     =  <<EOF
-        gox -os="linux darwin windows" -arch=amd64 -output="bin/gateway_{{.OS}}_{{.Arch}}" -verbose ./cmd/...
+        cd cmd/gateway && gox -os="linux darwin windows" -arch=amd64 -output="../../bin/gateway_{{.OS}}_{{.Arch}}" -verbose .
     EOF
 }
 
 task "deploy" {
     description = "Push the built artifacts to the release. assumes its running in CI"
     command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway $VERSION ./bin"
-}
-
-variables {
-    files = "$(go list -v ./... | grep -iEv \"cmd|examples\")"
 }
 
 config {
