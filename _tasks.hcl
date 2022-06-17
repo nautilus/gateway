@@ -1,7 +1,6 @@
 task "install:cd" {
     description = "Install the necessary dependencies to run in CI. does not run `install`"
     command     = <<EOF
-    go install github.com/tcnksm/ghr@latest
     go install github.com/mitchellh/gox@latest
     EOF
 }
