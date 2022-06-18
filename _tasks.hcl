@@ -1,7 +1,6 @@
 task "install:cd" {
     description = "Install the necessary dependencies to run in CI. does not run `install`"
     command     = <<EOF
-    go install github.com/tcnksm/ghr@latest
     go install github.com/mitchellh/gox@latest
     EOF
 }
@@ -29,11 +28,6 @@ task "build" {
     command     =  <<EOF
         cd cmd/gateway && gox -os="linux darwin windows" -arch=amd64 -output="../../bin/gateway_{{.OS}}_{{.Arch}}" -verbose .
     EOF
-}
-
-task "deploy" {
-    description = "Push the built artifacts to the release. assumes its running in CI"
-    command     = "ghr -t $GITHUB_TOKEN -u nautilus -r gateway $VERSION ./bin"
 }
 
 config {
