@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 	"testing"
 
@@ -167,7 +166,7 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 				}
 			`,
 			`
-				directive @foo on FIELD_DEFINITION
+				directive @foo on INPUT_FIELD_DEFINITION
 
 				input Foo  {
 					lastName: String! @foo
@@ -177,16 +176,16 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 		{
 			"Conflicting total field directives",
 			`
-				directive @foo on FIELD_DEFINITION
+				directive @foo on INPUT_FIELD_DEFINITION
 
-				directive @bar on FIELD_DEFINITION
+				directive @bar on INPUT_FIELD_DEFINITION
 
 				input Foo {
 					lastName: String! @foo @bar
 				}
 			`,
 			`
-				directive @foo on FIELD_DEFINITION
+				directive @foo on INPUT_FIELD_DEFINITION
 
 				input Foo  {
 					lastName: String! @foo
@@ -798,15 +797,18 @@ type testMergeTableRow struct {
 }
 
 func testMergeRunNegativeTable(t *testing.T, table []testMergeTableRow) {
+	t.Helper()
 	for _, row := range table {
 		t.Run(row.Message, func(t *testing.T) {
-			original, _ := graphql.LoadSchema(row.Schema1)
-			if original == nil {
-				t.Error("could not build schema")
+			t.Helper()
+			original, err := graphql.LoadSchema(row.Schema1)
+			if err != nil {
+				t.Errorf("Failed to load schema:\n%s", row.Schema1)
+				t.Fatal(err)
 			}
 
 			// we're assuming the test needs to fail
-			_, err := testMergeSchemas(t, original, row.Schema2)
+			_, err = testMergeSchemas(t, original, row.Schema2)
 			if err == nil {
 				t.Error("Did not encounter an error when one was expected")
 			}
@@ -815,11 +817,12 @@ func testMergeRunNegativeTable(t *testing.T, table []testMergeTableRow) {
 }
 
 func testMergeSchemas(t *testing.T, schema1 *ast.Schema, schema2Str string) (*ast.Schema, error) {
+	t.Helper()
 	// create a schema with the provided content
-	schema2, _ := graphql.LoadSchema(schema2Str)
-	if schema2 == nil {
-		t.Error("could not build schema")
-		return nil, errors.New("could not build schema")
+	schema2, err := graphql.LoadSchema(schema2Str)
+	if err != nil {
+		t.Errorf("Failed to load schema:\n%s", schema2Str)
+		t.Fatal(err)
 	}
 
 	// create remote schemas with each
@@ -1271,10 +1274,12 @@ type Query {
 			},
 			expectSchema: `
 type Foo {
-	name("""
-	description
-	"""
-	arg1: String): String
+	name(
+		"""
+		description
+		"""
+		arg1: String
+	): String
 }
 interface Node {
 	id: ID!
@@ -1305,10 +1310,12 @@ type Query {
 			},
 			expectSchema: `
 type Foo {
-	name("""
-	description
-	"""
-	arg1: String): String
+	name(
+		"""
+		description
+		"""
+		arg1: String
+	): String
 }
 interface Node {
 	id: ID!
