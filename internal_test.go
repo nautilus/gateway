@@ -182,6 +182,24 @@ func TestSchemaIntrospection_query(t *testing.T) {
 	assert.Equal(t, "A", directive.Name)
 }
 
+func TestSchemaIntrospection_deterministicOrder(t *testing.T) {
+	introspectSchema := func() graphql.IntrospectionQueryResult {
+		var result graphql.IntrospectionQueryResult
+		err := schemaTestLoadQuery(graphql.IntrospectionQuery, &result, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log(result)
+		return result
+	}
+
+	first := introspectSchema()
+	const maxAttempts = 10
+	for i := 0; i < maxAttempts; i++ {
+		assert.Equal(t, first, introspectSchema())
+	}
+}
+
 func TestSchemaIntrospection_lookUpType(t *testing.T) {
 	// a place to hold the response of the query
 	result := &struct {
