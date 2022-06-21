@@ -3,6 +3,7 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/vektah/gqlparser/v2/ast"
@@ -161,11 +162,6 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				result.Directives[name] = definition
 
 				// we're done with this type
-				continue
-			}
-
-			// we only want one copy of the internal stuff
-			if definition.Name == "skip" || definition.Name == "include" || definition.Name == "deprecated" {
 				continue
 			}
 
@@ -352,26 +348,27 @@ func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefi
 }
 
 func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition *ast.DirectiveDefinition) (*ast.DirectiveDefinition, error) {
-	prevCopy := *previousDefinition
+	result := *previousDefinition // shallow copy to mutate merge result
 	// keep the first description
-	if prevCopy.Description == "" {
-		prevCopy.Description = newDefinition.Description
+	if result.Description == "" {
+		result.Description = newDefinition.Description
 	}
 
 	// make sure the 2 directives can be placed on the same locations
-	if err := mergeDirectiveLocationsEqual(previousDefinition.Locations, newDefinition.Locations); err != nil {
+	var err error
+	result.Locations, err = mergeDirectiveLocations(result.Locations, newDefinition.Locations)
+	if err != nil {
 		return nil, fmt.Errorf("conflict in locations for directive %s. %s", previousDefinition.Name, err.Error())
 	}
 
 	// make sure the 2 definitions take the same arguments
-	var err error
-	prevCopy.Arguments, err = mergeArgumentDefinitionList(previousDefinition.Arguments, newDefinition.Arguments)
+	result.Arguments, err = mergeArgumentDefinitionList(result.Arguments, newDefinition.Arguments, result.Position.Src.BuiltIn)
 	if err != nil {
 		return nil, fmt.Errorf("conflict in argument definitions for directive %s. %s", previousDefinition.Name, err.Error())
 	}
 
 	// the 2 directives can coexist
-	return &prevCopy, nil
+	return &result, nil
 }
 
 func mergeEnumValues(value1, value2 *ast.EnumValueDefinition) (*ast.EnumValueDefinition, error) {
@@ -425,7 +422,7 @@ func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, err
 
 	// arguments
 	var err error
-	field1Copy.Arguments, err = mergeArgumentDefinitionList(field1.Arguments, field2.Arguments)
+	field1Copy.Arguments, err = mergeArgumentDefinitionList(field1.Arguments, field2.Arguments, false)
 	if err != nil {
 		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
 	}
@@ -520,7 +517,7 @@ func mergeArgumentsEqual(arg1, arg2 *ast.Argument) error {
 	return nil
 }
 
-func mergeArgumentDefinitionList(list1, list2 ast.ArgumentDefinitionList) (ast.ArgumentDefinitionList, error) {
+func mergeArgumentDefinitionList(list1, list2 ast.ArgumentDefinitionList, ignoreNewDefaultValue bool) (ast.ArgumentDefinitionList, error) {
 	list1Copy := append(ast.ArgumentDefinitionList{}, list1...)
 	// if the 2 lists are not the same length
 	if len(list1) != len(list2) {
@@ -537,7 +534,7 @@ func mergeArgumentDefinitionList(list1, list2 ast.ArgumentDefinitionList) (ast.A
 
 		// if the 2 arguments are not the same
 		var err error
-		list1Copy[ix], err = mergeArgumentDefinitions(arg1, arg2)
+		list1Copy[ix], err = mergeArgumentDefinitions(arg1, arg2, ignoreNewDefaultValue)
 		if err != nil {
 			return nil, err
 		}
@@ -546,24 +543,26 @@ func mergeArgumentDefinitionList(list1, list2 ast.ArgumentDefinitionList) (ast.A
 	return list1Copy, nil
 }
 
-func mergeArgumentDefinitions(arg1 *ast.ArgumentDefinition, arg2 *ast.ArgumentDefinition) (*ast.ArgumentDefinition, error) {
-	arg1Copy := *arg1
+func mergeArgumentDefinitions(prevArg *ast.ArgumentDefinition, newArg *ast.ArgumentDefinition, ignoreNewDefaultValue bool) (*ast.ArgumentDefinition, error) {
+	result := *prevArg
 	// descriptions
-	if arg1Copy.Description == "" {
-		arg1Copy.Description = arg2.Description
+	if result.Description == "" {
+		result.Description = newArg.Description
 	}
 
 	// check that the 2 types are equal
-	if err := mergeTypesEqual(arg1.Type, arg2.Type); err != nil {
+	if err := mergeTypesEqual(result.Type, newArg.Type); err != nil {
 		return nil, err
 	}
 
 	// check that the 2 default values are equal
-	if err := mergeValuesEqual(arg1.DefaultValue, arg2.DefaultValue); err != nil {
-		return nil, err
+	if !ignoreNewDefaultValue { // use first arg's default value and ignore others, e.g. built-in directive argument default values
+		if err := mergeValuesEqual(result.DefaultValue, newArg.DefaultValue); err != nil {
+			return nil, err
+		}
 	}
 
-	return &arg1Copy, nil
+	return &result, nil
 }
 
 func mergeValuesEqual(value1, value2 *ast.Value) error {
@@ -619,27 +618,100 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 	return nil
 }
 
-func mergeDirectiveLocationsEqual(list1, list2 []ast.DirectiveLocation) error {
-	// if the 2 lists are not the same length
-	if len(list1) != len(list2) {
-		// they will never be the same
-		return errors.New("do not have the same number of locations")
+// Directives can be used on execution locations (a query) or on type system locations (a deprecated field).
+// Gateway should not merge and share execution locations since these may not be supported by the respective service.
+// Gateway should merge and share type system locations since these are only defined and used in each respective service's schema. In other words, the services own their usage of those directives.
+//
+// Some implementations merge all locations irrespective of their kind. This could result in a
+// runtime error or an ignored execution directive instead of an immediate query syntax error.
+//
+// From the spec: http://spec.graphql.org/October2021/#DirectiveLocation
+//     DirectiveLocation :
+//     	ExecutableDirectiveLocation
+//     	TypeSystemDirectiveLocation
+//     ExecutableDirectiveLocation :
+//       QUERY
+//       MUTATION
+//       SUBSCRIPTION
+//       FIELD
+//       FRAGMENT_DEFINITION
+//       FRAGMENT_SPREAD
+//       INLINE_FRAGMENT
+//       VARIABLE_DEFINITION
+//     TypeSystemDirectiveLocation :
+//       SCHEMA
+//       SCALAR
+//       OBJECT
+//       FIELD_DEFINITION
+//       ARGUMENT_DEFINITION
+//       INTERFACE
+//       UNION
+//       ENUM
+//       ENUM_VALUE
+//       INPUT_OBJECT
+//       INPUT_FIELD_DEFINITION
+func mergeDirectiveLocations(list1, list2 []ast.DirectiveLocation) ([]ast.DirectiveLocation, error) {
+	resultSet := make(map[ast.DirectiveLocation]struct{})
+	executableSet1 := make(map[ast.DirectiveLocation]struct{})
+	for _, l := range list1 {
+		resultSet[l] = struct{}{}
+		if isExecutableDirectiveLocation(l) {
+			executableSet1[l] = struct{}{}
+		}
 	}
-
-	// build up a set of the locations for list1
-	list1Locs := map[ast.DirectiveLocation]bool{}
-	for _, location := range list1 {
-		list1Locs[location] = true
-	}
-
-	// make sure every location in list2 is there
-	for _, location := range list2 {
-		// if its not then the 2 lists are different
-		if _, ok := list1Locs[location]; !ok {
-			return fmt.Errorf("directive could be found on %s in one definition but not the other", location)
+	executableSet2 := make(map[ast.DirectiveLocation]struct{})
+	for _, l := range list2 {
+		resultSet[l] = struct{}{}
+		if isExecutableDirectiveLocation(l) {
+			executableSet2[l] = struct{}{}
 		}
 	}
 
-	// build a set of the locations for the
-	return nil
+	mismatchErr := fmt.Errorf("do not have the same executable locations: %s", executableDirectiveLocationDiff(executableSet1, executableSet2))
+	for l := range executableSet1 {
+		if _, ok := executableSet2[l]; !ok {
+			return nil, mismatchErr
+		}
+	}
+	for l := range executableSet2 {
+		if _, ok := executableSet1[l]; !ok {
+			return nil, mismatchErr
+		}
+	}
+
+	var result []ast.DirectiveLocation
+	for l := range resultSet {
+		result = append(result, l)
+	}
+	sort.Slice(result, func(a, b int) bool {
+		return result[a] < result[b]
+	})
+	return result, nil
+}
+
+func isExecutableDirectiveLocation(d ast.DirectiveLocation) bool {
+	switch d {
+	case
+		ast.LocationQuery,
+		ast.LocationMutation,
+		ast.LocationSubscription,
+		ast.LocationField,
+		ast.LocationFragmentDefinition,
+		ast.LocationFragmentSpread,
+		ast.LocationInlineFragment,
+		ast.LocationVariableDefinition:
+		return true
+	default:
+		return false
+	}
+}
+
+func executableDirectiveLocationDiff(set1, set2 map[ast.DirectiveLocation]struct{}) string {
+	var diff []string
+	for l := range set1 {
+		if _, ok := set2[l]; !ok {
+			diff = append(diff, string(l))
+		}
+	}
+	return fmt.Sprintf("these locations are not shared: %s", strings.Join(diff, ", "))
 }

@@ -922,9 +922,7 @@ type Query {
 	node(id: ID!): Node
 }
 type User {
-	"""
-	description
-	"""
+	"""description"""
 	firstName: String!
 }
 `,
@@ -952,9 +950,7 @@ type Query {
 	node(id: ID!): Node
 }
 type User {
-	"""
-	description
-	"""
+	"""description"""
 	firstName: String!
 }
 `,
@@ -982,9 +978,7 @@ interface Node {
 type Query {
 	node(id: ID!): Node
 }
-"""
-User represents a customer
-"""
+"""User represents a customer"""
 type User {
 	firstName: String!
 }
@@ -1012,9 +1006,7 @@ interface Node {
 type Query {
 	node(id: ID!): Node
 }
-"""
-User represents a customer
-"""
+"""User represents a customer"""
 type User {
 	firstName: String!
 }
@@ -1033,9 +1025,7 @@ type User {
 			`,
 			},
 			expectSchema: `
-"""
-other-description
-"""
+"""other-description"""
 directive @foo on FIELD_DEFINITION
 interface Node {
 	id: ID!
@@ -1057,9 +1047,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 directive @foo on FIELD_DEFINITION
 interface Node {
 	id: ID!
@@ -1087,9 +1075,7 @@ type Query {
 			},
 			expectSchema: `
 enum Foo {
-	"""
-	description
-	"""
+	"""description"""
 	Bar
 }
 interface Node {
@@ -1117,9 +1103,7 @@ type Query {
 			},
 			expectSchema: `
 enum Foo {
-	"""
-	description
-	"""
+	"""description"""
 	Bar
 }
 interface Node {
@@ -1147,9 +1131,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 enum Foo {
 	Bar
 }
@@ -1177,9 +1159,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 enum Foo {
 	Bar
 }
@@ -1208,9 +1188,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 interface Foo {
 	name: String
 }
@@ -1238,9 +1216,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 interface Foo {
 	name: String
 }
@@ -1275,9 +1251,7 @@ type Query {
 			expectSchema: `
 type Foo {
 	name(
-		"""
-		description
-		"""
+		"""description"""
 		arg1: String
 	): String
 }
@@ -1311,9 +1285,7 @@ type Query {
 			expectSchema: `
 type Foo {
 	name(
-		"""
-		description
-		"""
+		"""description"""
 		arg1: String
 	): String
 }
