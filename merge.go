@@ -3,6 +3,7 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/vektah/gqlparser/v2/ast"
@@ -224,6 +225,9 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 		prevCopy.Description = newDefinition.Description
 	}
 
+	// interfaces
+	prevCopy.Interfaces = mergeInterfaceNames(prevCopy.Interfaces, newDefinition.Interfaces)
+
 	// we have to add the fields in the source definition with the one in the aggregate
 	prevCopy.Fields = append(ast.FieldList{}, previousDefinition.Fields...)
 	for _, newField := range newDefinition.Fields {
@@ -250,6 +254,22 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 	}
 
 	return &prevCopy, nil
+}
+
+func mergeInterfaceNames(interfaces1, interfaces2 []string) []string {
+	interfacesSet := make(map[string]struct{})
+	for _, i := range interfaces1 {
+		interfacesSet[i] = struct{}{}
+	}
+	for _, i := range interfaces2 {
+		interfacesSet[i] = struct{}{}
+	}
+	var result []string
+	for i := range interfacesSet {
+		result = append(result, i)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func findField(fields ast.FieldList, fieldName string) (int, *ast.FieldDefinition) {
