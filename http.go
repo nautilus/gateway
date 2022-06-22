@@ -412,5 +412,7 @@ func (g *Gateway) PlaygroundHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// we are not handling a POST request so we have to show the user the playground
-	w.Write(playgroundContent)
+	playgroundTemplate.Execute(w, playgroundConfig{
+		Endpoint: r.URL.String(),
+	})
 }
