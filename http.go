@@ -402,8 +402,8 @@ func emitResponse(w http.ResponseWriter, code int, response string) {
 }
 
 // PlaygroundHandler returns a combined UI and API http.HandlerFunc.
-// On GET requests, shows the user an interface that they can use to interact with the API.
-// On POSTs the endpoint executes the designated query.
+// On POST requests, executes the designated query.
+// On all other requests, shows the user an interface that they can use to interact with the API.
 func (g *Gateway) PlaygroundHandler(w http.ResponseWriter, r *http.Request) {
 	// on POSTs, we have to send the request to the graphqlHandler
 	if r.Method == http.MethodPost {
