@@ -350,33 +350,33 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 		variables := operations[idx].Variables
 
 		// step through the path to find the file variable
-		for i := 1; i < len(parts); i++ { 
+		for i := 1; i < len(parts); i++ {
 			val, ok := variables[parts[i]]
 			if !ok {
 				return fmt.Errorf("key not found in variables: %s", parts[i])
 			}
 			switch v := val.(type) {
 			// if the path part is a map, then keep stepping through it
-			case map[string]interface{}: 
+			case map[string]interface{}:
 				variables = v
 			// if we hit nil, then we have found the variable to replace with the file and have hit the end of parts
-			case nil: 
+			case nil:
 				variables[parts[i]] = file
 			// if we find a list then find the the variable to replace at the parts index (supports: [Upload!]!)
-			case []interface{}: 
+			case []interface{}:
 				// make sure the path contains another part before looking for an index
-				if i+1 >= len(parts) { 
+				if i+1 >= len(parts) {
 					return fmt.Errorf("invalid number of parts in path: " + path)
 				}
 
 				// the next part in the path must be an index (ex: the "2" in: variables.input.files.2)
-				index, err := strconv.Atoi(parts[i+1]) 
+				index, err := strconv.Atoi(parts[i+1])
 				if err != nil {
 					return fmt.Errorf("expected numeric index: " + err.Error())
 				}
 
 				// index might not be within the bounds
-				if index >= len(v) { 
+				if index >= len(v) {
 					return fmt.Errorf("file index %d out of bound %d", index, len(v))
 				}
 				fileVal := v[index]
@@ -386,7 +386,7 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 				v[index] = file
 
 				// skip the final iteration through parts (skips the index definition, ex: the "2" in: variables.input.files.2)
-				i++ 
+				i++
 			default:
 				return fmt.Errorf("expected nil value, got %v", v) // possibly duplicate path or path to non-null variable
 			}
