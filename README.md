@@ -41,4 +41,4 @@ This project is built as a go module and follows the practices outlined in the [
 to change until v1 has been released at which point semantic versioning will be strictly followed. Before
 then, minor version bumps denote an API breaking change.
 
-Currently supports Go Modules using Go 1.13 and above.
+Currently supports Go Modules using Go 1.16 and above.
