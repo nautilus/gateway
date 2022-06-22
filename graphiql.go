@@ -2,8 +2,30 @@ package gateway
 
 import (
 	"encoding/json"
+	"io"
 	"text/template"
 )
+
+// PlaygroundConfig contains configuration for rendering a playground UI with a few, critical settings.
+type PlaygroundConfig struct {
+	Endpoint string             `json:"endpoint"`
+	Settings PlaygroundSettings `json:"settings"`
+}
+
+// PlaygroundSettings contains settings for setting up a playground UI.
+// It contains only a few, critical settings to provide a stronger backward-compatibility guarantee.
+//
+// If you need more options, consider opening an issue or serving your own custom playground UI.
+type PlaygroundSettings struct {
+	// options correspond to these: https://github.com/graphql/graphql-playground#settings
+
+	RequestCredentials   string            `json:"request.credentials"`
+	RequestGlobalHeaders map[string]string `json:"request.globalHeaders"`
+}
+
+func writePlayground(w io.Writer, config PlaygroundConfig) error {
+	return playgroundTemplate.Execute(w, config)
+}
 
 var playgroundTemplate = template.Must(template.New("").Funcs(map[string]interface{}{
 	"toJSON": func(v interface{}) (string, error) {
@@ -11,10 +33,6 @@ var playgroundTemplate = template.Must(template.New("").Funcs(map[string]interfa
 		return string(bytes), err
 	},
 }).Parse(playgroundContent))
-
-type playgroundConfig struct {
-	Endpoint string `json:"endpoint"`
-}
 
 // playgroundContent sourced from here: https://github.com/graphql/graphql-playground/blob/main/packages/graphql-playground-html/minimal.html
 const playgroundContent = `

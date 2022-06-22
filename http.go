@@ -401,9 +401,9 @@ func emitResponse(w http.ResponseWriter, code int, response string) {
 	fmt.Fprint(w, response)
 }
 
-// PlaygroundHandler returns a http.HandlerFunc which on GET requests shows
-// the user an interface that they can use to interact with the API. On
-// POSTs the endpoint executes the designated query
+// PlaygroundHandler returns a combined UI and API http.HandlerFunc.
+// On GET requests, shows the user an interface that they can use to interact with the API.
+// On POSTs the endpoint executes the designated query.
 func (g *Gateway) PlaygroundHandler(w http.ResponseWriter, r *http.Request) {
 	// on POSTs, we have to send the request to the graphqlHandler
 	if r.Method == http.MethodPost {
@@ -412,7 +412,14 @@ func (g *Gateway) PlaygroundHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// we are not handling a POST request so we have to show the user the playground
-	playgroundTemplate.Execute(w, playgroundConfig{
+	writePlayground(w, PlaygroundConfig{
 		Endpoint: r.URL.String(),
+	})
+}
+
+// StaticPlaygroundHandler returns a static UI http.HandlerFunc with custom configuration
+func (g *Gateway) StaticPlaygroundHandler(config PlaygroundConfig) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writePlayground(w, config)
 	})
 }
