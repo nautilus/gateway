@@ -420,6 +420,10 @@ func (g *Gateway) PlaygroundHandler(w http.ResponseWriter, r *http.Request) {
 // StaticPlaygroundHandler returns a static UI http.HandlerFunc with custom configuration
 func (g *Gateway) StaticPlaygroundHandler(config PlaygroundConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
 		writePlayground(w, config)
 	})
 }
