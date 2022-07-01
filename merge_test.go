@@ -7,6 +7,7 @@ import (
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/formatter"
 )
@@ -922,9 +923,7 @@ type Query {
 	node(id: ID!): Node
 }
 type User {
-	"""
-	description
-	"""
+	"""description"""
 	firstName: String!
 }
 `,
@@ -952,9 +951,7 @@ type Query {
 	node(id: ID!): Node
 }
 type User {
-	"""
-	description
-	"""
+	"""description"""
 	firstName: String!
 }
 `,
@@ -982,9 +979,7 @@ interface Node {
 type Query {
 	node(id: ID!): Node
 }
-"""
-User represents a customer
-"""
+"""User represents a customer"""
 type User {
 	firstName: String!
 }
@@ -1012,9 +1007,7 @@ interface Node {
 type Query {
 	node(id: ID!): Node
 }
-"""
-User represents a customer
-"""
+"""User represents a customer"""
 type User {
 	firstName: String!
 }
@@ -1033,9 +1026,7 @@ type User {
 			`,
 			},
 			expectSchema: `
-"""
-other-description
-"""
+"""other-description"""
 directive @foo on FIELD_DEFINITION
 interface Node {
 	id: ID!
@@ -1057,9 +1048,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 directive @foo on FIELD_DEFINITION
 interface Node {
 	id: ID!
@@ -1087,9 +1076,7 @@ type Query {
 			},
 			expectSchema: `
 enum Foo {
-	"""
-	description
-	"""
+	"""description"""
 	Bar
 }
 interface Node {
@@ -1117,9 +1104,7 @@ type Query {
 			},
 			expectSchema: `
 enum Foo {
-	"""
-	description
-	"""
+	"""description"""
 	Bar
 }
 interface Node {
@@ -1147,9 +1132,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 enum Foo {
 	Bar
 }
@@ -1177,9 +1160,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 enum Foo {
 	Bar
 }
@@ -1208,9 +1189,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 interface Foo {
 	name: String
 }
@@ -1238,9 +1217,7 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""
-description
-"""
+"""description"""
 interface Foo {
 	name: String
 }
@@ -1275,9 +1252,7 @@ type Query {
 			expectSchema: `
 type Foo {
 	name(
-		"""
-		description
-		"""
+		"""description"""
 		arg1: String
 	): String
 }
@@ -1311,9 +1286,7 @@ type Query {
 			expectSchema: `
 type Foo {
 	name(
-		"""
-		description
-		"""
+		"""description"""
 		arg1: String
 	): String
 }
@@ -1409,4 +1382,80 @@ type Query {
 	node(id: ID!): Node
 }
 `), currentSchemaStr)
+}
+
+func TestMergeSchema_directiveLocations(t *testing.T) {
+	for _, tc := range []struct {
+		description        string
+		schema1, schema2   string
+		expectMergedSchema string
+		expectErr          string
+	}{
+		{
+			description: "same locations",
+			schema1:     `directive @foo on INPUT_OBJECT | INPUT_FIELD_DEFINITION`,
+			schema2:     `directive @foo on INPUT_OBJECT | INPUT_FIELD_DEFINITION`,
+			expectMergedSchema: `
+directive @foo on INPUT_FIELD_DEFINITION | INPUT_OBJECT
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "merge type system locations",
+			schema1:     `directive @foo on SCHEMA | OBJECT`,
+			schema2:     `directive @foo on SCALAR | OBJECT`,
+			expectMergedSchema: `
+directive @foo on OBJECT | SCALAR | SCHEMA
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "do not merge executable locations",
+			schema1:     `directive @foo on FIELD | QUERY`,
+			schema2:     `directive @foo on FRAGMENT_DEFINITION | QUERY`,
+			expectErr:   `conflict in locations for directive foo. do not have the same executable locations: these locations are not shared: FIELD`,
+		},
+		{
+			description: "merge shared executable locations and mixed type system locations",
+			schema1:     `directive @foo on FIELD | SCHEMA | OBJECT`,
+			schema2:     `directive @foo on FIELD | SCALAR`,
+			expectMergedSchema: `
+directive @foo on FIELD | OBJECT | SCALAR | SCHEMA
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			currentSchema, err := graphql.LoadSchema(tc.schema1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			currentSchema, err = testMergeSchemas(t, currentSchema, tc.schema2)
+			if tc.expectErr != "" {
+				assert.EqualError(t, err, tc.expectErr)
+				return
+			}
+			require.NoError(t, err)
+
+			var currentSchemaBuf bytes.Buffer
+			formatter.NewFormatter(&currentSchemaBuf).FormatSchema(currentSchema)
+			currentSchemaStr := strings.TrimSpace(currentSchemaBuf.String())
+			assert.Equal(t, strings.TrimSpace(tc.expectMergedSchema), currentSchemaStr)
+		})
+	}
 }

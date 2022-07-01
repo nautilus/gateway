@@ -7,6 +7,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func schemaTestLoadQuery(query string, target interface{}, variables map[string]interface{}) error {
@@ -196,7 +197,7 @@ func TestSchemaIntrospection_deterministicOrder(t *testing.T) {
 	first := introspectSchema()
 	const maxAttempts = 10
 	for i := 0; i < maxAttempts; i++ {
-		assert.Equal(t, first, introspectSchema())
+		require.Equal(t, first, introspectSchema())
 	}
 }
 

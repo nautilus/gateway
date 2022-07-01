@@ -7,6 +7,6 @@ require (
 	golang.org/x/sys v0.0.0-20220615213510-4f61da869c0c // indirect
 )
 
-go 1.13
+go 1.16
 
 replace github.com/nautilus/gateway => ../..
