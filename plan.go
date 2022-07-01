@@ -152,12 +152,16 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 		stepWg := &sync.WaitGroup{}
 
 		// get the type for the operation
-		operationType := "Query"
+		var operationType string
 		switch operation.Operation {
 		case ast.Mutation:
 			operationType = "Mutation"
 		case ast.Subscription:
 			operationType = "Subscription"
+		case ast.Query:
+			operationType = "Query"
+		default:
+			operationType = "Query"
 		}
 
 		// we are garunteed at least one query

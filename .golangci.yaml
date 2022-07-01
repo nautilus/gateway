@@ -5,3 +5,4 @@ linters:
     - durationcheck
     - errname
     - errorlint
+    - exhaustive

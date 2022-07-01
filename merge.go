@@ -135,10 +135,14 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			switch definition.Kind {
 			case ast.Object:
 				previousDefinition, err = mergeObjectTypes(result, previousDefinition, definition)
+			case ast.Interface:
+				previousDefinition, err = mergeInterfaces(result, previousDefinition, definition)
 			case ast.InputObject:
 				previousDefinition, err = mergeInputObjects(result, previousDefinition, definition)
 			case ast.Enum:
 				previousDefinition, err = mergeEnums(result, previousDefinition, definition)
+			case ast.Scalar:
+				previousDefinition, err = mergeScalars(previousDefinition, definition)
 			case ast.Union:
 				previousDefinition, err = mergeUnions(result, previousDefinition, definition)
 			}
@@ -391,6 +395,20 @@ func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition 
 }
 
 func mergeEnumValues(value1, value2 *ast.EnumValueDefinition) (*ast.EnumValueDefinition, error) {
+	value1Copy := *value1
+	if value1Copy.Description == "" {
+		value1Copy.Description = value2.Description
+	}
+
+	// if the 2 directives dont match
+	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
+		return nil, fmt.Errorf("conflict in enum value directives: %w", err)
+	}
+
+	return &value1Copy, nil
+}
+
+func mergeScalars(value1, value2 *ast.Definition) (*ast.Definition, error) {
 	value1Copy := *value1
 	if value1Copy.Description == "" {
 		value1Copy.Description = value2.Description
@@ -726,6 +744,16 @@ func isTypeSystemDirectiveLocation(d ast.DirectiveLocation) bool {
 		ast.LocationInputObject,
 		ast.LocationInputFieldDefinition:
 		return true
+	case
+		ast.LocationQuery,
+		ast.LocationMutation,
+		ast.LocationSubscription,
+		ast.LocationField,
+		ast.LocationFragmentDefinition,
+		ast.LocationFragmentSpread,
+		ast.LocationInlineFragment,
+		ast.LocationVariableDefinition:
+		return false
 	default:
 		return false
 	}
