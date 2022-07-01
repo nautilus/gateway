@@ -49,7 +49,8 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 			var introspectedType *introspection.Type
 			for _, schemaType := range introspectionSchema.Types() {
 				if *schemaType.Name() == name {
-					introspectedType = &schemaType
+					schemaTypeCopy := schemaType // copy loop var
+					introspectedType = &schemaTypeCopy
 					break
 				}
 			}
