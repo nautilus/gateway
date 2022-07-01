@@ -142,7 +142,8 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 		plans = append(plans, plan)
 
 		// a channel to register new steps
-		stepCh := make(chan *newQueryPlanStepPayload, 50)
+		const maxConcurrentSteps = 50
+		stepCh := make(chan *newQueryPlanStepPayload, maxConcurrentSteps)
 
 		// a chan to get errors
 		errCh := make(chan error)
@@ -611,9 +612,10 @@ func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *e
 		// the field can be found in many locations
 	} else {
 		// locations to prioritize first
-		priorities := make([]string, len(p.LocationPriorities), len(p.LocationPriorities)+2)
+		initialLocationPriorities := []string{config.parentLocation, internalSchemaLocation}
+		priorities := make([]string, len(p.LocationPriorities), len(p.LocationPriorities)+len(initialLocationPriorities))
 		copy(priorities, p.LocationPriorities)
-		priorities = append(priorities, config.parentLocation, internalSchemaLocation)
+		priorities = append(priorities, initialLocationPriorities...)
 
 		for _, priority := range priorities {
 			// look to see if the current location is one of the possible locations

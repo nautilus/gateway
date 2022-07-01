@@ -236,7 +236,11 @@ func parseGetRequest(r *http.Request) (operations []*HTTPOperation, payloadErr e
 
 // Parses post request (plain or multipart) to list of operations
 func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
-	contentType := strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0]
+	contentTypes := strings.Split(r.Header.Get("Content-Type"), ";")
+	if len(contentTypes) == 0 {
+		return nil, false, errors.New("no content-type specified")
+	}
+	contentType := contentTypes[0]
 	switch contentType {
 	case "text/plain", "application/json", "":
 		// read the full request body
@@ -248,7 +252,8 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 		return parseOperations(operationsJson)
 	case "multipart/form-data":
 
-		parseErr := r.ParseMultipartForm(32 << 20)
+		const maxPartSize = 32 << 20 // 32 Mebibytes
+		parseErr := r.ParseMultipartForm(maxPartSize)
 		if parseErr != nil {
 			payloadErr = errors.New("error parse multipart request: " + parseErr.Error())
 			return
@@ -334,7 +339,8 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 			return errors.New("file locator doesn't have variables in it: " + path)
 		}
 
-		if len(parts) < 2 {
+		const minPathParts = 2
+		if len(parts) < minPathParts {
 			return errors.New("invalid number of parts in path: " + path)
 		}
 

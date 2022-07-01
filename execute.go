@@ -56,7 +56,8 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 	result := map[string]interface{}{}
 
 	// a channel to receive query results
-	resultCh := make(chan *queryExecutionResult, 10)
+	const maxResultBuffer = 10
+	resultCh := make(chan *queryExecutionResult, maxResultBuffer)
 	defer close(resultCh)
 
 	// a wait group so we know when we're done with all of the steps
@@ -64,7 +65,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 
 	// and a channel for errors
 	errMutex := &sync.Mutex{}
-	errCh := make(chan error, 10)
+	errCh := make(chan error, maxResultBuffer)
 	defer close(errCh)
 
 	// a channel to close the goroutine
@@ -676,7 +677,8 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 	// points come in the form <field>:<index>#<id> and each of index or id is optional
 	if strings.Contains(point, "#") {
 		idData := strings.Split(point, "#")
-		if len(idData) == 2 {
+		const longIDParts = 2
+		if len(idData) == longIDParts {
 			id = idData[1]
 		}
 
@@ -686,7 +688,7 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 
 	if strings.Contains(field, ":") {
 		indexData := strings.Split(field, ":")
-		indexValue, err := strconv.ParseInt(indexData[1], 0, 32)
+		indexValue, err := strconv.Atoi(indexData[1])
 		if err != nil {
 			return nil, err
 		}
