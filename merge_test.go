@@ -844,7 +844,6 @@ func TestMergeSchemaDifferentSetsOfInterfaces(t *testing.T) {
 	// Thing of schema2 implements two interfaces
 
 	schema1, err := graphql.LoadSchema(
-		//language=GRAPHQL
 		`
 		type Query {
 			node(id: ID!): Node
@@ -862,7 +861,6 @@ func TestMergeSchemaDifferentSetsOfInterfaces(t *testing.T) {
 	`)
 	assert.Nil(t, err)
 	schema2, err := graphql.LoadSchema(
-		//language=GRAPHQL
 		`
 		type Query {
 			node(id: ID!): Node

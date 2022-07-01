@@ -98,13 +98,14 @@ func TestSchemaIntrospection_query(t *testing.T) {
 	var fooInput graphql.IntrospectionQueryFullType
 
 	for _, schemaType := range result.Schema.Types {
-		if schemaType.Name == typeNameQuery {
+		switch schemaType.Name {
+		case typeNameQuery:
 			queryType = schemaType
-		} else if schemaType.Name == "User" {
+		case "User":
 			userType = schemaType
-		} else if schemaType.Name == "EnumValue" {
+		case "EnumValue":
 			enumType = schemaType
-		} else if schemaType.Name == "FooInput" {
+		case "FooInput":
 			fooInput = schemaType
 		}
 	}

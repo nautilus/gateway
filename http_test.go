@@ -237,7 +237,6 @@ func readResultWithErrors(responseRecorder *httptest.ResponseRecorder, t *testin
 		return nil, err
 	}
 
-	//result := map[string]interface{}{}
 	result := resultWithErrors{}
 	err = json.Unmarshal(body, &result)
 	return &result, err

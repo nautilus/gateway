@@ -10,6 +10,7 @@ linters:
     - gochecknoglobals
     - gochecknoinits
     - goconst
+    - gocritic
 
 issues:
   exclude-rules:

@@ -327,11 +327,9 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 	}
 
 	for _, selection := range selectionSetFragments {
-		switch selection := selection.(type) {
-		case *ast.Field:
-			if selection.Alias == matchString || selection.Name == matchString {
-				return selection, nil
-			}
+		selection, ok := selection.(*ast.Field)
+		if ok && (selection.Alias == matchString || selection.Name == matchString) {
+			return selection, nil
 		}
 	}
 
@@ -544,7 +542,7 @@ func executorExtractValue(ctx *ExecutionContext, source map[string]interface{}, 
 	var recent interface{} = source
 	ctx.logger.Debug("Pulling ", path, " from ", source)
 
-	for i, point := range path[:] {
+	for i, point := range path {
 		// if the point designates an element in the list
 		if isListElement(point) {
 			pointData, err := executorGetPointData(point)

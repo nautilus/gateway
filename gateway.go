@@ -337,12 +337,9 @@ func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap 
 					// if the field is not an introspection field
 					if !(name == typeNameQuery && strings.HasPrefix(fieldDef.Name, "__")) {
 						locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
-					} else {
-						// its an introspection name
-						if !stripInternal {
-							// register the location for the field
-							locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
-						}
+					} else if !stripInternal { // its an introspection name
+						// register the location for the field
+						locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
 					}
 
 				}

@@ -2094,7 +2094,6 @@ func TestFindInsertionPoint_handlesNullObjects(t *testing.T) {
 func TestSingleObjectWithColonInID(t *testing.T) {
 	var source = make(map[string]interface{})
 	_ = json.Unmarshal([]byte(
-		// language=JSON
 		`{"hello": {"id": "Thing:1337", "firstName": "Foo", "lastName": "bar"}}`),
 		&source,
 	)
