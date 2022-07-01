@@ -152,7 +152,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 		executor:       &ParallelExecutor{},
 		logger:         &DefaultLogger{},
 		merger:         MergerFunc(mergeSchemas),
-		queryFields:    []*QueryField{nodeField},
+		queryFields:    []*QueryField{makeNodeField()},
 		queryPlanCache: &NoQueryPlanCache{},
 	}
 
@@ -300,19 +300,21 @@ func WithLogger(l Logger) Option {
 	}
 }
 
-var nodeField = &QueryField{
-	Name: "node",
-	Type: ast.NamedType("Node", &ast.Position{}),
-	Arguments: ast.ArgumentDefinitionList{
-		&ast.ArgumentDefinition{
-			Name: "id",
-			Type: ast.NonNullNamedType("ID", &ast.Position{}),
+func makeNodeField() *QueryField {
+	return &QueryField{
+		Name: "node",
+		Type: ast.NamedType("Node", &ast.Position{}),
+		Arguments: ast.ArgumentDefinitionList{
+			&ast.ArgumentDefinition{
+				Name: "id",
+				Type: ast.NonNullNamedType("ID", &ast.Position{}),
+			},
 		},
-	},
-	Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
-		// pass it to the user
-		return args["id"].(string), nil
-	},
+		Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+			// pass it to the user
+			return args["id"].(string), nil
+		},
+	}
 }
 
 func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap {

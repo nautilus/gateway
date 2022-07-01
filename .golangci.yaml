@@ -7,3 +7,13 @@ linters:
     - errorlint
     - exhaustive
     - exportloopref
+    - gochecknoglobals
+    - gochecknoinits
+
+issues:
+  exclude-rules:
+    # Template parsing is slow, so some global templates are ok
+    - text: ".*Template is a global variable"
+      source: ".*Template = template\\.Must\\(.*"
+      linters:
+        - gochecknoglobals
