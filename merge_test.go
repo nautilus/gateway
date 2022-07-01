@@ -1322,3 +1322,63 @@ type Query {
 		})
 	}
 }
+
+func TestMergeSchema_multipleInterfaces(t *testing.T) {
+	currentSchema, err := graphql.LoadSchema(`
+		interface Node {
+			id: ID!
+		}
+
+		interface Foo {
+			foo: String
+		}
+
+		type Bar implements Node & Foo {
+			id: ID!
+			foo: String
+		}
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentSchema, err = testMergeSchemas(t, currentSchema, `
+		interface Node {
+			id: ID!
+		}
+
+		interface Baz {
+			baz: String
+		}
+
+		type Bar implements Node & Baz {
+			id: ID!
+			baz: String
+		}
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var currentSchemaBuf bytes.Buffer
+	formatter.NewFormatter(&currentSchemaBuf).FormatSchema(currentSchema)
+	currentSchemaStr := strings.TrimSpace(currentSchemaBuf.String())
+	assert.Equal(t, strings.TrimSpace(`
+type Bar implements Baz & Foo & Node {
+	id: ID!
+	foo: String
+	baz: String
+}
+interface Baz {
+	baz: String
+}
+interface Foo {
+	foo: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`), currentSchemaStr)
+}

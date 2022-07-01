@@ -245,6 +245,8 @@ func (g *Gateway) introspectInputValue(iv *introspection.InputValue, selectionSe
 			result[field.Alias] = iv.Description
 		case "type":
 			result[field.Alias] = g.introspectType(iv.Type, field.SelectionSet)
+		case "defaultValue":
+			result[field.Alias] = iv.DefaultValue
 		}
 	}
 

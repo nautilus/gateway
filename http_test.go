@@ -1328,3 +1328,47 @@ func createMultipartRequest(operations, fileMap []byte, filesContent ...[]byte) 
 
 	return request, nil
 }
+
+func TestStaticPlaygroundHandler(t *testing.T) {
+	schema, _ := graphql.LoadSchema(`
+		type Query {
+			allUsers: [String!]!
+		}
+	`)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url1"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"Hello": "world",
+			}, nil
+		},
+	)))
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	t.Run("static UI", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodGet, "/graphql", strings.NewReader(""))
+		responseRecorder := httptest.NewRecorder()
+		gateway.StaticPlaygroundHandler(PlaygroundConfig{
+			Endpoint: "some-url",
+		}).ServeHTTP(responseRecorder, request)
+
+		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+
+		assert.Contains(t, responseRecorder.Body.String(), "some-url")
+	})
+
+	t.Run("queries fail", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(`query { allUsers { firstName } }`))
+		responseRecorder := httptest.NewRecorder()
+		gateway.StaticPlaygroundHandler(PlaygroundConfig{}).ServeHTTP(responseRecorder, request)
+
+		assert.Equal(t, http.StatusMethodNotAllowed, responseRecorder.Result().StatusCode)
+	})
+}
