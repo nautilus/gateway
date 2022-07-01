@@ -87,7 +87,7 @@ func TestSchemaIntrospection_query(t *testing.T) {
 
 	// there are a few things we need to look for:
 	// 		Schema.queryType.name, Schema.mutationType, Schema.subscriptionType, Query.allUsers, and User.firstName
-	assert.Equal(t, "Query", result.Schema.QueryType.Name)
+	assert.Equal(t, typeNameQuery, result.Schema.QueryType.Name)
 	assert.Nil(t, result.Schema.MutationType)
 	assert.Nil(t, result.Schema.SubscriptionType)
 
@@ -98,7 +98,7 @@ func TestSchemaIntrospection_query(t *testing.T) {
 	var fooInput graphql.IntrospectionQueryFullType
 
 	for _, schemaType := range result.Schema.Types {
-		if schemaType.Name == "Query" {
+		if schemaType.Name == typeNameQuery {
 			queryType = schemaType
 		} else if schemaType.Name == "User" {
 			userType = schemaType

@@ -179,9 +179,9 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	}
 
 	// for now, just use the query type as the query type
-	queryType := result.Types["Query"]
-	mutationType := result.Types["Mutation"]
-	subscriptionType := result.Types["Subscription"]
+	queryType := result.Types[typeNameQuery]
+	mutationType := result.Types[typeNameMutation]
+	subscriptionType := result.Types[typeNameSubscription]
 
 	result.Query = queryType
 	result.Mutation = mutationType

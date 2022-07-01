@@ -155,13 +155,13 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 		var operationType string
 		switch operation.Operation {
 		case ast.Mutation:
-			operationType = "Mutation"
+			operationType = typeNameMutation
 		case ast.Subscription:
-			operationType = "Subscription"
+			operationType = typeNameSubscription
 		case ast.Query:
-			operationType = "Query"
+			operationType = typeNameQuery
 		default:
-			operationType = "Query"
+			operationType = typeNameQuery
 		}
 
 		// we are garunteed at least one query
@@ -910,16 +910,16 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 
 	// assign the right operation
 	switch parentType {
-	case "Mutation":
+	case typeNameMutation:
 		operation.Operation = ast.Mutation
-	case "Subscription":
+	case typeNameSubscription:
 		operation.Operation = ast.Subscription
 	default:
 		operation.Operation = ast.Query
 	}
 
 	// if we are querying an operation all we need to do is add the selection set at the root
-	if parentType == "Query" || parentType == "Mutation" || parentType == "Subscription" {
+	if parentType == typeNameQuery || parentType == typeNameMutation || parentType == typeNameSubscription {
 		operation.SelectionSet = selectionSet
 	} else {
 		// if we are not querying the top level then we have to embed the selection set

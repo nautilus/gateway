@@ -33,7 +33,7 @@ func TestExecutor_plansOfOne(t *testing.T) {
 					{
 						// this is equivalent to
 						// query { values }
-						ParentType: "Query",
+						ParentType: typeNameQuery,
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
 								Name: "values",
@@ -91,7 +91,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 
 						// this is equivalent to
 						// query { user }
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
@@ -185,14 +185,14 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 				Then: []*QueryPlanStep{
 					{ // this is equivalent to
 						// query { user }
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						// return a known value we can test against
 						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{}},
 						// then we have to ask for the users favorite cat photo and its url
 						Then: []*QueryPlanStep{
 							{
-								ParentType:     "Query",
+								ParentType:     typeNameQuery,
 								InsertionPoint: []string{},
 								SelectionSet: ast.SelectionSet{
 									&ast.Field{
@@ -260,7 +260,7 @@ func TestExecutor_insertIntoFragmentSpread(t *testing.T) {
 				Then: []*QueryPlanStep{
 					// a query to satisfy photo.createdBy.firstName
 					{
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
@@ -386,7 +386,7 @@ func TestExecutor_insertIntoListFragmentSpreads(t *testing.T) {
 				Then: []*QueryPlanStep{
 					// a query to satisfy photo.createdBy.firstName
 					{
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
@@ -528,7 +528,7 @@ func TestExecutor_insertIntoFragmentSpreadLists(t *testing.T) {
 				Then: []*QueryPlanStep{
 					// a query to satisfy photo.viewedBy.firstName
 					{
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
@@ -666,7 +666,7 @@ func TestExecutor_insertIntoInlineFragment(t *testing.T) {
 				Then: []*QueryPlanStep{
 					// a query to satisfy photo.createdBy.firstName
 					{
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
@@ -774,7 +774,7 @@ func TestExecutor_insertIntoListInlineFragments(t *testing.T) {
 				Then: []*QueryPlanStep{
 					// a query to satisfy photo.createdBy.firstName
 					{
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
@@ -896,7 +896,7 @@ func TestExecutor_insertIntoInlineFragmentsList(t *testing.T) {
 				Then: []*QueryPlanStep{
 					// a query to satisfy photo.viewedBy.firstName
 					{
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
@@ -1025,7 +1025,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 			RootStep: &QueryPlanStep{
 				Then: []*QueryPlanStep{
 					{
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
@@ -1267,7 +1267,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 					{
 						// this is equivalent to
 						// query { values }
-						ParentType: "Query",
+						ParentType: typeNameQuery,
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
 								Name: "values",
@@ -1286,7 +1286,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 					{
 						// this is equivalent to
 						// query { values }
-						ParentType: "Query",
+						ParentType: typeNameQuery,
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
 								Name: "values",
@@ -1345,7 +1345,7 @@ func TestExecutor_includeIf(t *testing.T) {
 
 						// this is equivalent to
 						// query { user }
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
@@ -1477,7 +1477,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 						{
 							// this is equivalent to
 							// query { values }
-							ParentType: "Query",
+							ParentType: typeNameQuery,
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
 									Name: "values",
@@ -1489,7 +1489,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 							QueryDocument: &ast.QueryDocument{
 								Operations: ast.OperationList{
 									{
-										Operation: "Query",
+										Operation: typeNameQuery,
 									},
 								},
 							},
@@ -1559,7 +1559,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 					{
 						// this is equivalent to
 						// query { values }
-						ParentType: "Query",
+						ParentType: typeNameQuery,
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
 								Name: "values",
@@ -1571,7 +1571,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 						QueryDocument: &ast.QueryDocument{
 							Operations: ast.OperationList{
 								{
-									Operation:           "Query",
+									Operation:           typeNameQuery,
 									VariableDefinitions: ast.VariableDefinitionList{fullVariableDefs[0]},
 								},
 							},
@@ -2159,7 +2159,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 			RootStep: &QueryPlanStep{
 				Then: []*QueryPlanStep{
 					{
-						ParentType:     "Query",
+						ParentType:     typeNameQuery,
 						InsertionPoint: []string{},
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{

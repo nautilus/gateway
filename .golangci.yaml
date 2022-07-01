@@ -9,6 +9,7 @@ linters:
     - exportloopref
     - gochecknoglobals
     - gochecknoinits
+    - goconst
 
 issues:
   exclude-rules:
@@ -17,3 +18,7 @@ issues:
       source: ".*Template = template\\.Must\\(.*"
       linters:
         - gochecknoglobals
+    # Allow const duplication in tests.
+    - path: '.+_test\.go'
+      linters:
+        - goconst

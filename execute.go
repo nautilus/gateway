@@ -12,6 +12,13 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
+// Common type names for manipulating schemas
+const (
+	typeNameQuery        = "Query"
+	typeNameMutation     = "Mutation"
+	typeNameSubscription = "Subscription"
+)
+
 // Executor is responsible for executing a query plan against the remote
 // schemas and returning the result
 type Executor interface {
@@ -235,7 +242,7 @@ func executeStep(
 
 	// if this is a query that falls underneath a `node(id: ???)` query then we only want to consider the object
 	// underneath the `node` field as the result for the query
-	stripNode := step.ParentType != "Query" && step.ParentType != "Subscription" && step.ParentType != "Mutation"
+	stripNode := step.ParentType != typeNameQuery && step.ParentType != typeNameSubscription && step.ParentType != typeNameMutation
 	if stripNode {
 		ctx.logger.Debug("Should strip node")
 		// get the result from the response that we have to stitch there
