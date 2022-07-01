@@ -341,7 +341,7 @@ func TestGateway(t *testing.T) {
 									},
 								},
 								// return a known value we can test against
-								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+								Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 									"allUsers": []interface{}{
 										map[string]interface{}{
 											"id": "1",
@@ -361,7 +361,7 @@ func TestGateway(t *testing.T) {
 												},
 											},
 										},
-										Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+										Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 											"node": map[string]interface{}{
 												"lastName": "Hello",
 											},
@@ -433,6 +433,7 @@ func TestGateway(t *testing.T) {
 
 		// create a gateway with the viewer field
 		gateway, err := New(sources, WithQueryFields(viewerField))
+		assert.NoError(t, err)
 
 		// execute the query
 		query := `
@@ -552,7 +553,7 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 								},
 							},
 							// return a known value we can test against
-							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 								"foo": "foo",
 							}},
 						},
@@ -592,7 +593,7 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 								},
 							},
 							// return a known value we can test against
-							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 								"bar": "bar",
 							}},
 						},

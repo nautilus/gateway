@@ -81,7 +81,7 @@ type queryPlanCacheItem struct {
 // AutomaticQueryPlanCache is a QueryPlanCache that will use the hash if it points to a known query plan,
 // otherwise it will compute the plan and save it for later, to be referenced by the designated hash.
 type AutomaticQueryPlanCache struct {
-	cache sync.Map // map[string]*queryPlanCacheItem
+	cache *sync.Map // map[string]*queryPlanCacheItem
 	ttl   time.Duration
 	// the automatic query plan cache needs to clear itself of query plans that have been used
 	// recently. This coordination requires a channel over which events can be trigger whenever
@@ -107,6 +107,7 @@ func (c *AutomaticQueryPlanCache) WithCacheTTL(duration time.Duration) *Automati
 // NewAutomaticQueryPlanCache returns a fresh instance of
 func NewAutomaticQueryPlanCache() *AutomaticQueryPlanCache {
 	return &AutomaticQueryPlanCache{
+		cache: new(sync.Map),
 		// default cache lifetime of 3 days
 		ttl:           10 * 24 * time.Hour,
 		retrievedPlan: make(chan bool),

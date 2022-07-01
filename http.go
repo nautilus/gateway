@@ -60,12 +60,12 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 
 	// if there was an error retrieving the payload
 	if payloadErr != nil {
-		// stringify the response
-		response, _ := json.Marshal(formatErrors(nil, payloadErr))
-
-		// send the error to the user
+		response := formatErrors(nil, payloadErr)
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		w.Write(response)
+		err := json.NewEncoder(w).Encode(response)
+		if err != nil {
+			g.logger.Warn("Failed to encode error response:", err.Error())
+		}
 		return
 	}
 
@@ -78,9 +78,6 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	statusCode := http.StatusOK
 
 	for _, operation := range operations {
-		// the result of the operation
-		result := map[string]interface{}{}
-
 		// there might be a query plan cache key embedded in the operation
 		cacheKey := ""
 		if operation.Extensions.QueryPlanCache != nil {
@@ -122,7 +119,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// fire the query with the request context passed through to execution
-		result, err = g.Execute(requestContext, plan)
+		result, err := g.Execute(requestContext, plan)
 		if err != nil {
 			results = append(results, formatErrorsWithCode(result, err, "INTERNAL_SERVER_ERROR"))
 
@@ -250,9 +247,7 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 			payloadErr = fmt.Errorf("encountered error reading body: %s", err.Error())
 			return
 		}
-
-		operations, batchMode, payloadErr = parseOperations(operationsJson)
-		break
+		return parseOperations(operationsJson)
 	case "multipart/form-data":
 
 		parseErr := r.ParseMultipartForm(32 << 20)
@@ -287,13 +282,11 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 				return
 			}
 		}
-		break
+		return
 	default:
 		payloadErr = errors.New("unknown content-type: " + contentType)
 		return
 	}
-
-	return
 }
 
 // Parses json operations string
@@ -412,9 +405,12 @@ func (g *Gateway) PlaygroundHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// we are not handling a POST request so we have to show the user the playground
-	writePlayground(w, PlaygroundConfig{
+	err := writePlayground(w, PlaygroundConfig{
 		Endpoint: r.URL.String(),
 	})
+	if err != nil {
+		g.logger.Warn("failed writing playground UI:", err.Error())
+	}
 }
 
 // StaticPlaygroundHandler returns a static UI http.HandlerFunc with custom configuration
@@ -424,6 +420,9 @@ func (g *Gateway) StaticPlaygroundHandler(config PlaygroundConfig) http.Handler 
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		writePlayground(w, config)
+		err := writePlayground(w, config)
+		if err != nil {
+			g.logger.Warn("failed writing playground UI:", err.Error())
+		}
 	})
 }

@@ -43,7 +43,7 @@ func TestExecutor_plansOfOne(t *testing.T) {
 							},
 						},
 						// return a known value we can test against
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 							"values": []string{
 								"hello",
 								"world",
@@ -110,7 +110,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 							},
 						},
 						// return a known value we can test against
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 							"user": map[string]interface{}{
 								"id":        "1",
 								"firstName": "hello",
@@ -137,7 +137,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 										},
 									},
 								},
-								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+								Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 									"node": map[string]interface{}{
 										"favoriteCatPhoto": map[string]interface{}{
 											"url": "hello world",
@@ -188,7 +188,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 						ParentType:     "Query",
 						InsertionPoint: []string{},
 						// return a known value we can test against
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{}},
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{}},
 						// then we have to ask for the users favorite cat photo and its url
 						Then: []*QueryPlanStep{
 							{
@@ -211,7 +211,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 									},
 								},
 								// return a known value we can test against
-								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+								Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 									"user": map[string]interface{}{
 										"id":        "1",
 										"firstName": "hello",
@@ -277,7 +277,7 @@ func TestExecutor_insertIntoFragmentSpread(t *testing.T) {
 								},
 							},
 						},
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 							"photo": map[string]interface{}{
 								"createdBy": map[string]interface{}{
 									"firstName": "John",
@@ -403,7 +403,7 @@ func TestExecutor_insertIntoListFragmentSpreads(t *testing.T) {
 								},
 							},
 						},
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 							"photos": []interface{}{
 								map[string]interface{}{
 									"createdBy": map[string]interface{}{
@@ -545,7 +545,7 @@ func TestExecutor_insertIntoFragmentSpreadLists(t *testing.T) {
 								},
 							},
 						},
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 							"photo": map[string]interface{}{
 								"viewedBy": []interface{}{
 									map[string]interface{}{
@@ -700,7 +700,7 @@ func TestExecutor_insertIntoInlineFragment(t *testing.T) {
 								},
 							},
 						},
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 							"photo": map[string]interface{}{
 								"createdBy": map[string]interface{}{
 									"firstName": "John",
@@ -806,7 +806,7 @@ func TestExecutor_insertIntoListInlineFragments(t *testing.T) {
 								},
 							},
 						},
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 							"photos": []interface{}{
 								map[string]interface{}{
 									"createdBy": map[string]interface{}{
@@ -928,7 +928,7 @@ func TestExecutor_insertIntoInlineFragmentsList(t *testing.T) {
 								},
 							},
 						},
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 							"photo": map[string]interface{}{
 								"viewedBy": []interface{}{
 									map[string]interface{}{
@@ -1059,7 +1059,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 						},
 						// planner will actually leave behind a queryer that hits service A
 						// for testing we can just return a known value
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 							"users": []interface{}{
 								map[string]interface{}{
 									"firstName": "hello",
@@ -1120,7 +1120,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 								},
 								// planner will actually leave behind a queryer that hits service B
 								// for testing we can just return a known value
-								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+								Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 									"node": map[string]interface{}{
 										"photoGallery": []interface{}{
 											map[string]interface{}{
@@ -1378,7 +1378,7 @@ func TestExecutor_includeIf(t *testing.T) {
 							},
 						},
 						// return a known value we can test against
-						Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{}},
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{}},
 						// then we have to ask for the users favorite cat photo and its url
 						Then: []*QueryPlanStep{
 							{
@@ -1400,7 +1400,7 @@ func TestExecutor_includeIf(t *testing.T) {
 										},
 									},
 								},
-								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+								Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 									"node": map[string]interface{}{
 										"favoriteCatPhoto": map[string]interface{}{
 											"url": "hello world",
@@ -1517,7 +1517,8 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 	plan, _ := gateway.GetPlans(reqCtx)
 
 	// execute any think
-	gateway.Execute(reqCtx, plan)
+	_, err = gateway.Execute(reqCtx, plan)
+	assert.NoError(t, err)
 
 	// make sure we called the middleware
 	assert.True(t, called, "Did not call middleware")
@@ -2182,7 +2183,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 							},
 						},
 						Queryer: &graphql.MockSuccessQueryer{
-							map[string]interface{}{
+							Value: map[string]interface{}{
 								"user": map[string]interface{}{
 									"parent": map[string]interface{}{
 										"parent": map[string]interface{}{
@@ -2213,7 +2214,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 									},
 								},
 								Queryer: &graphql.MockSuccessQueryer{
-									map[string]interface{}{"node": map[string]interface{}{
+									Value: map[string]interface{}{"node": map[string]interface{}{
 										"house": map[string]interface{}{
 											"id": "2",
 											"cats": []interface{}{
@@ -2233,7 +2234,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 												Definition: definitionFactory("String"),
 											},
 										},
-										Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+										Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 											"node": map[string]interface{}{
 												"id":      "2",
 												"address": "Cats street",
@@ -2249,7 +2250,7 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 												Definition: definitionFactory("String"),
 											},
 										},
-										Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+										Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 											"node": map[string]interface{}{
 												"id": "3", "name": "kitty",
 											}},

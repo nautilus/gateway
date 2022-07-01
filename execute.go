@@ -457,10 +457,8 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 					return nil, err
 				}
 
-				for _, point := range entryInsertionPoints {
-					// add the list of insertion points to the acumulator
-					newInsertionPoints = append(newInsertionPoints, point)
-				}
+				// add the list of insertion points to the acumulator
+				newInsertionPoints = append(newInsertionPoints, entryInsertionPoints...)
 			}
 
 			// return the flat list of insertion points created by our children

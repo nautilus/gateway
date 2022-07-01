@@ -1591,12 +1591,6 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 	location1 := "url1"
 	location2 := "url2"
 
-	type testCase struct {
-		priorities       []string
-		allUsersLocation string
-		lastNameLocation string
-	}
-
 	// The location map for fields for this query.
 	// All fields live on location1. "lastName" is
 	// additionally available on location2.

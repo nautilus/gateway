@@ -36,6 +36,7 @@ func TestGraphQLHandler_postMissingQuery(t *testing.T) {
 			allUsers: [String!]!
 		}
 	`)
+	assert.NoError(t, err)
 
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
@@ -223,7 +224,7 @@ func readResultWithErrors(responseRecorder *httptest.ResponseRecorder, t *testin
 	//result := map[string]interface{}{}
 	result := resultWithErrors{}
 	err = json.Unmarshal(body, &result)
-	return &result, nil
+	return &result, err
 }
 
 func TestQueryPlanCacheParameters_post(t *testing.T) {
@@ -418,6 +419,7 @@ func TestPlaygroundHandler_postRequest(t *testing.T) {
 			allUsers: [String!]!
 		}
 	`)
+	assert.NoError(t, err)
 	schemas := []*graphql.RemoteSchema{{Schema: schema, URL: "url1"}}
 
 	// create gateway schema we can test against
@@ -554,6 +556,7 @@ func TestPlaygroundHandler_getRequest(t *testing.T) {
 			allUsers: [String!]!
 		}
 	`)
+	assert.NoError(t, err)
 	schemas := []*graphql.RemoteSchema{{Schema: schema, URL: "url1"}}
 
 	// create gateway schema we can test against
@@ -596,6 +599,7 @@ func TestGraphQLHandler_postWithFile(t *testing.T) {
 			uploadInput(input: FileInput!): String!
 		}
 	`)
+	assert.NoError(t, err)
 
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
@@ -687,6 +691,7 @@ func TestGraphQLHandler_DeeplyNestedFileInput(t *testing.T) {
 			uploadInputWrapper(input: WrapperOne!): String!
 		}
 	`)
+	assert.NoError(t, err)
 
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
@@ -763,6 +768,7 @@ func TestGraphQLHandler_postWithMultipleFiles(t *testing.T) {
 			uploadMultiInput(input: FilesInput!): [String!]!
 		}
 	`)
+	assert.NoError(t, err)
 
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
@@ -856,6 +862,7 @@ func TestGraphQLHandler_postBatchWithMultipleFiles(t *testing.T) {
 			uploadMultiInput(input: FilesInput!): [String!]!
 		}
 	`)
+	assert.NoError(t, err)
 
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
@@ -938,6 +945,7 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 			uploadMultiInput(input: FilesInput!): [String!]!
 		}
 	`)
+	assert.NoError(t, err)
 
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
@@ -1330,11 +1338,12 @@ func createMultipartRequest(operations, fileMap []byte, filesContent ...[]byte) 
 }
 
 func TestStaticPlaygroundHandler(t *testing.T) {
-	schema, _ := graphql.LoadSchema(`
+	schema, err := graphql.LoadSchema(`
 		type Query {
 			allUsers: [String!]!
 		}
 	`)
+	assert.NoError(t, err)
 
 	// create gateway schema we can test against
 	gateway, err := New([]*graphql.RemoteSchema{
