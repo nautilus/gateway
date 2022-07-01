@@ -1423,7 +1423,7 @@ type Query {
 			description: "do not merge executable locations",
 			schema1:     `directive @foo on FIELD | QUERY`,
 			schema2:     `directive @foo on FRAGMENT_DEFINITION | QUERY`,
-			expectErr:   `conflict in locations for directive foo. do not have the same executable locations: these locations are not shared: FIELD`,
+			expectErr:   `conflict in locations for directive foo: do not have the same executable locations: these locations are not shared: FIELD`,
 		},
 		{
 			description: "merge shared executable locations and mixed type system locations",

@@ -109,7 +109,8 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				if err != nil {
 					errMutex.Lock()
 					// if the error was a list
-					if errList, ok := err.(graphql.ErrorList); ok {
+					var errList graphql.ErrorList
+					if errors.As(err, &errList) {
 						errs = append(errs, errList...)
 					} else {
 						errs = append(errs, err)

@@ -120,7 +120,7 @@ func (g *Gateway) internalSchema() (*ast.Schema, error) {
 		}
 	`)
 	if schema == nil {
-		return nil, fmt.Errorf("Syntax error in schema string: %s", err.Error())
+		return nil, fmt.Errorf("Syntax error in schema string: %w", err)
 	}
 
 	// then we have to add any query fields we have

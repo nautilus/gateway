@@ -1630,7 +1630,7 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 		})
 
 		if err != nil {
-			return nil, fmt.Errorf("encountered error when planning query: %s", err.Error())
+			return nil, fmt.Errorf("encountered error when planning query: %w", err)
 		}
 
 		return selections, nil

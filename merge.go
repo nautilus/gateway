@@ -206,7 +206,7 @@ func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, new
 		var err error
 		prevCopy.Fields[ix], err = mergeFields(field, otherField)
 		if err != nil {
-			return nil, fmt.Errorf("encountered error merging interface %v: %v", previousDefinition.Name, err.Error())
+			return nil, fmt.Errorf("encountered error merging interface %v: %w", previousDefinition.Name, err)
 		}
 	}
 
@@ -235,7 +235,7 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 			prevCopy.Fields[prevIndex], err = mergeFields(prevField, newField)
 			if err != nil {
 				//  we don't allow 2 fields that have different types
-				return nil, fmt.Errorf("encountered error merging object %v: %v", previousDefinition.Name, err.Error())
+				return nil, fmt.Errorf("encountered error merging object %v: %w", previousDefinition.Name, err)
 			}
 		} else {
 			// its safe to copy over the definition
@@ -377,13 +377,13 @@ func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition 
 	var err error
 	result.Locations, err = mergeDirectiveLocations(result.Locations, newDefinition.Locations)
 	if err != nil {
-		return nil, fmt.Errorf("conflict in locations for directive %s. %s", previousDefinition.Name, err.Error())
+		return nil, fmt.Errorf("conflict in locations for directive %s: %w", previousDefinition.Name, err)
 	}
 
 	// make sure the 2 definitions take the same arguments
 	result.Arguments, err = mergeArgumentDefinitionList(result.Arguments, newDefinition.Arguments, result.Position.Src.BuiltIn)
 	if err != nil {
-		return nil, fmt.Errorf("conflict in argument definitions for directive %s. %s", previousDefinition.Name, err.Error())
+		return nil, fmt.Errorf("conflict in argument definitions for directive %s: %w", previousDefinition.Name, err)
 	}
 
 	// the 2 directives can coexist
@@ -398,7 +398,7 @@ func mergeEnumValues(value1, value2 *ast.EnumValueDefinition) (*ast.EnumValueDef
 
 	// if the 2 directives dont match
 	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
-		return nil, fmt.Errorf("conflict in enum value directives. %s", err.Error())
+		return nil, fmt.Errorf("conflict in enum value directives: %w", err)
 	}
 
 	return &value1Copy, nil
@@ -436,24 +436,24 @@ func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, err
 
 	// fields
 	if err := mergeTypesEqual(field1.Type, field2.Type); err != nil {
-		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
 	// arguments
 	var err error
 	field1Copy.Arguments, err = mergeArgumentDefinitionList(field1.Arguments, field2.Arguments, false)
 	if err != nil {
-		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
 	// default values
 	if err := mergeValuesEqual(field1.DefaultValue, field2.DefaultValue); err != nil {
-		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
 	// directives
 	if err := mergeDirectiveListsEqual(field1.Directives, field2.Directives); err != nil {
-		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
 	// nothing went wrong

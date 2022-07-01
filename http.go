@@ -36,9 +36,7 @@ func formatErrorsWithCode(data map[string]interface{}, err error, code string) m
 	var errList graphql.ErrorList
 
 	// if the err is itself an error list
-	if list, ok := err.(graphql.ErrorList); ok {
-		errList = list
-	} else {
+	if !errors.As(err, &errList) {
 		errList = graphql.ErrorList{
 			graphql.NewError(code, err.Error()),
 		}
@@ -244,7 +242,7 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 		// read the full request body
 		operationsJson, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			payloadErr = fmt.Errorf("encountered error reading body: %s", err.Error())
+			payloadErr = fmt.Errorf("encountered error reading body: %w", err)
 			return
 		}
 		return parseOperations(operationsJson)
@@ -306,7 +304,7 @@ func parseOperations(operationsJson []byte) (operations []*HTTPOperation, batchM
 		batch := []*HTTPOperation{}
 
 		if err = json.Unmarshal(operationsJson, &batch); err != nil {
-			payloadErr = fmt.Errorf("encountered error parsing operationsJson: %s", err.Error())
+			payloadErr = fmt.Errorf("encountered error parsing operationsJson: %w", err)
 		} else {
 			operations = batch
 		}

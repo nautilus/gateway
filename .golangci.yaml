@@ -2,3 +2,6 @@ linters:
   enable:
     # Default linters plus these:
     - bodyclose
+    - durationcheck
+    - errname
+    - errorlint
