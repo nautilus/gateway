@@ -59,7 +59,9 @@ func TestGraphQLHandler_postMissingQuery(t *testing.T) {
 	gateway.GraphQLHandler(responseRecorder, request)
 
 	// make sure we got an error code
-	assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+	result := responseRecorder.Result()
+	assert.NoError(t, result.Body.Close())
+	assert.Equal(t, http.StatusUnprocessableEntity, result.StatusCode)
 }
 
 func TestGraphQLHandler(t *testing.T) {
@@ -95,7 +97,9 @@ func TestGraphQLHandler(t *testing.T) {
 		gateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+		recorderResult := responseRecorder.Result()
+		assert.NoError(t, recorderResult.Body.Close())
+		assert.Equal(t, http.StatusUnprocessableEntity, recorderResult.StatusCode)
 
 		// verify the graphql error code
 		result, err := readResultWithErrors(responseRecorder, t)
@@ -115,7 +119,9 @@ func TestGraphQLHandler(t *testing.T) {
 		gateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+		result := responseRecorder.Result()
+		assert.NoError(t, result.Body.Close())
+		assert.Equal(t, http.StatusUnprocessableEntity, result.StatusCode)
 	})
 
 	t.Run("Object variables succeeds", func(t *testing.T) {
@@ -128,7 +134,9 @@ func TestGraphQLHandler(t *testing.T) {
 		gateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+		result := responseRecorder.Result()
+		assert.NoError(t, result.Body.Close())
+		assert.Equal(t, http.StatusOK, result.StatusCode)
 	})
 
 	t.Run("OperationName", func(t *testing.T) {
@@ -141,7 +149,9 @@ func TestGraphQLHandler(t *testing.T) {
 		gateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusBadRequest, responseRecorder.Result().StatusCode)
+		result := responseRecorder.Result()
+		assert.NoError(t, result.Body.Close())
+		assert.Equal(t, http.StatusBadRequest, result.StatusCode)
 	})
 
 	t.Run("error marhsalling response", func(t *testing.T) {
@@ -170,7 +180,9 @@ func TestGraphQLHandler(t *testing.T) {
 		innerGateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusInternalServerError, responseRecorder.Result().StatusCode)
+		recorderResult := responseRecorder.Result()
+		assert.NoError(t, recorderResult.Body.Close())
+		assert.Equal(t, http.StatusInternalServerError, recorderResult.StatusCode)
 
 		// verify the graphql error code
 		result, err := readResultWithErrors(responseRecorder, t)
@@ -204,7 +216,9 @@ func TestGraphQLHandler(t *testing.T) {
 		innerGateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+		recorderResult := responseRecorder.Result()
+		assert.NoError(t, recorderResult.Body.Close())
+		assert.Equal(t, http.StatusOK, recorderResult.StatusCode)
 
 		// verify the graphql error code
 		result, err := readResultWithErrors(responseRecorder, t)
@@ -216,7 +230,9 @@ func TestGraphQLHandler(t *testing.T) {
 }
 
 func readResultWithErrors(responseRecorder *httptest.ResponseRecorder, t *testing.T) (*resultWithErrors, error) {
-	body, err := ioutil.ReadAll(responseRecorder.Result().Body)
+	recorderResult := responseRecorder.Result()
+	defer recorderResult.Body.Close()
+	body, err := ioutil.ReadAll(recorderResult.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -442,6 +458,7 @@ func TestPlaygroundHandler_postRequest(t *testing.T) {
 
 	// get the response from the handler
 	response := responseRecorder.Result()
+	defer response.Body.Close()
 	// read the body
 	_, err = ioutil.ReadAll(response.Body)
 	if err != nil {
@@ -508,6 +525,7 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 	gw.PlaygroundHandler(responseRecorder, request)
 	// get the response from the handler
 	response := responseRecorder.Result()
+	defer response.Body.Close()
 
 	// make sure we got a successful response
 	if !assert.Equal(t, http.StatusOK, response.StatusCode) {
@@ -573,8 +591,9 @@ func TestPlaygroundHandler_getRequest(t *testing.T) {
 	// call the http hander
 	gateway.PlaygroundHandler(responseRecorder, request)
 
-	_, err = html.Parse(responseRecorder.Result().Body)
-	defer responseRecorder.Result().Body.Close()
+	result := responseRecorder.Result()
+	_, err = html.Parse(result.Body)
+	defer result.Body.Close()
 
 	if err != nil {
 		t.Error(err.Error())
@@ -661,7 +680,9 @@ func TestGraphQLHandler_postWithFile(t *testing.T) {
 			gateway.GraphQLHandler(responseRecorder, request)
 
 			// make sure we got a response code (200)
-			assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+			result := responseRecorder.Result()
+			assert.NoError(t, result.Body.Close())
+			assert.Equal(t, http.StatusOK, result.StatusCode)
 		})
 	}
 }
@@ -745,7 +766,9 @@ func TestGraphQLHandler_DeeplyNestedFileInput(t *testing.T) {
 			fmt.Println(responseRecorder.Body)
 
 			// make sure we got a response code (200)
-			assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+			result := responseRecorder.Result()
+			assert.NoError(t, result.Body.Close())
+			assert.Equal(t, http.StatusOK, result.StatusCode)
 		})
 	}
 }
@@ -839,7 +862,9 @@ func TestGraphQLHandler_postWithMultipleFiles(t *testing.T) {
 			gateway.GraphQLHandler(responseRecorder, request)
 
 			// make sure we got a response code (200)
-			assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+			result := responseRecorder.Result()
+			assert.NoError(t, result.Body.Close())
+			assert.Equal(t, http.StatusOK, result.StatusCode)
 		})
 	}
 }
@@ -919,7 +944,9 @@ func TestGraphQLHandler_postBatchWithMultipleFiles(t *testing.T) {
 	gateway.GraphQLHandler(responseRecorder, request)
 
 	// make sure we got an error code
-	assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+	result := responseRecorder.Result()
+	assert.NoError(t, result.Body.Close())
+	assert.Equal(t, http.StatusOK, result.StatusCode)
 }
 
 func TestGraphQLHandler_postFilesWithError(t *testing.T) {
@@ -1245,7 +1272,9 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 			gateway.GraphQLHandler(responseRecorder, request)
 
 			// make sure we got an error code
-			assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+			result := responseRecorder.Result()
+			assert.NoError(t, result.Body.Close())
+			assert.Equal(t, http.StatusUnprocessableEntity, result.StatusCode)
 		})
 	}
 
@@ -1264,7 +1293,9 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 		gateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+		result := responseRecorder.Result()
+		assert.NoError(t, result.Body.Close())
+		assert.Equal(t, http.StatusUnprocessableEntity, result.StatusCode)
 	})
 
 	t.Run("Unknown content-type", func(t *testing.T) {
@@ -1282,7 +1313,9 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 		gateway.GraphQLHandler(responseRecorder, request)
 
 		// make sure we got an error code
-		assert.Equal(t, http.StatusUnprocessableEntity, responseRecorder.Result().StatusCode)
+		result := responseRecorder.Result()
+		assert.NoError(t, result.Body.Close())
+		assert.Equal(t, http.StatusUnprocessableEntity, result.StatusCode)
 	})
 }
 
@@ -1368,7 +1401,9 @@ func TestStaticPlaygroundHandler(t *testing.T) {
 			Endpoint: "some-url",
 		}).ServeHTTP(responseRecorder, request)
 
-		assert.Equal(t, http.StatusOK, responseRecorder.Result().StatusCode)
+		result := responseRecorder.Result()
+		defer result.Body.Close()
+		assert.Equal(t, http.StatusOK, result.StatusCode)
 
 		assert.Contains(t, responseRecorder.Body.String(), "some-url")
 	})
@@ -1378,6 +1413,8 @@ func TestStaticPlaygroundHandler(t *testing.T) {
 		responseRecorder := httptest.NewRecorder()
 		gateway.StaticPlaygroundHandler(PlaygroundConfig{}).ServeHTTP(responseRecorder, request)
 
-		assert.Equal(t, http.StatusMethodNotAllowed, responseRecorder.Result().StatusCode)
+		result := responseRecorder.Result()
+		assert.NoError(t, result.Body.Close())
+		assert.Equal(t, http.StatusMethodNotAllowed, result.StatusCode)
 	})
 }

@@ -1,2 +1,4 @@
 linters:
   enable:
+    # Default linters plus these:
+    - bodyclose
