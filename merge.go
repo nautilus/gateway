@@ -653,16 +653,19 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 func mergeDirectiveLocations(list1, list2 []ast.DirectiveLocation) ([]ast.DirectiveLocation, error) {
 	resultSet := make(map[ast.DirectiveLocation]struct{})
 	executableSet1 := make(map[ast.DirectiveLocation]struct{})
+	// Check the permissive set (type system locations) rather than the restrictive set (executable locations).
+	// The kinds of locations can expand in future versions of the spec, so we should err on the side
+	// of denying new type system fields instead of allowing new executable fields.
 	for _, l := range list1 {
 		resultSet[l] = struct{}{}
-		if isExecutableDirectiveLocation(l) {
+		if !isTypeSystemDirectiveLocation(l) {
 			executableSet1[l] = struct{}{}
 		}
 	}
 	executableSet2 := make(map[ast.DirectiveLocation]struct{})
 	for _, l := range list2 {
 		resultSet[l] = struct{}{}
-		if isExecutableDirectiveLocation(l) {
+		if !isTypeSystemDirectiveLocation(l) {
 			executableSet2[l] = struct{}{}
 		}
 	}
@@ -689,17 +692,20 @@ func mergeDirectiveLocations(list1, list2 []ast.DirectiveLocation) ([]ast.Direct
 	return result, nil
 }
 
-func isExecutableDirectiveLocation(d ast.DirectiveLocation) bool {
+func isTypeSystemDirectiveLocation(d ast.DirectiveLocation) bool {
 	switch d {
 	case
-		ast.LocationQuery,
-		ast.LocationMutation,
-		ast.LocationSubscription,
-		ast.LocationField,
-		ast.LocationFragmentDefinition,
-		ast.LocationFragmentSpread,
-		ast.LocationInlineFragment,
-		ast.LocationVariableDefinition:
+		ast.LocationSchema,
+		ast.LocationScalar,
+		ast.LocationObject,
+		ast.LocationFieldDefinition,
+		ast.LocationArgumentDefinition,
+		ast.LocationInterface,
+		ast.LocationUnion,
+		ast.LocationEnum,
+		ast.LocationEnumValue,
+		ast.LocationInputObject,
+		ast.LocationInputFieldDefinition:
 		return true
 	default:
 		return false
