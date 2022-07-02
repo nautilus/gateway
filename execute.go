@@ -692,7 +692,7 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 			return nil, err
 		}
 
-		index = int(indexValue)
+		index = indexValue
 		field = indexData[0]
 	}
 

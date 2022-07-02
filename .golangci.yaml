@@ -21,6 +21,7 @@ linters:
     - noctx
     - nolintlint
     - revive
+    - unconvert
 
 issues:
   exclude-rules:
