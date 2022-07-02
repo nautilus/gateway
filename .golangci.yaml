@@ -13,6 +13,7 @@ linters:
     - gocritic
     - gofmt
     - gomnd
+    - gosec
 
 issues:
   exclude-rules:

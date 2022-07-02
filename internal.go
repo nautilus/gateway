@@ -276,6 +276,7 @@ func (g *Gateway) introspectInputValueSlice(values []introspection.InputValue, s
 
 	// each type in the schema
 	for _, field := range values {
+		field := field // use loop-local address
 		result = append(result, g.introspectInputValue(&field, selectionSet))
 	}
 
@@ -298,6 +299,7 @@ func (g *Gateway) introspectEnumValueSlice(values []introspection.EnumValue, sel
 
 	// each type in the schema
 	for _, enumValue := range values {
+		enumValue := enumValue // use loop-local address
 		result = append(result, g.introspectEnumValue(&enumValue, selectionSet))
 	}
 
@@ -309,6 +311,7 @@ func (g *Gateway) introspectTypeSlice(types []introspection.Type, selectionSet a
 
 	// each type in the schema
 	for _, field := range types {
+		field := field // use loop-local address
 		result = append(result, g.introspectType(&field, selectionSet))
 	}
 
