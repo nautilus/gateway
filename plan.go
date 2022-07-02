@@ -403,8 +403,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 			// modify its selection set to only include fields that are at the same location as the parent.
 			if len(selection.SelectionSet) > 0 {
 				// the insertion point for this field is the previous one with the new field name
-				insertionPoint := make([]string, len(config.insertionPoint))
-				copy(insertionPoint, config.insertionPoint)
+				insertionPoint := copyStrings(config.insertionPoint)
 				insertionPoint = append(insertionPoint, selection.Alias)
 
 				// if this field is being wrapped in a fragment then we need to make sure

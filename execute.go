@@ -429,9 +429,9 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 				entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
 				ctx.logger.Debug("Adding ", entryPoint, " to list")
 
-				newBranchSet := make([][]string, len(oldBranch))
-				for i, c := range oldBranch {
-					newBranchSet[i] = append(newBranchSet[i], c...)
+				var newBranchSet [][]string
+				for _, c := range oldBranch {
+					newBranchSet = append(newBranchSet, copyStrings(c))
 				}
 
 				// if we are adding to an existing branch
@@ -730,4 +730,10 @@ type MockExecutor struct {
 // Execute returns the provided value
 func (e *MockExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
 	return e.Value, nil
+}
+
+func copyStrings(s []string) []string {
+	var result []string
+	result = append(result, s...)
+	return result
 }
