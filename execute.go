@@ -402,9 +402,8 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 				err := fmt.Errorf("Received null for required field: %v", foundSelection.Name)
 				ctx.logger.Warn(err)
 				return nil, err
-			} else {
-				return nil, nil
 			}
+			return nil, nil
 		}
 
 		// if the type is a list

@@ -17,6 +17,10 @@ linters:
     - makezero
     - misspell
     - nakedret
+    - nilerr
+    - noctx
+    - nolintlint
+    - revive
 
 issues:
   exclude-rules:

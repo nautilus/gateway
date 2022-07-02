@@ -242,12 +242,12 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 	switch contentType {
 	case "text/plain", "application/json", "":
 		// read the full request body
-		operationsJson, err := ioutil.ReadAll(r.Body)
+		operationsJSON, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			payloadErr = fmt.Errorf("encountered error reading body: %w", err)
 			return
 		}
-		return parseOperations(operationsJson)
+		return parseOperations(operationsJSON)
 	case "multipart/form-data":
 
 		const maxPartSize = 32 << 20 // 32 Mebibytes
@@ -257,8 +257,8 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 			return
 		}
 
-		operationsJson := []byte(r.Form.Get("operations"))
-		operations, batchMode, payloadErr = parseOperations(operationsJson)
+		operationsJSON := []byte(r.Form.Get("operations"))
+		operations, batchMode, payloadErr = parseOperations(operationsJSON)
 
 		var filePosMap map[string][]string
 		if err := json.Unmarshal([]byte(r.Form.Get("map")), &filePosMap); err != nil {
@@ -291,14 +291,14 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 }
 
 // Parses json operations string
-func parseOperations(operationsJson []byte) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
+func parseOperations(operationsJSON []byte) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
 	// there are two possible options for receiving information from a post request
 	// the first is that the user provides an object in the form of { query, variables, operationName }
 	// the second option is a list of that object
 
 	singleQuery := &HTTPOperation{}
 	// if we were given a single object
-	if err := json.Unmarshal(operationsJson, &singleQuery); err == nil {
+	if err := json.Unmarshal(operationsJSON, &singleQuery); err == nil {
 		// add it to the list of operations
 		operations = append(operations, singleQuery)
 		// we weren't given an object
@@ -306,8 +306,8 @@ func parseOperations(operationsJson []byte) (operations []*HTTPOperation, batchM
 		// but we could have been given a list
 		batch := []*HTTPOperation{}
 
-		if err = json.Unmarshal(operationsJson, &batch); err != nil {
-			payloadErr = fmt.Errorf("encountered error parsing operationsJson: %w", err)
+		if err = json.Unmarshal(operationsJSON, &batch); err != nil {
+			payloadErr = fmt.Errorf("encountered error parsing operationsJSON: %w", err)
 		} else {
 			operations = batch
 		}
