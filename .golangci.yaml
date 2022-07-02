@@ -15,6 +15,7 @@ linters:
     - gomnd
     - gosec
     - makezero
+    - misspell
 
 issues:
   exclude-rules:

@@ -10,7 +10,7 @@ import (
 	"encoding/hex"
 )
 
-// In general, "query persistance" is a term for a family of optimizations that involve
+// In general, "query persistence" is a term for a family of optimizations that involve
 // storing some kind of representation of the queries that the client will send. For
 // nautilus, this allows for the pre-computation of query plans and can drastically speed
 // up response times.
@@ -115,7 +115,7 @@ func NewAutomaticQueryPlanCache() *AutomaticQueryPlanCache {
 	}
 }
 
-// Retrieve follows the "automatic query persistance" technique. If the hash is known, it will use the referenced query plan.
+// Retrieve follows the "automatic query persistence" technique. If the hash is known, it will use the referenced query plan.
 // If the hash is not know but the query is provided, it will compute the plan, return it, and save it for later use.
 // If the hash is not known and the query is not provided, it will return with an error prompting the client to provide the hash and query
 func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) (QueryPlanList, error) {

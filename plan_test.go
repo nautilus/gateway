@@ -1640,7 +1640,7 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 	//
 	// Plan with no manually defined priorities.
 	// locality rules dictate that "lastName" should
-	// be resolved at location1, since it is avaiable
+	// be resolved at location1, since it is available
 	// in both locations but the parent "allUsers"
 	// query only lives on location1.
 
