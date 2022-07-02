@@ -17,6 +17,7 @@ type schemaTableRow struct {
 }
 
 func TestGateway(t *testing.T) {
+	t.Parallel()
 	schemas := []schemaTableRow{
 		{
 			"url1",
@@ -53,6 +54,7 @@ func TestGateway(t *testing.T) {
 	}
 
 	t.Run("Compute Field URLs", func(t *testing.T) {
+		t.Parallel()
 		locations := fieldURLs(sources, false)
 
 		allUsersURL, err := locations.URLFor(typeNameQuery, "allUsers")
@@ -82,6 +84,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("Options", func(t *testing.T) {
+		t.Parallel()
 		// create a new schema with the sources and some configuration
 		gateway, err := New([]*graphql.RemoteSchema{sources[0]}, func(schema *Gateway) {
 			schema.sources = append(schema.sources, sources[1])
@@ -97,6 +100,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("WithPlanner", func(t *testing.T) {
+		t.Parallel()
 		// the planner we will assign
 		planner := &MockPlanner{}
 
@@ -110,6 +114,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("WithQueryerFactory", func(t *testing.T) {
+		t.Parallel()
 		// the planner we will assign
 		planner := &MinQueriesPlanner{}
 
@@ -128,6 +133,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("WithLocationPriorities", func(t *testing.T) {
+		t.Parallel()
 		priorities := []string{"url1", "url2"}
 
 		gateway, err := New(sources, WithLocationPriorities(priorities))
@@ -140,6 +146,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("WithLogger", func(t *testing.T) {
+		t.Parallel()
 		logger := &DefaultLogger{}
 
 		go func() { // verify no race condition between Gateway instances (singleton): https://github.com/nautilus/gateway/issues/154
@@ -159,6 +166,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("fieldURLs ignore introspection", func(t *testing.T) {
+		t.Parallel()
 		locations := fieldURLs(sources, true)
 
 		for key := range locations {
@@ -174,6 +182,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("Response Middleware Error", func(t *testing.T) {
+		t.Parallel()
 		// create a new schema with the sources and some configuration
 		gateway, err := New(sources,
 			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
@@ -206,6 +215,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("Response Middleware Error Empty Data", func(t *testing.T) {
+		t.Parallel()
 		// create a new schema with the sources and some configuration
 		gateway, err := New(sources,
 			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
@@ -239,6 +249,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("Response Middleware Success", func(t *testing.T) {
+		t.Parallel()
 		// create a new schema with the sources and some configuration
 		gateway, err := New(sources,
 			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
@@ -285,6 +296,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("filter out automatically inserted ids", func(t *testing.T) {
+		t.Parallel()
 		// the query we're going to fire. Query.allUsers comes from service one. User.lastName
 		// from service two.
 		query := `
@@ -406,6 +418,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("Introspection field on services", func(t *testing.T) {
+		t.Parallel()
 		// compute the location of each field
 		locations := fieldURLs(sources, false)
 
@@ -416,6 +429,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("Gateway fields", func(t *testing.T) {
+		t.Parallel()
 		// define a gateway field
 		viewerField := &QueryField{
 			Name: "viewer",
@@ -497,6 +511,7 @@ func TestGateway(t *testing.T) {
 }
 
 func TestGatewayExecuteRespectsOperationName(t *testing.T) {
+	t.Parallel()
 	// define a schema source
 	schema, _ := graphql.LoadSchema(`
 		type Query {
@@ -631,6 +646,7 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 }
 
 func TestFieldURLs_concat(t *testing.T) {
+	t.Parallel()
 	// create a field url map
 	first := FieldURLMap{}
 	first.RegisterURL("Parent", "field1", "url1")

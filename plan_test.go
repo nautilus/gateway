@@ -10,6 +10,7 @@ import (
 )
 
 func TestPlanQuery_singleRootField(t *testing.T) {
+	t.Parallel()
 	// the location for the schema
 	location := "url1"
 
@@ -58,6 +59,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 }
 
 func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
+	t.Parallel()
 	// the location for the schema
 	location := "url1"
 
@@ -137,6 +139,7 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 // Tests that location selection for Fields within Fragment Spreads are correctly
 // prioritized, to avoid unnecessary federation steps.
 func TestPlanQuery_includeFragmentsBoundaryTypes(t *testing.T) {
+	t.Parallel()
 	// the locations for the schema
 	location1 := "url1"
 	location2 := "url2"
@@ -214,6 +217,7 @@ func TestPlanQuery_includeFragmentsBoundaryTypes(t *testing.T) {
 }
 
 func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
+	t.Parallel()
 	// the locations for the schema
 	location1 := "url1"
 	location2 := "url2"
@@ -303,6 +307,7 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 }
 
 func TestPlanQuery_includeInlineFragments(t *testing.T) {
+	t.Parallel()
 	// the locations for the schema
 	location1 := "url1"
 	location2 := "url2"
@@ -396,6 +401,7 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 }
 
 func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
+	t.Parallel()
 	// the locations for the schema
 	loc1 := "url1"
 	loc2 := "url2"
@@ -527,6 +533,7 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 }
 
 func TestPlanQuery_singleRootObject(t *testing.T) {
+	t.Parallel()
 	// the location for the schema
 	location := "url1"
 
@@ -632,6 +639,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 }
 
 func TestPlanQuery_subGraphs(t *testing.T) {
+	t.Parallel()
 	schema, _ := graphql.LoadSchema(`
 		type User {
 			firstName: String!
@@ -798,6 +806,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 }
 
 func TestPlanQuery_preferParentLocation(t *testing.T) {
+	t.Parallel()
 
 	schema, _ := graphql.LoadSchema(`
 		type User {
@@ -855,6 +864,7 @@ func TestPlanQuery_preferParentLocation(t *testing.T) {
 }
 
 func TestPlanQuery_scrubFields(t *testing.T) {
+	t.Parallel()
 	schema, _ := graphql.LoadSchema(`
 		type User {
 			id: ID!
@@ -889,6 +899,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
 
 	t.Run("Multiple Step Scrubbing", func(t *testing.T) {
+		t.Parallel()
 		plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
 			Query: `
 				{
@@ -921,6 +932,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 	})
 
 	t.Run("Single Step no Scrubbing", func(t *testing.T) {
+		t.Parallel()
 		plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
 			Query: `
 					{
@@ -946,6 +958,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 	})
 
 	t.Run("Existing id", func(t *testing.T) {
+		t.Parallel()
 		plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
 			Query: `
 				{
@@ -979,6 +992,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 }
 
 func TestPlanQuery_groupSiblings(t *testing.T) {
+	t.Parallel()
 	schema, _ := graphql.LoadSchema(`
 		type User {
 			favoriteCatSpecies: String!
@@ -1045,6 +1059,7 @@ func TestPlanQuery_groupSiblings(t *testing.T) {
 }
 
 func TestPlanQuery_nodeField(t *testing.T) {
+	t.Parallel()
 	// the query to test
 	// query {
 	//     node(id: $id) {
@@ -1134,6 +1149,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	}
 
 	t.Run("Url1 Step", func(t *testing.T) {
+		t.Parallel()
 		// the url1 step should have Node as the parent type
 		assert.Equal(t, "Node", url1Step.ParentType)
 		// there should be one selection set
@@ -1156,6 +1172,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	})
 
 	t.Run("Url2 Step", func(t *testing.T) {
+		t.Parallel()
 		// the url1 step should have Node as the parent type
 		assert.Equal(t, "Node", url2Step.ParentType)
 		// there should be one selection set
@@ -1179,6 +1196,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 }
 
 func TestPlanQuery_stepVariables(t *testing.T) {
+	t.Parallel()
 	// the query to test
 	// query($id: ID!, $category: String!) {
 	// 		user(id: $id) {
@@ -1262,6 +1280,7 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 }
 
 func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
+	t.Parallel()
 	// the locations for the schema
 	loc1 := "url1"
 	loc2 := "url2"
@@ -1450,6 +1469,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 }
 
 func TestPlannerBuildQuery_query(t *testing.T) {
+	t.Parallel()
 	// if we pass a query on Query to the builder we should get that same
 	// selection set present in the operation without any nesting
 	selection := ast.SelectionSet{
@@ -1491,6 +1511,7 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 }
 
 func TestPlannerBuildQuery_node(t *testing.T) {
+	t.Parallel()
 	// if we are querying a specific type/id then we need to perform a query similar to
 	// {
 	// 		node(id: $id) {
@@ -1583,11 +1604,14 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 	assert.Equal(t, selection, fragment.SelectionSet)
 }
 
+/* TODO
 func TestPlanQuery_mutationsInSeries(t *testing.T) {
 	t.Skip("Not implemented")
 }
+*/
 
 func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
+	t.Parallel()
 	location1 := "url1"
 	location2 := "url2"
 
@@ -1702,6 +1726,7 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 }
 
 func TestPlanQuery_scrubWithAlias(t *testing.T) {
+	t.Parallel()
 	schema, _ := graphql.LoadSchema(`
 		type User {
 			firstName: String!

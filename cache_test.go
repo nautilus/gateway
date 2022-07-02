@@ -24,6 +24,7 @@ func (p *testPlannerCounter) Plan(*PlanningContext) (QueryPlanList, error) {
 }
 
 func TestCacheOptions(t *testing.T) {
+	t.Parallel()
 	// turn the combo into a remote schema
 	schema, _ := graphql.LoadSchema(`
 		type Query {
@@ -48,6 +49,7 @@ func TestCacheOptions(t *testing.T) {
 }
 
 func TestNoQueryPlanCache(t *testing.T) {
+	t.Parallel()
 	cacheKey := "asdf"
 	// the plan we are expecting back
 	plans := QueryPlanList{}
@@ -77,6 +79,7 @@ func TestNoQueryPlanCache(t *testing.T) {
 }
 
 func TestAutomaticQueryPlanCache(t *testing.T) {
+	t.Parallel()
 	cacheKey := "asdf"
 	// the plan we are expecting back
 	plans := QueryPlanList{}
@@ -115,6 +118,7 @@ func TestAutomaticQueryPlanCache(t *testing.T) {
 }
 
 func TestAutomaticQueryPlanCache_passPlannerErrors(t *testing.T) {
+	t.Parallel()
 	cacheKey := "asdf"
 	// instantiate a planner that can count how many times it was invoked
 	planner := &MockErrPlanner{errors.New("Error")}
@@ -130,6 +134,7 @@ func TestAutomaticQueryPlanCache_passPlannerErrors(t *testing.T) {
 }
 
 func TestAutomaticQueryPlanCache_setCacheKey(t *testing.T) {
+	t.Parallel()
 	// instantiate a planner that can count how many times it was invoked
 	planner := &testPlannerCounter{
 		Plans: QueryPlanList{},
@@ -153,6 +158,7 @@ func TestAutomaticQueryPlanCache_setCacheKey(t *testing.T) {
 }
 
 func TestAutomaticQueryPlanCache_garbageCollection(t *testing.T) {
+	t.Parallel()
 	cacheKey := "asdf"
 	// the plan we are expecting back
 	plans := QueryPlanList{}

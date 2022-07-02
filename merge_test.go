@@ -13,6 +13,7 @@ import (
 )
 
 func TestMergeSchema_assignQueryType(t *testing.T) {
+	t.Parallel()
 	// create the first schema
 	schema1, err := graphql.LoadSchema(`
 			type Query {
@@ -48,6 +49,7 @@ func TestMergeSchema_assignQueryType(t *testing.T) {
 }
 
 func TestMergeSchema_assignMutationType(t *testing.T) {
+	t.Parallel()
 	// create the first schema
 	schema1, err := graphql.LoadSchema(`
 			type Mutation {
@@ -83,6 +85,7 @@ func TestMergeSchema_assignMutationType(t *testing.T) {
 }
 
 func TestMergeSchema_inputTypes(t *testing.T) {
+	t.Parallel()
 	// create the first schema
 	originalSchema, err := graphql.LoadSchema(`
 		input Foo {
@@ -92,6 +95,7 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 	assert.Nil(t, err)
 
 	t.Run("Matching", func(t *testing.T) {
+		t.Parallel()
 		// merge the schema with one that should work
 		schema, err := testMergeSchemas(t, originalSchema, `
 			input Foo {
@@ -197,7 +201,9 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 }
 
 func TestMergeSchema_objectTypes(t *testing.T) {
+	t.Parallel()
 	t.Run("Merge fields", func(t *testing.T) {
+		t.Parallel()
 		// create the first schema
 		originalSchema, err := graphql.LoadSchema(`
 			type User {
@@ -373,7 +379,9 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 }
 
 func TestMergeSchema_enums(t *testing.T) {
+	t.Parallel()
 	t.Run("Matching", func(t *testing.T) {
+		t.Parallel()
 		// the directive that we are always comparing to
 		originalSchema, err := graphql.LoadSchema(`
 			enum Foo {
@@ -418,7 +426,9 @@ func TestMergeSchema_enums(t *testing.T) {
 }
 
 func TestMergeSchema_directives(t *testing.T) {
+	t.Parallel()
 	t.Run("Matching", func(t *testing.T) {
+		t.Parallel()
 		// the directive that we are always comparing to
 		originalSchema, err := graphql.LoadSchema(`
 			directive @foo(url: String = "url") on FIELD_DEFINITION
@@ -497,7 +507,9 @@ func TestMergeSchema_directives(t *testing.T) {
 }
 
 func TestMergeSchema_union(t *testing.T) {
+	t.Parallel()
 	t.Run("Matching", func(t *testing.T) {
+		t.Parallel()
 		// the directive that we are always comparing to
 		originalSchema, err := graphql.LoadSchema(`
 			type CatPhoto {
@@ -603,7 +615,9 @@ func TestMergeSchema_union(t *testing.T) {
 }
 
 func TestMergeSchema_unions(t *testing.T) {
+	t.Parallel()
 	t.Run("Matching", func(t *testing.T) {
+		t.Parallel()
 		originalSchema, err := graphql.LoadSchema(`
 			type Foo {
 				name: String!	
@@ -668,7 +682,9 @@ func TestMergeSchema_unions(t *testing.T) {
 }
 
 func TestMergeSchema_interfaces(t *testing.T) {
+	t.Parallel()
 	t.Run("Matching", func(t *testing.T) {
+		t.Parallel()
 		// the directive that we are always comparing to
 		originalSchema, err := graphql.LoadSchema(`
 			interface Foo {
@@ -802,6 +818,7 @@ func testMergeRunNegativeTable(t *testing.T, table []testMergeTableRow) {
 	for _, row := range table {
 		t.Run(row.Message, func(t *testing.T) {
 			t.Helper()
+			t.Parallel()
 			original, err := graphql.LoadSchema(row.Schema1)
 			if err != nil {
 				t.Errorf("Failed to load schema:\n%s", row.Schema1)
@@ -840,6 +857,7 @@ func testMergeSchemas(t *testing.T, schema1 *ast.Schema, schema2Str string) (*as
 }
 
 func TestMergeSchemaDifferentSetsOfInterfaces(t *testing.T) {
+	t.Parallel()
 	// Thing of schema1 implements one interface
 	// Thing of schema2 implements two interfaces
 
@@ -1323,6 +1341,7 @@ type Query {
 }
 
 func TestMergeSchema_multipleInterfaces(t *testing.T) {
+	t.Parallel()
 	currentSchema, err := graphql.LoadSchema(`
 		interface Node {
 			id: ID!
@@ -1383,6 +1402,7 @@ type Query {
 }
 
 func TestMergeSchema_directiveLocations(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		description        string
 		schema1, schema2   string
@@ -1438,7 +1458,9 @@ type Query {
 `,
 		},
 	} {
+		tc := tc // enable parallel sub-tests
 		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
 			currentSchema, err := graphql.LoadSchema(tc.schema1)
 			if err != nil {
 				t.Fatal(err)

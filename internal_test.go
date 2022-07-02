@@ -75,6 +75,7 @@ func schemaTestLoadQuery(query string, target interface{}, variables map[string]
 }
 
 func TestSchemaIntrospection_query(t *testing.T) {
+	t.Parallel()
 	// a place to hold the response of the query
 	result := &graphql.IntrospectionQueryResult{}
 
@@ -185,6 +186,7 @@ func TestSchemaIntrospection_query(t *testing.T) {
 }
 
 func TestSchemaIntrospection_deterministicOrder(t *testing.T) {
+	t.Parallel()
 	introspectSchema := func() graphql.IntrospectionQueryResult {
 		var result graphql.IntrospectionQueryResult
 		err := schemaTestLoadQuery(graphql.IntrospectionQuery, &result, nil)
@@ -203,6 +205,7 @@ func TestSchemaIntrospection_deterministicOrder(t *testing.T) {
 }
 
 func TestSchemaIntrospection_lookUpType(t *testing.T) {
+	t.Parallel()
 	// a place to hold the response of the query
 	result := &struct {
 		Type struct {
@@ -229,6 +232,7 @@ func TestSchemaIntrospection_lookUpType(t *testing.T) {
 }
 
 func TestSchemaIntrospection_missingType(t *testing.T) {
+	t.Parallel()
 	// a place to hold the response of the query
 	result := &struct {
 		Type *struct {
@@ -255,6 +259,7 @@ func TestSchemaIntrospection_missingType(t *testing.T) {
 }
 
 func TestSchema_resolveNodeInlineID(t *testing.T) {
+	t.Parallel()
 	type Result struct {
 		Node struct {
 			ID string `json:"id"`
@@ -285,6 +290,7 @@ func TestSchema_resolveNodeInlineID(t *testing.T) {
 }
 
 func TestSchema_resolveNodeIDFromArg(t *testing.T) {
+	t.Parallel()
 	type Result struct {
 		Node struct {
 			ID string `json:"id"`
