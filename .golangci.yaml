@@ -16,6 +16,7 @@ linters:
     - gosec
     - makezero
     - misspell
+    - nakedret
 
 issues:
   exclude-rules:

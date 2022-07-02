@@ -228,10 +228,8 @@ func parseGetRequest(r *http.Request) (operations []*HTTPOperation, payloadErr e
 		}
 	}
 
-	// add the query to the list of operations
-	operations = append(operations, operation)
-
-	return
+	// include the query in the list of operations
+	return []*HTTPOperation{operation}, payloadErr
 }
 
 // Parses post request (plain or multipart) to list of operations
