@@ -24,6 +24,7 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestExecutor_plansOfOne(t *testing.T) {
+	t.Parallel()
 	// build a query plan that the executor will follow
 	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
 		logger: &DefaultLogger{},
@@ -70,6 +71,7 @@ func TestExecutor_plansOfOne(t *testing.T) {
 }
 
 func TestExecutor_plansWithDependencies(t *testing.T) {
+	t.Parallel()
 	// the query we want to execute is
 	// {
 	// 		user {                   <- from serviceA
@@ -169,6 +171,7 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 }
 
 func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
+	t.Parallel()
 	// the query we want to execute is
 	// {
 	// 		user {                   <- from serviceA
@@ -239,6 +242,7 @@ func TestExecutor_emptyPlansWithDependencies(t *testing.T) {
 }
 
 func TestExecutor_insertIntoFragmentSpread(t *testing.T) {
+	t.Parallel()
 	// the query we want to execute is
 	// {
 	//   photo {								<- Query.services @ serviceA
@@ -367,6 +371,7 @@ func TestExecutor_insertIntoFragmentSpread(t *testing.T) {
 }
 
 func TestExecutor_insertIntoListFragmentSpreads(t *testing.T) {
+	t.Parallel()
 	// {
 	// 	photos {								<-- Query.services @ serviceA, list
 	// 	  ...photosFragment
@@ -509,6 +514,7 @@ func TestExecutor_insertIntoListFragmentSpreads(t *testing.T) {
 }
 
 func TestExecutor_insertIntoFragmentSpreadLists(t *testing.T) {
+	t.Parallel()
 	// {
 	// 	photo {								<-- Query.services @ serviceA
 	// 	  ...photoFragment
@@ -647,6 +653,7 @@ func TestExecutor_insertIntoFragmentSpreadLists(t *testing.T) {
 }
 
 func TestExecutor_insertIntoInlineFragment(t *testing.T) {
+	t.Parallel()
 	// the query we want to execute is
 	// {
 	//   photo {								<- Query.services @ serviceA
@@ -756,6 +763,7 @@ func TestExecutor_insertIntoInlineFragment(t *testing.T) {
 }
 
 func TestExecutor_insertIntoListInlineFragments(t *testing.T) {
+	t.Parallel()
 	// {
 	// 	photos {								<-- Query.services @ serviceA, list
 	// 	  ... on Photo {
@@ -878,6 +886,7 @@ func TestExecutor_insertIntoListInlineFragments(t *testing.T) {
 }
 
 func TestExecutor_insertIntoInlineFragmentsList(t *testing.T) {
+	t.Parallel()
 	// {
 	// 	photo {								<-- Query.services @ serviceA
 	// 	  ... on Photo {
@@ -997,6 +1006,7 @@ func TestExecutor_insertIntoInlineFragmentsList(t *testing.T) {
 }
 
 func TestExecutor_insertIntoLists(t *testing.T) {
+	t.Parallel()
 	// the query we want to execute is
 	// {
 	// 		users {                  	<- Query.services @ serviceA
@@ -1255,6 +1265,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 }
 
 func TestExecutor_multipleErrors(t *testing.T) {
+	t.Parallel()
 	// an executor should return a list of every error that it encounters while executing the plan
 
 	// build a query plan that the executor will follow
@@ -1324,6 +1335,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 }
 
 func TestExecutor_includeIf(t *testing.T) {
+	t.Parallel()
 
 	// the query we want to execute is
 	// {
@@ -1423,6 +1435,7 @@ func TestExecutor_includeIf(t *testing.T) {
 }
 
 func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
+	t.Parallel()
 	schema, _ := graphql.LoadSchema(
 		`
 			type Query {
@@ -1525,6 +1538,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 }
 
 func TestExecutor_threadsVariables(t *testing.T) {
+	t.Parallel()
 	// the variables we'll be threading through
 	fullVariables := map[string]interface{}{
 		"hello":   "world",
@@ -1601,6 +1615,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 	}
 }
 func TestFindInsertionPoint_rootList(t *testing.T) {
+	t.Parallel()
 	// in this example, the step before would have just resolved (need to be inserted at)
 	// ["users", "photoGallery"]. There would be an id field underneath each photo in the list
 	// of users.photoGallery
@@ -1723,6 +1738,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 }
 
 func TestFindObject(t *testing.T) {
+	t.Parallel()
 	// create an object we want to extract
 	source := map[string]interface{}{
 		"hello": []interface{}{
@@ -1783,6 +1799,7 @@ func TestFindObject(t *testing.T) {
 }
 
 func TestFindString(t *testing.T) {
+	t.Parallel()
 	// create an object we want to extract
 	source := map[string]interface{}{
 		"hello": []interface{}{
@@ -1821,6 +1838,7 @@ func TestFindString(t *testing.T) {
 }
 
 func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
+	t.Parallel()
 	// the object to mutate
 	source := map[string]interface{}{}
 
@@ -1898,6 +1916,7 @@ func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
 }
 
 func TestExecutorInsertObject_insertListElements(t *testing.T) {
+	t.Parallel()
 	// the object to mutate
 	source := map[string]interface{}{}
 
@@ -1949,6 +1968,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 }
 
 func TestExecutorGetPointData(t *testing.T) {
+	t.Parallel()
 	table := []struct {
 		point string
 		data  *extractorPointData
@@ -1961,7 +1981,9 @@ func TestExecutorGetPointData(t *testing.T) {
 	}
 
 	for _, row := range table {
+		row := row // enable parallel sub-tests
 		t.Run(row.point, func(t *testing.T) {
+			t.Parallel()
 			pointData, err := executorGetPointData(row.point)
 			if err != nil {
 				t.Error(err.Error())
@@ -1974,6 +1996,7 @@ func TestExecutorGetPointData(t *testing.T) {
 }
 
 func TestFindInsertionPoint_bailOnNil(t *testing.T) {
+	t.Parallel()
 	// we want the list of insertion points that point to
 	planInsertionPoint := []string{"post", "author"}
 	expected := [][]string{}
@@ -2012,6 +2035,7 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 }
 
 func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
+	t.Parallel()
 	// we want the list of insertion points that point to
 	planInsertionPoint := []string{"users", "photoGallery", "author"}
 
@@ -2087,11 +2111,14 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	assert.Equal(t, finalInsertionPoint, generatedPoint)
 }
 
+/* TODO
 func TestFindInsertionPoint_handlesNullObjects(t *testing.T) {
 	t.Skip("Not yet implemented")
 }
+*/
 
 func TestSingleObjectWithColonInID(t *testing.T) {
+	t.Parallel()
 	var source = make(map[string]interface{})
 	_ = json.Unmarshal([]byte(
 		`{"hello": {"id": "Thing:1337", "firstName": "Foo", "lastName": "bar"}}`),
@@ -2113,6 +2140,7 @@ func TestSingleObjectWithColonInID(t *testing.T) {
 // Test provides quite deep query to illustrate problem with
 // reused memory during slice `appends`
 func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
+	t.Parallel()
 
 	// the query we want to execute is
 	//	{

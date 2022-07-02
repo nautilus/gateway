@@ -23,6 +23,7 @@ linters:
     - revive
     - unconvert
     - unparam
+    - paralleltest
 
 issues:
   exclude-rules:
