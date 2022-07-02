@@ -816,6 +816,7 @@ type testMergeTableRow struct {
 func testMergeRunNegativeTable(t *testing.T, table []testMergeTableRow) {
 	t.Helper()
 	for _, row := range table {
+		row := row // enable parallel sub-tests
 		t.Run(row.Message, func(t *testing.T) {
 			t.Helper()
 			t.Parallel()
