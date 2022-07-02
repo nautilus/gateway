@@ -22,6 +22,7 @@ linters:
     - nolintlint
     - revive
     - unconvert
+    - unparam
 
 issues:
   exclude-rules:

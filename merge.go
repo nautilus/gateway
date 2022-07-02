@@ -76,7 +76,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				continue
 			}
 
-			previousDefinition, err := mergeInterfaces(result, previousDefinition, definition)
+			previousDefinition, err := mergeInterfaces(previousDefinition, definition)
 			if err != nil {
 				return nil, err
 			}
@@ -134,17 +134,17 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 
 			switch definition.Kind {
 			case ast.Object:
-				previousDefinition, err = mergeObjectTypes(result, previousDefinition, definition)
+				previousDefinition, err = mergeObjectTypes(previousDefinition, definition)
 			case ast.Interface:
-				previousDefinition, err = mergeInterfaces(result, previousDefinition, definition)
+				previousDefinition, err = mergeInterfaces(previousDefinition, definition)
 			case ast.InputObject:
-				previousDefinition, err = mergeInputObjects(result, previousDefinition, definition)
+				previousDefinition, err = mergeInputObjects(previousDefinition, definition)
 			case ast.Enum:
-				previousDefinition, err = mergeEnums(result, previousDefinition, definition)
+				previousDefinition, err = mergeEnums(previousDefinition, definition)
 			case ast.Scalar:
 				previousDefinition, err = mergeScalars(previousDefinition, definition)
 			case ast.Union:
-				previousDefinition, err = mergeUnions(result, previousDefinition, definition)
+				previousDefinition, err = mergeUnions(previousDefinition, definition)
 			}
 
 			if err != nil {
@@ -191,7 +191,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	return result, nil
 }
 
-func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+func mergeInterfaces(previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	prevCopy := *previousDefinition
 	// descriptions
 	if prevCopy.Description == "" {
@@ -217,7 +217,7 @@ func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, new
 	return &prevCopy, nil
 }
 
-func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	prevCopy := *previousDefinition
 	// descriptions
 	if prevCopy.Description == "" {
@@ -280,7 +280,7 @@ func findField(fields ast.FieldList, fieldName string) (int, *ast.FieldDefinitio
 	return -1, nil
 }
 
-func mergeInputObjects(result *ast.Schema, object1, object2 *ast.Definition) (*ast.Definition, error) {
+func mergeInputObjects(object1, object2 *ast.Definition) (*ast.Definition, error) {
 	object1Copy := *object1
 
 	// if the field list isn't the same
@@ -321,7 +321,7 @@ func mergeStringSliceEquivalent(slice1, slice2 []string) error {
 	return nil
 }
 
-func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+func mergeEnums(previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	prevCopy := *previousDefinition
 
 	// if we are merging an internal enums
@@ -354,7 +354,7 @@ func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefin
 	return &prevCopy, nil
 }
 
-func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+func mergeUnions(previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	// unions are defined by a list of strings that name the sub types
 
 	// if the length of the 2 lists is not the same

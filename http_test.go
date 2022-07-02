@@ -230,6 +230,7 @@ func TestGraphQLHandler(t *testing.T) {
 }
 
 func readResultWithErrors(responseRecorder *httptest.ResponseRecorder, t *testing.T) (*resultWithErrors, error) {
+	t.Helper()
 	recorderResult := responseRecorder.Result()
 	defer recorderResult.Body.Close()
 	body, err := ioutil.ReadAll(recorderResult.Body)

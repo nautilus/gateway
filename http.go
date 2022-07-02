@@ -27,8 +27,8 @@ type HTTPOperation struct {
 	} `json:"extensions"`
 }
 
-func formatErrors(data map[string]interface{}, err error) map[string]interface{} {
-	return formatErrorsWithCode(data, err, "UNKNOWN_ERROR")
+func formatErrors(err error) map[string]interface{} {
+	return formatErrorsWithCode(nil, err, "UNKNOWN_ERROR")
 }
 
 func formatErrorsWithCode(data map[string]interface{}, err error, code string) map[string]interface{} {
@@ -58,7 +58,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 
 	// if there was an error retrieving the payload
 	if payloadErr != nil {
-		response := formatErrors(nil, payloadErr)
+		response := formatErrors(payloadErr)
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		err := json.NewEncoder(w).Encode(response)
 		if err != nil {
@@ -107,9 +107,9 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			response, err := json.Marshal(formatErrorsWithCode(nil, err, "GRAPHQL_VALIDATION_FAILED"))
 			if err != nil {
 				// if we couldn't serialize the response then we're in internal error territory
-				response, err = json.Marshal(formatErrors(nil, err))
+				response, err = json.Marshal(formatErrors(err))
 				if err != nil {
-					response, _ = json.Marshal(formatErrors(nil, err))
+					response, _ = json.Marshal(formatErrors(err))
 				}
 			}
 			emitResponse(w, http.StatusBadRequest, string(response))
@@ -155,9 +155,9 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// if we couldn't serialize the response then we're in internal error territory
 		statusCode = http.StatusInternalServerError
-		response, err = json.Marshal(formatErrors(nil, err))
+		response, err = json.Marshal(formatErrors(err))
 		if err != nil {
-			response, _ = json.Marshal(formatErrors(nil, err))
+			response, _ = json.Marshal(formatErrors(err))
 		}
 	}
 
