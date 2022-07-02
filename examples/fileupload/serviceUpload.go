@@ -72,7 +72,7 @@ func main() {
 		graphql.SchemaConfig{
 			Query: graphql.NewObject(
 				graphql.ObjectConfig{
-					Name: "Query",
+					Name: typeNameQuery,
 					Fields: graphql.Fields{
 						"file": &graphql.Field{
 							Type: File,
@@ -103,7 +103,7 @@ func main() {
 				}),
 			Mutation: graphql.NewObject(
 				graphql.ObjectConfig{
-					Name: "Mutation",
+					Name: typeNameMutation,
 					Fields: graphql.Fields{
 						"upload": &graphql.Field{
 							Type: graphql.NewNonNull(graphql.String),

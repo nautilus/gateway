@@ -76,7 +76,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				continue
 			}
 
-			previousDefinition, err := mergeInterfaces(result, previousDefinition, definition)
+			previousDefinition, err := mergeInterfaces(previousDefinition, definition)
 			if err != nil {
 				return nil, err
 			}
@@ -134,13 +134,17 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 
 			switch definition.Kind {
 			case ast.Object:
-				previousDefinition, err = mergeObjectTypes(result, previousDefinition, definition)
+				previousDefinition, err = mergeObjectTypes(previousDefinition, definition)
+			case ast.Interface:
+				previousDefinition, err = mergeInterfaces(previousDefinition, definition)
 			case ast.InputObject:
-				previousDefinition, err = mergeInputObjects(result, previousDefinition, definition)
+				previousDefinition, err = mergeInputObjects(previousDefinition, definition)
 			case ast.Enum:
-				previousDefinition, err = mergeEnums(result, previousDefinition, definition)
+				previousDefinition, err = mergeEnums(previousDefinition, definition)
+			case ast.Scalar:
+				previousDefinition, err = mergeScalars(previousDefinition, definition)
 			case ast.Union:
-				previousDefinition, err = mergeUnions(result, previousDefinition, definition)
+				previousDefinition, err = mergeUnions(previousDefinition, definition)
 			}
 
 			if err != nil {
@@ -175,9 +179,9 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	}
 
 	// for now, just use the query type as the query type
-	queryType, _ := result.Types["Query"]
-	mutationType, _ := result.Types["Mutation"]
-	subscriptionType, _ := result.Types["Subscription"]
+	queryType := result.Types[typeNameQuery]
+	mutationType := result.Types[typeNameMutation]
+	subscriptionType := result.Types[typeNameSubscription]
 
 	result.Query = queryType
 	result.Mutation = mutationType
@@ -187,7 +191,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 	return result, nil
 }
 
-func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+func mergeInterfaces(previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	prevCopy := *previousDefinition
 	// descriptions
 	if prevCopy.Description == "" {
@@ -206,14 +210,14 @@ func mergeInterfaces(schema *ast.Schema, previousDefinition *ast.Definition, new
 		var err error
 		prevCopy.Fields[ix], err = mergeFields(field, otherField)
 		if err != nil {
-			return nil, fmt.Errorf("encountered error merging interface %v: %v", previousDefinition.Name, err.Error())
+			return nil, fmt.Errorf("encountered error merging interface %v: %w", previousDefinition.Name, err)
 		}
 	}
 
 	return &prevCopy, nil
 }
 
-func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	prevCopy := *previousDefinition
 	// descriptions
 	if prevCopy.Description == "" {
@@ -235,7 +239,7 @@ func mergeObjectTypes(schema *ast.Schema, previousDefinition *ast.Definition, ne
 			prevCopy.Fields[prevIndex], err = mergeFields(prevField, newField)
 			if err != nil {
 				//  we don't allow 2 fields that have different types
-				return nil, fmt.Errorf("encountered error merging object %v: %v", previousDefinition.Name, err.Error())
+				return nil, fmt.Errorf("encountered error merging object %v: %w", previousDefinition.Name, err)
 			}
 		} else {
 			// its safe to copy over the definition
@@ -276,7 +280,7 @@ func findField(fields ast.FieldList, fieldName string) (int, *ast.FieldDefinitio
 	return -1, nil
 }
 
-func mergeInputObjects(result *ast.Schema, object1, object2 *ast.Definition) (*ast.Definition, error) {
+func mergeInputObjects(object1, object2 *ast.Definition) (*ast.Definition, error) {
 	object1Copy := *object1
 
 	// if the field list isn't the same
@@ -317,7 +321,7 @@ func mergeStringSliceEquivalent(slice1, slice2 []string) error {
 	return nil
 }
 
-func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+func mergeEnums(previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	prevCopy := *previousDefinition
 
 	// if we are merging an internal enums
@@ -350,7 +354,7 @@ func mergeEnums(schema *ast.Schema, previousDefinition *ast.Definition, newDefin
 	return &prevCopy, nil
 }
 
-func mergeUnions(schema *ast.Schema, previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
+func mergeUnions(previousDefinition *ast.Definition, newDefinition *ast.Definition) (*ast.Definition, error) {
 	// unions are defined by a list of strings that name the sub types
 
 	// if the length of the 2 lists is not the same
@@ -377,13 +381,13 @@ func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition 
 	var err error
 	result.Locations, err = mergeDirectiveLocations(result.Locations, newDefinition.Locations)
 	if err != nil {
-		return nil, fmt.Errorf("conflict in locations for directive %s. %s", previousDefinition.Name, err.Error())
+		return nil, fmt.Errorf("conflict in locations for directive %s: %w", previousDefinition.Name, err)
 	}
 
 	// make sure the 2 definitions take the same arguments
 	result.Arguments, err = mergeArgumentDefinitionList(result.Arguments, newDefinition.Arguments, result.Position.Src.BuiltIn)
 	if err != nil {
-		return nil, fmt.Errorf("conflict in argument definitions for directive %s. %s", previousDefinition.Name, err.Error())
+		return nil, fmt.Errorf("conflict in argument definitions for directive %s: %w", previousDefinition.Name, err)
 	}
 
 	// the 2 directives can coexist
@@ -398,7 +402,21 @@ func mergeEnumValues(value1, value2 *ast.EnumValueDefinition) (*ast.EnumValueDef
 
 	// if the 2 directives dont match
 	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
-		return nil, fmt.Errorf("conflict in enum value directives. %s", err.Error())
+		return nil, fmt.Errorf("conflict in enum value directives: %w", err)
+	}
+
+	return &value1Copy, nil
+}
+
+func mergeScalars(value1, value2 *ast.Definition) (*ast.Definition, error) {
+	value1Copy := *value1
+	if value1Copy.Description == "" {
+		value1Copy.Description = value2.Description
+	}
+
+	// if the 2 directives dont match
+	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
+		return nil, fmt.Errorf("conflict in enum value directives: %w", err)
 	}
 
 	return &value1Copy, nil
@@ -436,24 +454,24 @@ func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, err
 
 	// fields
 	if err := mergeTypesEqual(field1.Type, field2.Type); err != nil {
-		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
 	// arguments
 	var err error
 	field1Copy.Arguments, err = mergeArgumentDefinitionList(field1.Arguments, field2.Arguments, false)
 	if err != nil {
-		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
 	// default values
 	if err := mergeValuesEqual(field1.DefaultValue, field2.DefaultValue); err != nil {
-		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
 	// directives
 	if err := mergeDirectiveListsEqual(field1.Directives, field2.Directives); err != nil {
-		return nil, fmt.Errorf("fields are not equal: %v", err.Error())
+		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
 	// nothing went wrong
@@ -726,6 +744,16 @@ func isTypeSystemDirectiveLocation(d ast.DirectiveLocation) bool {
 		ast.LocationInputObject,
 		ast.LocationInputFieldDefinition:
 		return true
+	case
+		ast.LocationQuery,
+		ast.LocationMutation,
+		ast.LocationSubscription,
+		ast.LocationField,
+		ast.LocationFragmentDefinition,
+		ast.LocationFragmentSpread,
+		ast.LocationInlineFragment,
+		ast.LocationVariableDefinition:
+		return false
 	default:
 		return false
 	}

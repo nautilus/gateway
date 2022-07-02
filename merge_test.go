@@ -844,7 +844,6 @@ func TestMergeSchemaDifferentSetsOfInterfaces(t *testing.T) {
 	// Thing of schema2 implements two interfaces
 
 	schema1, err := graphql.LoadSchema(
-		//language=GRAPHQL
 		`
 		type Query {
 			node(id: ID!): Node
@@ -862,7 +861,6 @@ func TestMergeSchemaDifferentSetsOfInterfaces(t *testing.T) {
 	`)
 	assert.Nil(t, err)
 	schema2, err := graphql.LoadSchema(
-		//language=GRAPHQL
 		`
 		type Query {
 			node(id: ID!): Node
@@ -1423,7 +1421,7 @@ type Query {
 			description: "do not merge executable locations",
 			schema1:     `directive @foo on FIELD | QUERY`,
 			schema2:     `directive @foo on FRAGMENT_DEFINITION | QUERY`,
-			expectErr:   `conflict in locations for directive foo. do not have the same executable locations: these locations are not shared: FIELD`,
+			expectErr:   `conflict in locations for directive foo: do not have the same executable locations: these locations are not shared: FIELD`,
 		},
 		{
 			description: "merge shared executable locations and mixed type system locations",

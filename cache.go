@@ -10,7 +10,7 @@ import (
 	"encoding/hex"
 )
 
-// In general, "query persistance" is a term for a family of optimizations that involve
+// In general, "query persistence" is a term for a family of optimizations that involve
 // storing some kind of representation of the queries that the client will send. For
 // nautilus, this allows for the pre-computation of query plans and can drastically speed
 // up response times.
@@ -81,7 +81,7 @@ type queryPlanCacheItem struct {
 // AutomaticQueryPlanCache is a QueryPlanCache that will use the hash if it points to a known query plan,
 // otherwise it will compute the plan and save it for later, to be referenced by the designated hash.
 type AutomaticQueryPlanCache struct {
-	cache sync.Map // map[string]*queryPlanCacheItem
+	cache *sync.Map // map[string]*queryPlanCacheItem
 	ttl   time.Duration
 	// the automatic query plan cache needs to clear itself of query plans that have been used
 	// recently. This coordination requires a channel over which events can be trigger whenever
@@ -107,6 +107,7 @@ func (c *AutomaticQueryPlanCache) WithCacheTTL(duration time.Duration) *Automati
 // NewAutomaticQueryPlanCache returns a fresh instance of
 func NewAutomaticQueryPlanCache() *AutomaticQueryPlanCache {
 	return &AutomaticQueryPlanCache{
+		cache: new(sync.Map),
 		// default cache lifetime of 3 days
 		ttl:           10 * 24 * time.Hour,
 		retrievedPlan: make(chan bool),
@@ -114,7 +115,7 @@ func NewAutomaticQueryPlanCache() *AutomaticQueryPlanCache {
 	}
 }
 
-// Retrieve follows the "automatic query persistance" technique. If the hash is known, it will use the referenced query plan.
+// Retrieve follows the "automatic query persistence" technique. If the hash is known, it will use the referenced query plan.
 // If the hash is not know but the query is provided, it will compute the plan, return it, and save it for later use.
 // If the hash is not known and the query is not provided, it will return with an error prompting the client to provide the hash and query
 func (c *AutomaticQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) (QueryPlanList, error) {

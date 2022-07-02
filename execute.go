@@ -12,6 +12,13 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
+// Common type names for manipulating schemas
+const (
+	typeNameQuery        = "Query"
+	typeNameMutation     = "Mutation"
+	typeNameSubscription = "Subscription"
+)
+
 // Executor is responsible for executing a query plan against the remote
 // schemas and returning the result
 type Executor interface {
@@ -49,7 +56,8 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 	result := map[string]interface{}{}
 
 	// a channel to receive query results
-	resultCh := make(chan *queryExecutionResult, 10)
+	const maxResultBuffer = 10
+	resultCh := make(chan *queryExecutionResult, maxResultBuffer)
 	defer close(resultCh)
 
 	// a wait group so we know when we're done with all of the steps
@@ -57,7 +65,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 
 	// and a channel for errors
 	errMutex := &sync.Mutex{}
-	errCh := make(chan error, 10)
+	errCh := make(chan error, maxResultBuffer)
 	defer close(errCh)
 
 	// a channel to close the goroutine
@@ -109,7 +117,8 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				if err != nil {
 					errMutex.Lock()
 					// if the error was a list
-					if errList, ok := err.(graphql.ErrorList); ok {
+					var errList graphql.ErrorList
+					if errors.As(err, &errList) {
 						errs = append(errs, errList...)
 					} else {
 						errs = append(errs, err)
@@ -234,7 +243,7 @@ func executeStep(
 
 	// if this is a query that falls underneath a `node(id: ???)` query then we only want to consider the object
 	// underneath the `node` field as the result for the query
-	stripNode := step.ParentType != "Query" && step.ParentType != "Subscription" && step.ParentType != "Mutation"
+	stripNode := step.ParentType != typeNameQuery && step.ParentType != typeNameSubscription && step.ParentType != typeNameMutation
 	if stripNode {
 		ctx.logger.Debug("Should strip node")
 		// get the result from the response that we have to stitch there
@@ -319,11 +328,9 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 	}
 
 	for _, selection := range selectionSetFragments {
-		switch selection := selection.(type) {
-		case *ast.Field:
-			if selection.Alias == matchString || selection.Name == matchString {
-				return selection, nil
-			}
+		selection, ok := selection.(*ast.Field)
+		if ok && (selection.Alias == matchString || selection.Name == matchString) {
+			return selection, nil
 		}
 	}
 
@@ -395,9 +402,8 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 				err := fmt.Errorf("Received null for required field: %v", foundSelection.Name)
 				ctx.logger.Warn(err)
 				return nil, err
-			} else {
-				return nil, nil
 			}
+			return nil, nil
 		}
 
 		// if the type is a list
@@ -422,9 +428,9 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 				entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
 				ctx.logger.Debug("Adding ", entryPoint, " to list")
 
-				newBranchSet := make([][]string, len(oldBranch))
-				for i, c := range oldBranch {
-					newBranchSet[i] = append(newBranchSet[i], c...)
+				var newBranchSet [][]string
+				for _, c := range oldBranch {
+					newBranchSet = append(newBranchSet, copyStrings(c))
 				}
 
 				// if we are adding to an existing branch
@@ -457,10 +463,8 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 					return nil, err
 				}
 
-				for _, point := range entryInsertionPoints {
-					// add the list of insertion points to the acumulator
-					newInsertionPoints = append(newInsertionPoints, point)
-				}
+				// add the list of insertion points to the acumulator
+				newInsertionPoints = append(newInsertionPoints, entryInsertionPoints...)
 			}
 
 			// return the flat list of insertion points created by our children
@@ -538,7 +542,7 @@ func executorExtractValue(ctx *ExecutionContext, source map[string]interface{}, 
 	var recent interface{} = source
 	ctx.logger.Debug("Pulling ", path, " from ", source)
 
-	for i, point := range path[:] {
+	for i, point := range path {
 		// if the point designates an element in the list
 		if isListElement(point) {
 			pointData, err := executorGetPointData(point)
@@ -672,7 +676,8 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 	// points come in the form <field>:<index>#<id> and each of index or id is optional
 	if strings.Contains(point, "#") {
 		idData := strings.Split(point, "#")
-		if len(idData) == 2 {
+		const longIDParts = 2
+		if len(idData) == longIDParts {
 			id = idData[1]
 		}
 
@@ -682,12 +687,12 @@ func executorGetPointData(point string) (*extractorPointData, error) {
 
 	if strings.Contains(field, ":") {
 		indexData := strings.Split(field, ":")
-		indexValue, err := strconv.ParseInt(indexData[1], 0, 32)
+		indexValue, err := strconv.Atoi(indexData[1])
 		if err != nil {
 			return nil, err
 		}
 
-		index = int(indexValue)
+		index = indexValue
 		field = indexData[0]
 	}
 
@@ -724,4 +729,10 @@ type MockExecutor struct {
 // Execute returns the provided value
 func (e *MockExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
 	return e.Value, nil
+}
+
+func copyStrings(s []string) []string {
+	var result []string
+	result = append(result, s...)
+	return result
 }

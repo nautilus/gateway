@@ -55,7 +55,7 @@ func TestGateway(t *testing.T) {
 	t.Run("Compute Field URLs", func(t *testing.T) {
 		locations := fieldURLs(sources, false)
 
-		allUsersURL, err := locations.URLFor("Query", "allUsers")
+		allUsersURL, err := locations.URLFor(typeNameQuery, "allUsers")
 		assert.Nil(t, err)
 		assert.Equal(t, []string{"url1"}, allUsersURL)
 
@@ -322,7 +322,7 @@ func TestGateway(t *testing.T) {
 
 								// this is equivalent to
 								// query { allUsers }
-								ParentType:     "Query",
+								ParentType:     typeNameQuery,
 								InsertionPoint: []string{},
 								SelectionSet: ast.SelectionSet{
 									&ast.Field{
@@ -341,7 +341,7 @@ func TestGateway(t *testing.T) {
 									},
 								},
 								// return a known value we can test against
-								Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+								Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 									"allUsers": []interface{}{
 										map[string]interface{}{
 											"id": "1",
@@ -361,7 +361,7 @@ func TestGateway(t *testing.T) {
 												},
 											},
 										},
-										Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+										Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 											"node": map[string]interface{}{
 												"lastName": "Hello",
 											},
@@ -433,6 +433,7 @@ func TestGateway(t *testing.T) {
 
 		// create a gateway with the viewer field
 		gateway, err := New(sources, WithQueryFields(viewerField))
+		assert.NoError(t, err)
 
 		// execute the query
 		query := `
@@ -464,7 +465,7 @@ func TestGateway(t *testing.T) {
 			QueryDocument: &ast.QueryDocument{
 				Operations: ast.OperationList{
 					{
-						Operation: "Query",
+						Operation: typeNameQuery,
 						SelectionSet: ast.SelectionSet{
 							&ast.Field{
 								Alias: "viewer",
@@ -541,7 +542,7 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 
 							// this is equivalent to
 							// query { allUsers }
-							ParentType:     "Query",
+							ParentType:     typeNameQuery,
 							InsertionPoint: []string{},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
@@ -552,7 +553,7 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 								},
 							},
 							// return a known value we can test against
-							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 								"foo": "foo",
 							}},
 						},
@@ -581,7 +582,7 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 
 							// this is equivalent to
 							// query { allUsers }
-							ParentType:     "Query",
+							ParentType:     typeNameQuery,
 							InsertionPoint: []string{},
 							SelectionSet: ast.SelectionSet{
 								&ast.Field{
@@ -592,7 +593,7 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 								},
 							},
 							// return a known value we can test against
-							Queryer: &graphql.MockSuccessQueryer{map[string]interface{}{
+							Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
 								"bar": "bar",
 							}},
 						},

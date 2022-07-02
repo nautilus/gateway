@@ -142,7 +142,8 @@ func TestAutomaticQueryPlanCache_setCacheKey(t *testing.T) {
 	cacheKey := ""
 
 	// plan a query
-	cache.Retrieve(&PlanningContext{Query: "hello"}, &cacheKey, planner)
+	_, err := cache.Retrieve(&PlanningContext{Query: "hello"}, &cacheKey, planner)
+	assert.NoError(t, err)
 
 	// make sure that the key was changed
 	if cacheKey == "" {

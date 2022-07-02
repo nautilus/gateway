@@ -27,8 +27,8 @@ type HTTPOperation struct {
 	} `json:"extensions"`
 }
 
-func formatErrors(data map[string]interface{}, err error) map[string]interface{} {
-	return formatErrorsWithCode(data, err, "UNKNOWN_ERROR")
+func formatErrors(err error) map[string]interface{} {
+	return formatErrorsWithCode(nil, err, "UNKNOWN_ERROR")
 }
 
 func formatErrorsWithCode(data map[string]interface{}, err error, code string) map[string]interface{} {
@@ -36,9 +36,7 @@ func formatErrorsWithCode(data map[string]interface{}, err error, code string) m
 	var errList graphql.ErrorList
 
 	// if the err is itself an error list
-	if list, ok := err.(graphql.ErrorList); ok {
-		errList = list
-	} else {
+	if !errors.As(err, &errList) {
 		errList = graphql.ErrorList{
 			graphql.NewError(code, err.Error()),
 		}
@@ -60,12 +58,12 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 
 	// if there was an error retrieving the payload
 	if payloadErr != nil {
-		// stringify the response
-		response, _ := json.Marshal(formatErrors(nil, payloadErr))
-
-		// send the error to the user
+		response := formatErrors(payloadErr)
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		w.Write(response)
+		err := json.NewEncoder(w).Encode(response)
+		if err != nil {
+			g.logger.Warn("Failed to encode error response:", err.Error())
+		}
 		return
 	}
 
@@ -78,9 +76,6 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	statusCode := http.StatusOK
 
 	for _, operation := range operations {
-		// the result of the operation
-		result := map[string]interface{}{}
-
 		// there might be a query plan cache key embedded in the operation
 		cacheKey := ""
 		if operation.Extensions.QueryPlanCache != nil {
@@ -112,9 +107,9 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			response, err := json.Marshal(formatErrorsWithCode(nil, err, "GRAPHQL_VALIDATION_FAILED"))
 			if err != nil {
 				// if we couldn't serialize the response then we're in internal error territory
-				response, err = json.Marshal(formatErrors(nil, err))
+				response, err = json.Marshal(formatErrors(err))
 				if err != nil {
-					response, _ = json.Marshal(formatErrors(nil, err))
+					response, _ = json.Marshal(formatErrors(err))
 				}
 			}
 			emitResponse(w, http.StatusBadRequest, string(response))
@@ -122,7 +117,7 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// fire the query with the request context passed through to execution
-		result, err = g.Execute(requestContext, plan)
+		result, err := g.Execute(requestContext, plan)
 		if err != nil {
 			results = append(results, formatErrorsWithCode(result, err, "INTERNAL_SERVER_ERROR"))
 
@@ -160,9 +155,9 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// if we couldn't serialize the response then we're in internal error territory
 		statusCode = http.StatusInternalServerError
-		response, err = json.Marshal(formatErrors(nil, err))
+		response, err = json.Marshal(formatErrors(err))
 		if err != nil {
-			response, _ = json.Marshal(formatErrors(nil, err))
+			response, _ = json.Marshal(formatErrors(err))
 		}
 	}
 
@@ -233,36 +228,37 @@ func parseGetRequest(r *http.Request) (operations []*HTTPOperation, payloadErr e
 		}
 	}
 
-	// add the query to the list of operations
-	operations = append(operations, operation)
-
-	return
+	// include the query in the list of operations
+	return []*HTTPOperation{operation}, payloadErr
 }
 
 // Parses post request (plain or multipart) to list of operations
 func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
-	contentType := strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0]
+	contentTypes := strings.Split(r.Header.Get("Content-Type"), ";")
+	if len(contentTypes) == 0 {
+		return nil, false, errors.New("no content-type specified")
+	}
+	contentType := contentTypes[0]
 	switch contentType {
 	case "text/plain", "application/json", "":
 		// read the full request body
-		operationsJson, err := ioutil.ReadAll(r.Body)
+		operationsJSON, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			payloadErr = fmt.Errorf("encountered error reading body: %s", err.Error())
+			payloadErr = fmt.Errorf("encountered error reading body: %w", err)
 			return
 		}
-
-		operations, batchMode, payloadErr = parseOperations(operationsJson)
-		break
+		return parseOperations(operationsJSON)
 	case "multipart/form-data":
 
-		parseErr := r.ParseMultipartForm(32 << 20)
+		const maxPartSize = 32 << 20 // 32 Mebibytes
+		parseErr := r.ParseMultipartForm(maxPartSize)
 		if parseErr != nil {
 			payloadErr = errors.New("error parse multipart request: " + parseErr.Error())
 			return
 		}
 
-		operationsJson := []byte(r.Form.Get("operations"))
-		operations, batchMode, payloadErr = parseOperations(operationsJson)
+		operationsJSON := []byte(r.Form.Get("operations"))
+		operations, batchMode, payloadErr = parseOperations(operationsJSON)
 
 		var filePosMap map[string][]string
 		if err := json.Unmarshal([]byte(r.Form.Get("map")), &filePosMap); err != nil {
@@ -287,24 +283,22 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 				return
 			}
 		}
-		break
+		return
 	default:
 		payloadErr = errors.New("unknown content-type: " + contentType)
 		return
 	}
-
-	return
 }
 
 // Parses json operations string
-func parseOperations(operationsJson []byte) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
+func parseOperations(operationsJSON []byte) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
 	// there are two possible options for receiving information from a post request
 	// the first is that the user provides an object in the form of { query, variables, operationName }
 	// the second option is a list of that object
 
 	singleQuery := &HTTPOperation{}
 	// if we were given a single object
-	if err := json.Unmarshal(operationsJson, &singleQuery); err == nil {
+	if err := json.Unmarshal(operationsJSON, &singleQuery); err == nil {
 		// add it to the list of operations
 		operations = append(operations, singleQuery)
 		// we weren't given an object
@@ -312,8 +306,8 @@ func parseOperations(operationsJson []byte) (operations []*HTTPOperation, batchM
 		// but we could have been given a list
 		batch := []*HTTPOperation{}
 
-		if err = json.Unmarshal(operationsJson, &batch); err != nil {
-			payloadErr = fmt.Errorf("encountered error parsing operationsJson: %s", err.Error())
+		if err = json.Unmarshal(operationsJSON, &batch); err != nil {
+			payloadErr = fmt.Errorf("encountered error parsing operationsJSON: %w", err)
 		} else {
 			operations = batch
 		}
@@ -343,7 +337,8 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 			return errors.New("file locator doesn't have variables in it: " + path)
 		}
 
-		if len(parts) < 2 {
+		const minPathParts = 2
+		if len(parts) < minPathParts {
 			return errors.New("invalid number of parts in path: " + path)
 		}
 
@@ -412,9 +407,12 @@ func (g *Gateway) PlaygroundHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// we are not handling a POST request so we have to show the user the playground
-	writePlayground(w, PlaygroundConfig{
+	err := writePlayground(w, PlaygroundConfig{
 		Endpoint: r.URL.String(),
 	})
+	if err != nil {
+		g.logger.Warn("failed writing playground UI:", err.Error())
+	}
 }
 
 // StaticPlaygroundHandler returns a static UI http.HandlerFunc with custom configuration
@@ -424,6 +422,9 @@ func (g *Gateway) StaticPlaygroundHandler(config PlaygroundConfig) http.Handler 
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		writePlayground(w, config)
+		err := writePlayground(w, config)
+		if err != nil {
+			g.logger.Warn("failed writing playground UI:", err.Error())
+		}
 	})
 }

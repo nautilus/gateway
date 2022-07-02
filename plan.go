@@ -71,7 +71,6 @@ type QueryerFactory func(ctx *PlanningContext, url string) graphql.Queryer
 // Planner is meant to be embedded in other QueryPlanners to share configuration
 type Planner struct {
 	QueryerFactory *QueryerFactory
-	queryerCache   map[string]graphql.Queryer
 }
 
 // MinQueriesPlanner does the most basic level of query planning
@@ -143,7 +142,8 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 		plans = append(plans, plan)
 
 		// a channel to register new steps
-		stepCh := make(chan *newQueryPlanStepPayload, 50)
+		const maxConcurrentSteps = 50
+		stepCh := make(chan *newQueryPlanStepPayload, maxConcurrentSteps)
 
 		// a chan to get errors
 		errCh := make(chan error)
@@ -153,12 +153,16 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 		stepWg := &sync.WaitGroup{}
 
 		// get the type for the operation
-		operationType := "Query"
+		var operationType string
 		switch operation.Operation {
 		case ast.Mutation:
-			operationType = "Mutation"
+			operationType = typeNameMutation
 		case ast.Subscription:
-			operationType = "Subscription"
+			operationType = typeNameSubscription
+		case ast.Query:
+			operationType = typeNameQuery
+		default:
+			operationType = typeNameQuery
 		}
 
 		// we are garunteed at least one query
@@ -180,95 +184,89 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 		go func(newSteps chan *newQueryPlanStepPayload) {
 		SelectLoop:
 			// continuously drain the step channel
-			for {
-				select {
-				case payload, ok := <-newSteps:
-					if !ok {
-						return
-					}
-					step := &QueryPlanStep{
-						Queryer:             p.GetQueryer(ctx, payload.Location),
-						ParentType:          payload.ParentType,
-						SelectionSet:        ast.SelectionSet{},
-						InsertionPoint:      payload.InsertionPoint,
-						Variables:           Set{},
-						FragmentDefinitions: payload.Fragments,
-					}
-
-					// if there is a parent to this query
-					if payload.Parent != nil {
-						ctx.Gateway.logger.Debug(fmt.Sprintf("Adding step as dependency"))
-						// add the new step to the Then of the parent
-						payload.Parent.Then = append(payload.Parent.Then, step)
-					}
-					// if we don't yet have a root step
-					if plan.RootStep == nil {
-						// use this one
-						plan.RootStep = step
-					}
-
-					ctx.Gateway.logger.Debug(fmt.Sprintf(
-						"Encountered new step: \n"+
-							"\tParentType: %v \n"+
-							"\tInsertion Point: %v \n"+
-							"\tSelectionSet: \n%s",
-						step.ParentType,
-						payload.InsertionPoint,
-						graphql.FormatSelectionSet(payload.SelectionSet),
-					))
-
-					// we are going to start walking down the operations selection set and let
-					// the steps of the walk add any necessary selectedFields
-					newSelection, err := p.extractSelection(ctx, &extractSelectionConfig{
-						stepCh:         stepCh,
-						stepWg:         stepWg,
-						locations:      ctx.Locations,
-						parentLocation: payload.Location,
-						parentType:     step.ParentType,
-						selection:      payload.SelectionSet,
-						step:           step,
-						insertionPoint: payload.InsertionPoint,
-						plan:           payload.Plan,
-						wrapper:        payload.Wrapper,
-					})
-					if err != nil {
-						errCh <- err
-						continue SelectLoop
-					}
-
-					// if some of the fields are from the same location as the field on the operation
-					if newSelection != nil {
-						// we have a selection set from one of the root operation fields in the same location
-						// so add it to the query we are sending to the service
-						step.SelectionSet = newSelection
-					}
-
-					// now that we're done processing the step we need to preconstruct the query that we
-					// will be firing for this plan
-
-					// we need to grab the list of variable definitions
-					variableDefs := ast.VariableDefinitionList{}
-					// we need to grab the variable definitions and values for each variable in the step
-					for variable := range step.Variables {
-						// add the definition
-						variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
-					}
-
-					// build up the query document
-					step.QueryDocument = plannerBuildQuery(ctx, plan.Operation.Name, step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions)
-
-					// we also need to turn the query into a string
-					queryString, err := graphql.PrintQuery(step.QueryDocument)
-					if err != nil {
-						errCh <- err
-						continue SelectLoop
-					}
-
-					step.QueryString = queryString
-
-					// we're done processing this step
-					stepWg.Done()
+			for payload := range newSteps {
+				step := &QueryPlanStep{
+					Queryer:             p.GetQueryer(ctx, payload.Location),
+					ParentType:          payload.ParentType,
+					SelectionSet:        ast.SelectionSet{},
+					InsertionPoint:      payload.InsertionPoint,
+					Variables:           Set{},
+					FragmentDefinitions: payload.Fragments,
 				}
+
+				// if there is a parent to this query
+				if payload.Parent != nil {
+					ctx.Gateway.logger.Debug("Adding step as dependency")
+					// add the new step to the Then of the parent
+					payload.Parent.Then = append(payload.Parent.Then, step)
+				}
+				// if we don't yet have a root step
+				if plan.RootStep == nil {
+					// use this one
+					plan.RootStep = step
+				}
+
+				ctx.Gateway.logger.Debug(fmt.Sprintf(
+					"Encountered new step: \n"+
+						"\tParentType: %v \n"+
+						"\tInsertion Point: %v \n"+
+						"\tSelectionSet: \n%s",
+					step.ParentType,
+					payload.InsertionPoint,
+					graphql.FormatSelectionSet(payload.SelectionSet),
+				))
+
+				// we are going to start walking down the operations selection set and let
+				// the steps of the walk add any necessary selectedFields
+				newSelection, err := p.extractSelection(ctx, &extractSelectionConfig{
+					stepCh:         stepCh,
+					stepWg:         stepWg,
+					locations:      ctx.Locations,
+					parentLocation: payload.Location,
+					parentType:     step.ParentType,
+					selection:      payload.SelectionSet,
+					step:           step,
+					insertionPoint: payload.InsertionPoint,
+					plan:           payload.Plan,
+					wrapper:        payload.Wrapper,
+				})
+				if err != nil {
+					errCh <- err
+					continue SelectLoop
+				}
+
+				// if some of the fields are from the same location as the field on the operation
+				if newSelection != nil {
+					// we have a selection set from one of the root operation fields in the same location
+					// so add it to the query we are sending to the service
+					step.SelectionSet = newSelection
+				}
+
+				// now that we're done processing the step we need to preconstruct the query that we
+				// will be firing for this plan
+
+				// we need to grab the list of variable definitions
+				variableDefs := ast.VariableDefinitionList{}
+				// we need to grab the variable definitions and values for each variable in the step
+				for variable := range step.Variables {
+					// add the definition
+					variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
+				}
+
+				// build up the query document
+				step.QueryDocument = plannerBuildQuery(ctx, plan.Operation.Name, step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions)
+
+				// we also need to turn the query into a string
+				queryString, err := graphql.PrintQuery(step.QueryDocument)
+				if err != nil {
+					errCh <- err
+					continue SelectLoop
+				}
+
+				step.QueryString = queryString
+
+				// we're done processing this step
+				stepWg.Done()
 			}
 		}(stepCh)
 
@@ -307,7 +305,6 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 
 type extractSelectionConfig struct {
 	stepCh chan *newQueryPlanStepPayload
-	errCh  chan error
 	stepWg *sync.WaitGroup
 
 	locations      FieldURLMap
@@ -406,8 +403,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 			// modify its selection set to only include fields that are at the same location as the parent.
 			if len(selection.SelectionSet) > 0 {
 				// the insertion point for this field is the previous one with the new field name
-				insertionPoint := make([]string, len(config.insertionPoint))
-				copy(insertionPoint, config.insertionPoint)
+				insertionPoint := copyStrings(config.insertionPoint)
 				insertionPoint = append(insertionPoint, selection.Alias)
 
 				// if this field is being wrapped in a fragment then we need to make sure
@@ -612,28 +608,29 @@ func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *e
 	// if this field can only be found in one location
 	if len(possibleLocations) == 1 {
 		return possibleLocations[0]
-		// the field can be found in many locations
-	} else {
-		// locations to prioritize first
-		priorities := make([]string, len(p.LocationPriorities), len(p.LocationPriorities)+2)
-		copy(priorities, p.LocationPriorities)
-		priorities = append(priorities, config.parentLocation, internalSchemaLocation)
+	}
+	// the field can be found in many locations
 
-		for _, priority := range priorities {
-			// look to see if the current location is one of the possible locations
-			for _, location := range possibleLocations {
-				// if the location is the same as the parent
-				if location == priority {
-					// assign this field to the parents entry
-					return priority
-				}
+	// locations to prioritize first
+	initialLocationPriorities := []string{config.parentLocation, internalSchemaLocation}
+	priorities := make([]string, len(p.LocationPriorities), len(p.LocationPriorities)+len(initialLocationPriorities))
+	copy(priorities, p.LocationPriorities)
+	priorities = append(priorities, initialLocationPriorities...)
+
+	for _, priority := range priorities {
+		// look to see if the current location is one of the possible locations
+		for _, location := range possibleLocations {
+			// if the location is the same as the parent
+			if location == priority {
+				// assign this field to the parents entry
+				return priority
 			}
 		}
-
-		// if we got here then this field can be found in multiple services and none of the top priority locations.
-		// for now, just use the first one
-		return possibleLocations[0]
 	}
+
+	// if we got here then this field can be found in multiple services and none of the top priority locations.
+	// for now, just use the first one
+	return possibleLocations[0]
 }
 
 func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extractSelectionConfig) (map[string]ast.SelectionSet, map[string]ast.FragmentDefinitionList, error) {
@@ -914,16 +911,16 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 
 	// assign the right operation
 	switch parentType {
-	case "Mutation":
+	case typeNameMutation:
 		operation.Operation = ast.Mutation
-	case "Subscription":
+	case typeNameSubscription:
 		operation.Operation = ast.Subscription
 	default:
 		operation.Operation = ast.Query
 	}
 
 	// if we are querying an operation all we need to do is add the selection set at the root
-	if parentType == "Query" || parentType == "Mutation" || parentType == "Subscription" {
+	if parentType == typeNameQuery || parentType == typeNameMutation || parentType == typeNameSubscription {
 		operation.SelectionSet = selectionSet
 	} else {
 		// if we are not querying the top level then we have to embed the selection set

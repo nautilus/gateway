@@ -15,7 +15,7 @@ func TestPlanQuery_singleRootField(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "foo", location)
+	locations.RegisterURL(typeNameQuery, "foo", location)
 
 	schema, _ := graphql.LoadSchema(`
 		type Query {
@@ -63,7 +63,7 @@ func TestPlanQuery_includeFragmentsSameLocation(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "foo", location)
+	locations.RegisterURL(typeNameQuery, "foo", location)
 
 	schema, _ := graphql.LoadSchema(`
 		type Query {
@@ -143,7 +143,7 @@ func TestPlanQuery_includeFragmentsBoundaryTypes(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "foo", location1)
+	locations.RegisterURL(typeNameQuery, "foo", location1)
 	locations.RegisterURL("BoundaryType", "a", location2)
 	locations.RegisterURL("BoundaryType", "a", location1)
 	locations.RegisterURL("BoundaryType", "b", location2)
@@ -220,8 +220,8 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "foo", location1)
-	locations.RegisterURL("Query", "bar", location2)
+	locations.RegisterURL(typeNameQuery, "foo", location1)
+	locations.RegisterURL(typeNameQuery, "bar", location2)
 
 	schema, _ := graphql.LoadSchema(`
 		type Query {
@@ -284,7 +284,7 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 	encounteredFields := Set{}
 
 	for _, definition := range (ast.FragmentDefinitionList{location1Defn, location2Defn}) {
-		assert.Equal(t, "Query", definition.TypeCondition)
+		assert.Equal(t, typeNameQuery, definition.TypeCondition)
 		assert.Equal(t, "Foo", definition.Name)
 		if len(definition.SelectionSet) != 1 {
 			t.Errorf("Encountered incorrect number of selections under fragment definition for location 1. Expected 1 found %v", len(location1Defn.SelectionSet))
@@ -309,8 +309,8 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "foo", location1)
-	locations.RegisterURL("Query", "bar", location2)
+	locations.RegisterURL(typeNameQuery, "foo", location1)
+	locations.RegisterURL(typeNameQuery, "bar", location2)
 
 	schema, _ := graphql.LoadSchema(`
 		type Query {
@@ -377,7 +377,7 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 			return
 		}
 
-		assert.Equal(t, "Query", fragment.TypeCondition)
+		assert.Equal(t, typeNameQuery, fragment.TypeCondition)
 
 		if len(fragment.SelectionSet) != 1 {
 			t.Errorf("Encountered incorrect number of selections under fragment definition. Expected 1 found %v", len(fragment.SelectionSet))
@@ -402,8 +402,8 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "foo", loc1)
-	locations.RegisterURL("Query", "bar", loc2)
+	locations.RegisterURL(typeNameQuery, "foo", loc1)
+	locations.RegisterURL(typeNameQuery, "bar", loc2)
 
 	schema, _ := graphql.LoadSchema(`
 		type Query {
@@ -532,7 +532,7 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "allUsers", location)
+	locations.RegisterURL(typeNameQuery, "allUsers", location)
 	locations.RegisterURL("User", "firstName", location)
 	locations.RegisterURL("User", "friends", location)
 
@@ -655,7 +655,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "allUsers", userLocation)
+	locations.RegisterURL(typeNameQuery, "allUsers", userLocation)
 	locations.RegisterURL("User", "firstName", userLocation)
 	locations.RegisterURL("User", "catPhotos", catLocation)
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
@@ -694,7 +694,7 @@ func TestPlanQuery_subGraphs(t *testing.T) {
 	// the first step should have all users
 	firstStep := plans[0].RootStep.Then[0]
 	// make sure we are grabbing values off of Query since its the root
-	assert.Equal(t, "Query", firstStep.ParentType)
+	assert.Equal(t, typeNameQuery, firstStep.ParentType)
 
 	// make sure there's a selection set
 	if len(firstStep.SelectionSet) != 1 {
@@ -816,7 +816,7 @@ func TestPlanQuery_preferParentLocation(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "allUsers", userLocation)
+	locations.RegisterURL(typeNameQuery, "allUsers", userLocation)
 	// add the
 	locations.RegisterURL("User", "id", catLocation)
 	locations.RegisterURL("User", "id", userLocation)
@@ -845,7 +845,7 @@ func TestPlanQuery_preferParentLocation(t *testing.T) {
 	// the first step should have all users
 	firstStep := plans[0].RootStep.Then[0]
 	// make sure we are grabbing values off of Query since its the root
-	assert.Equal(t, "Query", firstStep.ParentType)
+	assert.Equal(t, typeNameQuery, firstStep.ParentType)
 
 	// make sure there's a selection set
 	if len(firstStep.Then) != 0 {
@@ -880,7 +880,7 @@ func TestPlanQuery_scrubFields(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "allUsers", userLocation)
+	locations.RegisterURL(typeNameQuery, "allUsers", userLocation)
 	locations.RegisterURL("CatPhoto", "owner", userLocation)
 	locations.RegisterURL("User", "firstName", userLocation)
 	locations.RegisterURL("User", "favoriteCatSpecies", catLocation)
@@ -1001,7 +1001,7 @@ func TestPlanQuery_groupSiblings(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "allUsers", userLocation)
+	locations.RegisterURL(typeNameQuery, "allUsers", userLocation)
 	locations.RegisterURL("User", "favoriteCatSpecies", catLocation)
 	locations.RegisterURL("User", "catPhotos", catLocation)
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
@@ -1035,7 +1035,7 @@ func TestPlanQuery_groupSiblings(t *testing.T) {
 	// the first step should have all users
 	firstStep := plans[0].RootStep.Then[0]
 	// make sure we are grabbing values off of Query since its the root
-	assert.Equal(t, "Query", firstStep.ParentType)
+	assert.Equal(t, typeNameQuery, firstStep.ParentType)
 
 	// make sure there's a selection set
 	if len(firstStep.Then) != 1 {
@@ -1059,7 +1059,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	locations := FieldURLMap{}
 	locations.RegisterURL("User", "firstName", "url1")
 	locations.RegisterURL("User", "lastName", "url2")
-	locations.RegisterURL("Query", "node", "url1", "url2", internalSchemaLocation)
+	locations.RegisterURL(typeNameQuery, "node", "url1", "url2", internalSchemaLocation)
 
 	// load the query we're going to query
 	schema, err := graphql.LoadSchema(`
@@ -1193,7 +1193,7 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "user", "url1")
+	locations.RegisterURL(typeNameQuery, "user", "url1")
 	locations.RegisterURL("User", "favoriteCatPhoto", "url2")
 	locations.RegisterURL("CatPhoto", "URL", "url2")
 
@@ -1268,7 +1268,7 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "user", loc2)
+	locations.RegisterURL(typeNameQuery, "user", loc2)
 	locations.RegisterURL("User", "lastName", loc1)
 	locations.RegisterURL("User", "id", loc1, loc2)
 
@@ -1475,7 +1475,7 @@ func TestPlannerBuildQuery_query(t *testing.T) {
 
 	// the query we're building goes to the top level Query object
 	ctx := &PlanningContext{Gateway: &Gateway{logger: &DefaultLogger{}}}
-	operation := plannerBuildQuery(ctx, "hoopla", "Query", variables, selection, ast.FragmentDefinitionList{})
+	operation := plannerBuildQuery(ctx, "hoopla", typeNameQuery, variables, selection, ast.FragmentDefinitionList{})
 	if operation == nil {
 		t.Error("Did not receive a query.")
 		return
@@ -1591,17 +1591,11 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 	location1 := "url1"
 	location2 := "url2"
 
-	type testCase struct {
-		priorities       []string
-		allUsersLocation string
-		lastNameLocation string
-	}
-
 	// The location map for fields for this query.
 	// All fields live on location1. "lastName" is
 	// additionally available on location2.
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "allUsers", location1)
+	locations.RegisterURL(typeNameQuery, "allUsers", location1)
 	locations.RegisterURL("User", "firstName", location1)
 	locations.RegisterURL("User", "lastName", location1)
 	locations.RegisterURL("User", "lastName", location2)
@@ -1636,7 +1630,7 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 		})
 
 		if err != nil {
-			return nil, fmt.Errorf("encountered error when planning query: %s", err.Error())
+			return nil, fmt.Errorf("encountered error when planning query: %w", err)
 		}
 
 		return selections, nil
@@ -1646,7 +1640,7 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 	//
 	// Plan with no manually defined priorities.
 	// locality rules dictate that "lastName" should
-	// be resolved at location1, since it is avaiable
+	// be resolved at location1, since it is available
 	// in both locations but the parent "allUsers"
 	// query only lives on location1.
 
@@ -1730,7 +1724,7 @@ func TestPlanQuery_scrubWithAlias(t *testing.T) {
 
 	// the location map for fields for this query
 	locations := FieldURLMap{}
-	locations.RegisterURL("Query", "allUsers", userLocation)
+	locations.RegisterURL(typeNameQuery, "allUsers", userLocation)
 	locations.RegisterURL("User", "firstName", userLocation)
 	locations.RegisterURL("User", "catPhotos", catLocation)
 	locations.RegisterURL("CatPhoto", "URL", catLocation)
@@ -1761,7 +1755,7 @@ func TestPlanQuery_scrubWithAlias(t *testing.T) {
 	// the first step should have all users
 	firstStep := plans[0].RootStep.Then[0]
 	// make sure we are grabbing values off of Query since its the root
-	assert.Equal(t, "Query", firstStep.ParentType)
+	assert.Equal(t, typeNameQuery, firstStep.ParentType)
 
 	// make sure there's a selection set
 	if len(firstStep.SelectionSet) != 1 {
