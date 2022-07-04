@@ -1,6 +1,6 @@
 # nautilus/gateway ![CI Checks](https://github.com/nautilus/gateway/workflows/CI%20Checks/badge.svg?branch=master) [![Coverage Status](https://coveralls.io/repos/github/nautilus/gateway/badge.svg?branch=master)](https://coveralls.io/github/nautilus/gateway?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/nautilus/gateway)](https://goreportcard.com/report/github.com/nautilus/gateway) [![Go Reference](https://pkg.go.dev/badge/github.com/nautilus/gateway.svg)](https://pkg.go.dev/github.com/nautilus/gateway)
 
-A standalone service designed to consolidate your graphql APIs into one endpoint.
+A library and standalone service that composes your GraphQL APIs into one endpoint.
 
 For a guide to getting started read [this post](https://medium.com/@aaivazis/a-guide-to-schema-federation-part-1-995b639ac035). For full documentation visit the [gateway homepage](https://gateway.nautilus.dev).
 
