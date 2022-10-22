@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -242,7 +242,7 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 	switch contentType {
 	case "text/plain", "application/json", "":
 		// read the full request body
-		operationsJSON, err := ioutil.ReadAll(r.Body)
+		operationsJSON, err := io.ReadAll(r.Body)
 		if err != nil {
 			payloadErr = fmt.Errorf("encountered error reading body: %w", err)
 			return

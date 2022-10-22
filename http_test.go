@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -241,7 +240,7 @@ func readResultWithErrors(responseRecorder *httptest.ResponseRecorder, t *testin
 	t.Helper()
 	recorderResult := responseRecorder.Result()
 	defer recorderResult.Body.Close()
-	body, err := ioutil.ReadAll(recorderResult.Body)
+	body, err := io.ReadAll(recorderResult.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +470,7 @@ func TestPlaygroundHandler_postRequest(t *testing.T) {
 	response := responseRecorder.Result()
 	defer response.Body.Close()
 	// read the body
-	_, err = ioutil.ReadAll(response.Body)
+	_, err = io.ReadAll(response.Body)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -545,7 +544,7 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 	}
 
 	// read the body
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		t.Error(err.Error())
 		return

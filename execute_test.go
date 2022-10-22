@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sync"
 	"testing"
@@ -1471,7 +1471,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 			return &http.Response{
 				StatusCode: 200,
 				// Send response to be tested
-				Body: ioutil.NopCloser(bytes.NewBuffer(result)),
+				Body: io.NopCloser(bytes.NewBuffer(result)),
 				// Must be set to non-nil value or it panics
 				Header: make(http.Header),
 			}

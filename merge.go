@@ -663,30 +663,31 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 // runtime error or an ignored execution directive instead of an immediate query syntax error.
 //
 // From the spec: http://spec.graphql.org/October2021/#DirectiveLocation
-//     DirectiveLocation :
-//     	ExecutableDirectiveLocation
-//     	TypeSystemDirectiveLocation
-//     ExecutableDirectiveLocation :
-//       QUERY
-//       MUTATION
-//       SUBSCRIPTION
-//       FIELD
-//       FRAGMENT_DEFINITION
-//       FRAGMENT_SPREAD
-//       INLINE_FRAGMENT
-//       VARIABLE_DEFINITION
-//     TypeSystemDirectiveLocation :
-//       SCHEMA
-//       SCALAR
-//       OBJECT
-//       FIELD_DEFINITION
-//       ARGUMENT_DEFINITION
-//       INTERFACE
-//       UNION
-//       ENUM
-//       ENUM_VALUE
-//       INPUT_OBJECT
-//       INPUT_FIELD_DEFINITION
+//
+//	DirectiveLocation :
+//		ExecutableDirectiveLocation
+//		TypeSystemDirectiveLocation
+//	ExecutableDirectiveLocation :
+//	  QUERY
+//	  MUTATION
+//	  SUBSCRIPTION
+//	  FIELD
+//	  FRAGMENT_DEFINITION
+//	  FRAGMENT_SPREAD
+//	  INLINE_FRAGMENT
+//	  VARIABLE_DEFINITION
+//	TypeSystemDirectiveLocation :
+//	  SCHEMA
+//	  SCALAR
+//	  OBJECT
+//	  FIELD_DEFINITION
+//	  ARGUMENT_DEFINITION
+//	  INTERFACE
+//	  UNION
+//	  ENUM
+//	  ENUM_VALUE
+//	  INPUT_OBJECT
+//	  INPUT_FIELD_DEFINITION
 func mergeDirectiveLocations(list1, list2 []ast.DirectiveLocation) ([]ast.DirectiveLocation, error) {
 	resultSet := make(map[ast.DirectiveLocation]struct{})
 	executableSet1 := make(map[ast.DirectiveLocation]struct{})
