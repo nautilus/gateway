@@ -198,7 +198,7 @@ func (g *Gateway) introspectField(fieldDef introspection.Field, selectionSet ast
 		case introspectName:
 			result[field.Alias] = fieldDef.Name
 		case introspectDescription:
-			result[field.Alias] = fieldDef.Description
+			result[field.Alias] = fieldDef.Description()
 		case introspectArgs:
 			result[field.Alias] = g.introspectInputValueSlice(fieldDef.Args, field.SelectionSet)
 		case introspectType:
@@ -221,7 +221,7 @@ func (g *Gateway) introspectEnumValue(definition *introspection.EnumValue, selec
 		case introspectName:
 			result[field.Alias] = definition.Name
 		case introspectDescription:
-			result[field.Alias] = definition.Description
+			result[field.Alias] = definition.Description()
 		case introspectIsDeprecated:
 			result[field.Alias] = definition.IsDeprecated()
 		case introspectDeprecationReason:
@@ -241,7 +241,7 @@ func (g *Gateway) introspectDirective(directive introspection.Directive, selecti
 		case introspectName:
 			result[field.Alias] = directive.Name
 		case introspectDescription:
-			result[field.Alias] = directive.Description
+			result[field.Alias] = directive.Description()
 		case introspectArgs:
 			result[field.Alias] = g.introspectInputValueSlice(directive.Args, field.SelectionSet)
 		case "locations":
@@ -260,7 +260,7 @@ func (g *Gateway) introspectInputValue(iv *introspection.InputValue, selectionSe
 		case introspectName:
 			result[field.Alias] = iv.Name
 		case introspectDescription:
-			result[field.Alias] = iv.Description
+			result[field.Alias] = iv.Description()
 		case "type":
 			result[field.Alias] = g.introspectType(iv.Type, field.SelectionSet)
 		case "defaultValue":
