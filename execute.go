@@ -415,7 +415,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 				return nil, fmt.Errorf("Root value of result chunk was not a list: %v", rootValue)
 			}
 			// build up a new list of insertion points
-			newInsertionPoints := [][]string{}
+			var newInsertionPoints [][]string
 
 			// each value in the result contributes an insertion point
 			for entryI, iEntry := range rootList {
@@ -426,6 +426,9 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 
 				// the point we are going to add to the list
 				entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
+				if foundSelection.Alias != "" {
+					entryPoint = fmt.Sprintf("%s:%v", foundSelection.Alias, entryI)
+				}
 				ctx.logger.Debug("Adding ", entryPoint, " to list")
 
 				var newBranchSet [][]string
