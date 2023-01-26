@@ -513,6 +513,150 @@ func TestExecutor_insertIntoListFragmentSpreads(t *testing.T) {
 	}, result)
 }
 
+func TestExecutor_insertIntoAliasedListFragmentSpreads(t *testing.T) {
+	t.Parallel()
+	//  {
+	//    gallery: photos{                       # <-- Query.photos @ serviceA, list
+	//      ...photosFragment
+	//    }
+	//  }
+	//  fragment photosFragment on Photo {
+	//    createdBy {
+	//      firstName                            # <-- User.firstName @ serviceA
+	//      address                              # <-- User.address @ serviceB
+	//    }
+	//  }
+
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					// a query to satisfy photo.createdBy.firstName
+					{
+						ParentType:     typeNameQuery,
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Alias: "gallery",
+								Name:  "photos",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("Photo", &ast.Position{}), &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.FragmentSpread{
+										Name:       "photosFragment",
+										Definition: nil,
+									},
+								},
+							},
+						},
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
+							"gallery": []interface{}{
+								map[string]interface{}{
+									"createdBy": map[string]interface{}{
+										"firstName": "John",
+										"id":        "1",
+									},
+								},
+								map[string]interface{}{
+									"createdBy": map[string]interface{}{
+										"firstName": "Jane",
+										"id":        "2",
+									},
+								},
+							},
+						}},
+						FragmentDefinitions: ast.FragmentDefinitionList{
+							&ast.FragmentDefinition{
+								Name:          "photosFragment",
+								TypeCondition: "Photo",
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "createdBy",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("User", &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "firstName",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.address
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"gallery", "createdBy"}, // photo is the query name here, but gallery is the alias
+								SelectionSet: ast.SelectionSet{
+									&ast.FragmentSpread{
+										Name: "photosFragment",
+									},
+								},
+								Queryer: graphql.QueryerFunc(
+									func(input *graphql.QueryInput) (interface{}, error) {
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										return map[string]interface{}{
+											"node": map[string]interface{}{
+												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+											},
+										}, nil
+									},
+								),
+								FragmentDefinitions: ast.FragmentDefinitionList{
+									&ast.FragmentDefinition{
+										Name:          "photosFragment",
+										TypeCondition: "User",
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name:  "address",
+												Alias: "address",
+												Definition: &ast.FieldDefinition{
+													Name: "address",
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error execluting plan: %v", err.Error())
+		return
+	}
+	assert.Equal(t, map[string]interface{}{
+		"gallery": []interface{}{
+			map[string]interface{}{
+				"createdBy": map[string]interface{}{
+					"id":        "1",
+					"firstName": "John",
+					"address":   "address-1",
+				},
+			},
+			map[string]interface{}{
+				"createdBy": map[string]interface{}{
+					"id":        "2",
+					"firstName": "Jane",
+					"address":   "address-2",
+				},
+			},
+		},
+	}, result)
+}
+
 func TestExecutor_insertIntoFragmentSpreadLists(t *testing.T) {
 	t.Parallel()
 	// {
@@ -1250,6 +1394,268 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 							map[string]interface{}{
 								"url": photoGalleryURL,
 								"followers": []interface{}{
+									map[string]interface{}{
+										"id":        "1",
+										"firstName": followerName,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, result)
+}
+
+func TestExecutor_insertIntoAliasedLists(t *testing.T) {
+	t.Parallel()
+	// the query we want to execute is
+	// {
+	//   users {                         # <- Query.users @ serviceA
+	//     firstName
+	//     mates: friends {              # <- list
+	//       firstName
+	//       collection: photoGallery {  # <- list, User.photoGallery @ serviceB
+	//         url
+	//         fellows: followers {      # <- list
+	//           firstName               # <- User.firstName @ serviceA
+	//         }
+	//       }
+	//     }
+	//   }
+	// }
+
+	// values to test against
+	photoGalleryURL := "photoGalleryURL"
+	followerName := "John"
+
+	// build a query plan that the executor will follow
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					{
+						ParentType:     typeNameQuery,
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Name: "users",
+								Definition: &ast.FieldDefinition{
+									Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Name: "firstName",
+										Definition: &ast.FieldDefinition{
+											Type: ast.NamedType("String", &ast.Position{}),
+										},
+									},
+									&ast.Field{
+										Alias: "mates",
+										Name:  "friends",
+										Definition: &ast.FieldDefinition{
+											Type: ast.ListType(ast.NamedType("User", &ast.Position{}), &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+												Name: "firstName",
+											},
+										},
+									},
+								},
+							},
+						},
+						// planner will actually leave behind a queryer that hits service A
+						// for testing we can just return a known value
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
+							"users": []interface{}{
+								map[string]interface{}{
+									"firstName": "hello",
+									"mates": []interface{}{
+										map[string]interface{}{
+											"firstName": "John",
+											"id":        "1",
+										},
+										map[string]interface{}{
+											"firstName": "Jacob",
+											"id":        "2",
+										},
+									},
+								},
+								map[string]interface{}{
+									"firstName": "goodbye",
+									"mates": []interface{}{
+										map[string]interface{}{
+											"firstName": "Jingleheymer",
+											"id":        "3",
+										},
+										map[string]interface{}{
+											"firstName": "Schmidt",
+											"id":        "4",
+										},
+									},
+								},
+							},
+						}},
+						// then we have to ask for the users photo gallery
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.photoGallery
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"users", "mates"},
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
+										Alias: "collection",
+										Name:  "photoGallery",
+										Definition: &ast.FieldDefinition{
+											Type: ast.ListType(ast.NamedType("CatPhoto", &ast.Position{}), &ast.Position{}),
+										},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "url",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+											&ast.Field{
+												Alias: "fellows",
+												Name:  "followers",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("User", &ast.Position{}),
+												},
+												SelectionSet: ast.SelectionSet{},
+											},
+										},
+									},
+								},
+								// planner will actually leave behind a queryer that hits service B
+								// for testing we can just return a known value
+								Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
+									"node": map[string]interface{}{
+										"collection": []interface{}{
+											map[string]interface{}{
+												"url": photoGalleryURL,
+												"fellows": []interface{}{
+													map[string]interface{}{
+														"id": "1",
+													},
+												},
+											},
+										},
+									},
+								}},
+								Then: []*QueryPlanStep{
+									// a query to satisfy User.firstName
+									{
+										ParentType:     "User",
+										InsertionPoint: []string{"users", "mates", "collection", "fellows"},
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
+												Name: "firstName",
+												Definition: &ast.FieldDefinition{
+													Type: ast.NamedType("String", &ast.Position{}),
+												},
+											},
+										},
+										// planner will actually leave behind a queryer that hits service B
+										// for testing we can just return a known value
+										Queryer: graphql.QueryerFunc(
+											func(input *graphql.QueryInput) (interface{}, error) {
+												// make sure that we got the right variable inputs
+												assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+
+												// return the payload
+												return map[string]interface{}{
+													"node": map[string]interface{}{
+														"firstName": followerName,
+													},
+												}, nil
+											},
+										),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Errorf("Encountered error executing plan: %v", err.Error())
+		return
+	}
+
+	// atm the mock queryer always returns the same value so we will end up with
+	// the same User.favoritePhoto and User.photoGallery
+	assert.Equal(t, map[string]interface{}{
+		"users": []interface{}{
+			map[string]interface{}{
+				"firstName": "hello",
+				"mates": []interface{}{
+					map[string]interface{}{
+						"firstName": "John",
+						"id":        "1",
+						"collection": []interface{}{
+							map[string]interface{}{
+								"url": photoGalleryURL,
+								"fellows": []interface{}{
+									map[string]interface{}{
+										"id":        "1",
+										"firstName": followerName,
+									},
+								},
+							},
+						},
+					},
+					map[string]interface{}{
+						"firstName": "Jacob",
+						"id":        "2",
+						"collection": []interface{}{
+							map[string]interface{}{
+								"url": photoGalleryURL,
+								"fellows": []interface{}{
+									map[string]interface{}{
+										"id":        "1",
+										"firstName": followerName,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			map[string]interface{}{
+				"firstName": "goodbye",
+				"mates": []interface{}{
+					map[string]interface{}{
+						"firstName": "Jingleheymer",
+						"id":        "3",
+						"collection": []interface{}{
+							map[string]interface{}{
+								"url": photoGalleryURL,
+								"fellows": []interface{}{
+									map[string]interface{}{
+										"id":        "1",
+										"firstName": followerName,
+									},
+								},
+							},
+						},
+					},
+					map[string]interface{}{
+						"firstName": "Schmidt",
+						"id":        "4",
+						"collection": []interface{}{
+							map[string]interface{}{
+								"url": photoGalleryURL,
+								"fellows": []interface{}{
 									map[string]interface{}{
 										"id":        "1",
 										"firstName": followerName,
