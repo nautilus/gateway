@@ -516,7 +516,7 @@ func TestExecutor_insertIntoListFragmentSpreads(t *testing.T) {
 func TestExecutor_insertIntoAliasedListFragmentSpreads(t *testing.T) {
 	t.Parallel()
 	//  {
-	//    gallery: photos{                       # <--Query.services @ serviceA, list
+	//    gallery: photos{                       # <-- Query.photos @ serviceA, list
 	//      ...photosFragment
 	//    }
 	//  }
@@ -594,7 +594,7 @@ func TestExecutor_insertIntoAliasedListFragmentSpreads(t *testing.T) {
 							// a query to satisfy User.address
 							{
 								ParentType:     "User",
-								InsertionPoint: []string{"gallery", "createdBy"}, // photo is the query name here
+								InsertionPoint: []string{"gallery", "createdBy"}, // photo is the query name here, but gallery is the alias
 								SelectionSet: ast.SelectionSet{
 									&ast.FragmentSpread{
 										Name: "photosFragment",
@@ -1412,7 +1412,7 @@ func TestExecutor_insertIntoAliasedLists(t *testing.T) {
 	t.Parallel()
 	// the query we want to execute is
 	// {
-	//   users {                         # <- Query.services @ serviceA
+	//   users {                         # <- Query.users @ serviceA
 	//     firstName
 	//     mates: friends {              # <- list
 	//       firstName
