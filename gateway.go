@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -317,7 +318,11 @@ func makeNodeField() *QueryField {
 			}
 			idStr, ok := id.(string)
 			if !ok {
-				return "", fmt.Errorf("invalid ID type: %T", id)
+				jsonID, err := json.Marshal(id)
+				if err != nil {
+					return "", fmt.Errorf("invalid ID type")
+				}
+				return "", fmt.Errorf("invalid ID type: %s", string(jsonID))
 			}
 			return idStr, nil
 		},

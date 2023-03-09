@@ -341,7 +341,12 @@ func TestSchema_resolveNodeWrongIDType(t *testing.T) {
 	`
 
 	err := schemaTestLoadQuery(query, result, map[string]interface{}{})
-	assert.EqualError(t, err, "invalid ID type: int64")
+	assert.Equal(t, graphql.ErrorList{
+		&graphql.Error{
+			Message: "invalid ID type: 123",
+			Path:    []interface{}{"node"},
+		},
+	}, err)
 	assert.Equal(t, Result{
 		Node: Node{ID: nil},
 	}, result)
@@ -367,7 +372,12 @@ func TestSchema_resolveNodeMissingIDArg(t *testing.T) {
 	variables := map[string]interface{}{} // missing ID arg
 
 	err := schemaTestLoadQuery(query, result, variables)
-	assert.EqualError(t, err, "argument 'id' is required")
+	assert.Equal(t, graphql.ErrorList{
+		&graphql.Error{
+			Message: "argument 'id' is required",
+			Path:    []interface{}{"node"},
+		},
+	}, err)
 	assert.Equal(t, Result{
 		Node: Node{ID: nil},
 	}, result)
@@ -395,7 +405,12 @@ func TestSchema_resolveNodeWrongIDArgType(t *testing.T) {
 	}
 
 	err := schemaTestLoadQuery(query, result, variables)
-	assert.EqualError(t, err, "invalid ID type: int")
+	assert.Equal(t, graphql.ErrorList{
+		&graphql.Error{
+			Message: "invalid ID type: 123",
+			Path:    []interface{}{"node"},
+		},
+	}, err)
 	assert.Equal(t, Result{
 		Node: Node{ID: nil},
 	}, result)

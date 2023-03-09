@@ -101,7 +101,10 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 					// find the id of the entity
 					id, err := qField.Resolver(ctx, args)
 					if err != nil {
-						return err
+						return &graphql.Error{
+							Message: err.Error(),
+							Path:    []interface{}{field.Alias},
+						}
 					}
 
 					// assign the id to the response
