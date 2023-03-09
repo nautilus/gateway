@@ -311,8 +311,15 @@ func makeNodeField() *QueryField {
 			},
 		},
 		Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
-			// pass it to the user
-			return args["id"].(string), nil
+			id := args["id"]
+			if id == nil {
+				return "", fmt.Errorf("argument 'id' is required")
+			}
+			idStr, ok := id.(string)
+			if !ok {
+				return "", fmt.Errorf("invalid ID type: %T", id)
+			}
+			return idStr, nil
 		},
 	}
 }

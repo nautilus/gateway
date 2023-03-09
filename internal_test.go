@@ -321,3 +321,82 @@ func TestSchema_resolveNodeIDFromArg(t *testing.T) {
 		ID string `json:"id"`
 	}{ID: "my-id"}}, result)
 }
+
+func TestSchema_resolveNodeWrongIDType(t *testing.T) {
+	t.Parallel()
+	type Node struct {
+		ID *string `json:"id"`
+	}
+	type Result struct {
+		Node Node `json:"node"`
+	}
+	var result Result
+
+	query := `
+		{
+			node(id: 123) {
+				id
+			}
+		}
+	`
+
+	err := schemaTestLoadQuery(query, result, map[string]interface{}{})
+	assert.EqualError(t, err, "invalid ID type: int64")
+	assert.Equal(t, Result{
+		Node: Node{ID: nil},
+	}, result)
+}
+
+func TestSchema_resolveNodeMissingIDArg(t *testing.T) {
+	t.Parallel()
+	type Node struct {
+		ID *string `json:"id"`
+	}
+	type Result struct {
+		Node Node `json:"node"`
+	}
+	var result Result
+
+	query := `
+		query ($id: ID!) {
+			node(id: $id) {
+				id
+			}
+		}
+	`
+	variables := map[string]interface{}{} // missing ID arg
+
+	err := schemaTestLoadQuery(query, result, variables)
+	assert.EqualError(t, err, "argument 'id' is required")
+	assert.Equal(t, Result{
+		Node: Node{ID: nil},
+	}, result)
+}
+
+func TestSchema_resolveNodeWrongIDArgType(t *testing.T) {
+	t.Parallel()
+	type Node struct {
+		ID *string `json:"id"`
+	}
+	type Result struct {
+		Node Node `json:"node"`
+	}
+	var result Result
+
+	query := `
+		query ($id: ID!) {
+			node(id: $id) {
+				id
+			}
+		}
+	`
+	variables := map[string]interface{}{
+		"id": 123,
+	}
+
+	err := schemaTestLoadQuery(query, result, variables)
+	assert.EqualError(t, err, "invalid ID type: int")
+	assert.Equal(t, Result{
+		Node: Node{ID: nil},
+	}, result)
+}
