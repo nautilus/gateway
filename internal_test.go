@@ -415,3 +415,33 @@ func TestSchema_resolveNodeWrongIDArgType(t *testing.T) {
 		Node: Node{ID: nil},
 	}, result)
 }
+
+func TestSchema_resolveNodeWrongIDTypeWithAlias(t *testing.T) {
+	t.Parallel()
+	type Node struct {
+		ID *string `json:"id"`
+	}
+	type Result struct {
+		Node Node `json:"node"`
+	}
+	var result Result
+
+	query := `
+		{
+			myAlias: node(id: 123) {
+				id
+			}
+		}
+	`
+
+	err := schemaTestLoadQuery(query, result, map[string]interface{}{})
+	assert.Equal(t, graphql.ErrorList{
+		&graphql.Error{
+			Message: "invalid ID type: 123",
+			Path:    []interface{}{"myAlias"},
+		},
+	}, err)
+	assert.Equal(t, Result{
+		Node: Node{ID: nil},
+	}, result)
+}
