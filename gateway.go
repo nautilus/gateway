@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -311,8 +312,19 @@ func makeNodeField() *QueryField {
 			},
 		},
 		Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
-			// pass it to the user
-			return args["id"].(string), nil
+			id := args["id"]
+			if id == nil {
+				return "", fmt.Errorf("argument 'id' is required")
+			}
+			idStr, ok := id.(string)
+			if !ok {
+				jsonID, err := json.Marshal(id)
+				if err != nil {
+					return "", fmt.Errorf("invalid ID type")
+				}
+				return "", fmt.Errorf("invalid ID type: %s", string(jsonID))
+			}
+			return idStr, nil
 		},
 	}
 }
