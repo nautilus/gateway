@@ -1448,3 +1448,37 @@ func TestStaticPlaygroundHandler(t *testing.T) {
 		assert.Equal(t, http.StatusMethodNotAllowed, result.StatusCode)
 	})
 }
+
+func TestGraphQLHandler_OptionsMethod(t *testing.T) {
+	t.Parallel()
+	planner := &MockErrPlanner{Err: errors.New("Planning error")}
+	schema, err := graphql.LoadSchema(`
+		type Query {
+			allUsers: [String!]!
+		}
+	`)
+	assert.NoError(t, err)
+	schemas := []*graphql.RemoteSchema{{Schema: schema, URL: "url1"}}
+	gateway, err := New(schemas, WithPlanner(planner))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	request := httptest.NewRequest(http.MethodOptions, "/graphql", nil)
+	response := httptest.NewRecorder()
+
+	gateway.GraphQLHandler(response, request)
+	assert.Equal(t,  http.StatusMethodNotAllowed, response.Code, "Unhandled HTTP method should return 405 Method Not Allowed, got:", response.Code)
+	assert.JSONEq(t, `
+{
+  "data": null,
+  "errors": [
+    {
+      "extensions": {
+        "code": "UNKNOWN_ERROR"
+      },
+      "message": "Method Not Allowed"
+    }
+  ]
+}`, response.Body.String())
+}
