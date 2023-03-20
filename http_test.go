@@ -1449,6 +1449,7 @@ func TestStaticPlaygroundHandler(t *testing.T) {
 	})
 }
 
+// Conforms to working draft spec for GraphQL over HTTP: https://github.com/graphql/graphql-over-http/blob/e4540976487b77bc04f1b2ce5cc48a9beea49381/spec/GraphQLOverHTTP.md?plain=1#L205-L206
 func TestGraphQLHandler_OptionsMethod(t *testing.T) {
 	t.Parallel()
 	planner := &MockErrPlanner{Err: errors.New("Planning error")}

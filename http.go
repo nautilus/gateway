@@ -54,12 +54,12 @@ func formatErrorsWithCode(data map[string]interface{}, err error, code string) m
 // a single object with { query, variables, operationName } or a list
 // of that object.
 func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
-	operations, batchMode, payloadErr := parseRequest(r)
+	operations, batchMode, parseStatusCode, payloadErr := parseRequest(r)
 
 	// if there was an error retrieving the payload
 	if payloadErr != nil {
 		response := formatErrors(payloadErr)
-		w.WriteHeader(http.StatusUnprocessableEntity)
+		w.WriteHeader(parseStatusCode)
 		err := json.NewEncoder(w).Encode(response)
 		if err != nil {
 			g.logger.Warn("Failed to encode error response:", err.Error())
@@ -165,26 +165,24 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 	emitResponse(w, statusCode, string(response))
 }
 
-// Parses request to operations (single or batch mode)
-func parseRequest(r *http.Request) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
+// Parses request to operations (single or batch mode).
+// Returns an error and an error status code if the request is invalid.
+func parseRequest(r *http.Request) (operations []*HTTPOperation, batchMode bool, errStatusCode int, payloadErr error) {
 	// this handler can handle multiple operations sent in the same query. Internally,
-	// it modules a single operation as a list of one.
+	// it models a single operation as a list of one.
 	operations = []*HTTPOperation{}
-
-	// the error we have encountered when extracting query input
-
-	// make our lives easier. track if we're in batch mode
-	batchMode = false
-
-	if r.Method == http.MethodGet {
-		// if we got a GET request
+	switch r.Method {
+	case http.MethodGet:
 		operations, payloadErr = parseGetRequest(r)
-
-	} else if r.Method == http.MethodPost {
-		// or we got a POST request
+	case http.MethodPost:
 		operations, batchMode, payloadErr = parsePostRequest(r)
+	default:
+		errStatusCode = http.StatusMethodNotAllowed
+		payloadErr = errors.New(http.StatusText(http.StatusMethodNotAllowed))
 	}
-
+	if errStatusCode == 0 && payloadErr != nil { // ensure an error always results in a failed status code
+		errStatusCode = http.StatusUnprocessableEntity
+	}
 	return
 }
 
