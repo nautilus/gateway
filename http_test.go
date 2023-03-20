@@ -1469,7 +1469,7 @@ func TestGraphQLHandler_OptionsMethod(t *testing.T) {
 	response := httptest.NewRecorder()
 
 	gateway.GraphQLHandler(response, request)
-	assert.Equal(t,  http.StatusMethodNotAllowed, response.Code, "Unhandled HTTP method should return 405 Method Not Allowed, got:", response.Code)
+	assert.Equal(t, http.StatusMethodNotAllowed, response.Code, "Unhandled HTTP method should return 405 Method Not Allowed, got:", response.Code)
 	assert.JSONEq(t, `
 {
   "data": null,
