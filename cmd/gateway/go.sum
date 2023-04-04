@@ -71,6 +71,8 @@ github.com/mitchellh/mapstructure v1.4.1 h1:CpVNEelQCZBooIPDn+AR3NpivK/TIKU8bDxd
 github.com/mitchellh/mapstructure v1.4.1/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/nautilus/gateway v0.3.6 h1:BdmcRegK7JZ/ciIN1qenNbNnWCCgx+LMHPJGn+77GmM=
 github.com/nautilus/gateway v0.3.6/go.mod h1:ScTIYRI7EsVh4Zow+HCChmox7h1tZPscmCQQ8pziSq8=
+github.com/nautilus/gateway v0.3.8 h1:GYFt0g90NolYF4SlKHBIhfZgVxC3jsUOHWnUZwhKmL8=
+github.com/nautilus/gateway v0.3.8/go.mod h1:IX2V2WawZFJcMcCn/wTZYEXx1PwFcYeyPSllLp3vzhU=
 github.com/nautilus/graphql v0.0.20 h1:l19LdpTLysxMa/72Uq+JdH3Fgrpz9vNzz7OnoQB0eqI=
 github.com/nautilus/graphql v0.0.20/go.mod h1:UYcs/gBtuFrZyX591SuYboby4xFNG9ZkaTYk7BBSRak=
 github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
