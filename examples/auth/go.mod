@@ -1,10 +1,10 @@
 module github.com/nautilus/gateway/examples/auth
 
 require (
-	github.com/graph-gophers/graphql-go v0.0.0-20190108123631-d5b7dc6be53b
-	github.com/nautilus/gateway v0.1.4
-	github.com/nautilus/graphql v0.0.9
-	github.com/vektah/gqlparser v1.1.0
+	github.com/graph-gophers/graphql-go v1.5.0
+	github.com/nautilus/gateway v0.3.8
+	github.com/nautilus/graphql v0.0.20
+	github.com/vektah/gqlparser/v2 v2.4.8
 )
 
 go 1.13
