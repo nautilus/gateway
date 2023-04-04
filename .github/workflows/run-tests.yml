@@ -35,8 +35,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Install runner and dependencies
-        run: |
-          go install github.com/alecaivazis/run@latest
+        run: go install github.com/alecaivazis/run@latest
 
       - name: Build
         run: |
@@ -65,12 +64,10 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Install runner and dependencies
-        run: |
-          go install github.com/alecaivazis/run@latest
+        run: go install github.com/alecaivazis/run@latest
 
       - name: Run tests
-        run: |
-          run tests:coverage
+        run: run tests:coverage
 
       - name: Report to Coveralls
         if: matrix.go == '^1.20'
