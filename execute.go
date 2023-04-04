@@ -720,7 +720,7 @@ type ErrExecutor struct {
 }
 
 // Execute returns the internet error
-func (e *ErrExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
+func (e *ErrExecutor) Execute(_ *ExecutionContext) (map[string]interface{}, error) {
 	return nil, e.Error
 }
 
@@ -730,7 +730,7 @@ type MockExecutor struct {
 }
 
 // Execute returns the provided value
-func (e *MockExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
+func (e *MockExecutor) Execute(_ *ExecutionContext) (map[string]interface{}, error) {
 	return e.Value, nil
 }
 
