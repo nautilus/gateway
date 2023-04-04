@@ -26,7 +26,7 @@ task "tests:coverage" {
 task "build" {
     description = "Build executable in all supported architectures"
     command     =  <<EOF
-        cd cmd/gateway && gox -os="linux darwin windows" -arch=amd64 -output="../../bin/gateway_{{.OS}}_{{.Arch}}" -verbose .
+        cd cmd/gateway && go mod edit -replace github.com/nautilus/gateway=../.. && go mod download github.com/nautilus/gateway && gox -os="linux darwin windows" -arch=amd64 -output="../../bin/gateway_{{.OS}}_{{.Arch}}" -verbose .
     EOF
 }
 
