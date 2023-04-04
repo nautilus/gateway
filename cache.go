@@ -57,7 +57,7 @@ func WithNoQueryPlanCache() Option {
 type NoQueryPlanCache struct{}
 
 // Retrieve just computes the query plan
-func (p *NoQueryPlanCache) Retrieve(ctx *PlanningContext, hash *string, planner QueryPlanner) (QueryPlanList, error) {
+func (p *NoQueryPlanCache) Retrieve(ctx *PlanningContext, _ *string, planner QueryPlanner) (QueryPlanList, error) {
 	return planner.Plan(ctx)
 }
 
