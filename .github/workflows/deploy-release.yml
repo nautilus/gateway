@@ -24,9 +24,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Build and deploy binaries
-        run: |
-          export VERSION=${GITHUB_REF/refs\/tags\//}
-          make build
+        run: make build
 
       - name: Release
         uses: softprops/action-gh-release@v1
