@@ -24,7 +24,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Build and deploy binaries
-        run: make build
+        run: make -j8 build  # '-j N' runs each build task in parallel.
 
       - name: Release
         uses: softprops/action-gh-release@v1
