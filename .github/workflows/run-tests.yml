@@ -35,7 +35,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Build
-        run: make build
+        run: make -j8 build  # '-j N' runs each build task in parallel.
 
   tests:
     name: Test with Go ${{ matrix.go }}
