@@ -23,15 +23,10 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-      - name: Install runner and dependencies
-        run: |
-          go install github.com/alecaivazis/run@latest
-          run install:cd
-
       - name: Build and deploy binaries
         run: |
           export VERSION=${GITHUB_REF/refs\/tags\//}
-          run build
+          make build
 
       - name: Release
         uses: softprops/action-gh-release@v1

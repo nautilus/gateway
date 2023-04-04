@@ -34,13 +34,8 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-      - name: Install runner and dependencies
-        run: go install github.com/alecaivazis/run@latest
-
       - name: Build
-        run: |
-          run install:cd
-          run build
+        run: make build
 
   tests:
     name: Test with Go ${{ matrix.go }}
@@ -63,14 +58,11 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-      - name: Install runner and dependencies
-        run: go install github.com/alecaivazis/run@latest
-
       - name: Run tests
-        run: run tests:coverage
+        run: make test
 
       - name: Report to Coveralls
         if: matrix.go == '^1.20'
         uses: shogo82148/actions-goveralls@v1
         with:
-          path-to-profile: coverage.out
+          path-to-profile: cover.out
