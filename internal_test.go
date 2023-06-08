@@ -258,6 +258,48 @@ func TestSchemaIntrospection_missingType(t *testing.T) {
 	assert.Nil(t, result.Type)
 }
 
+func TestSchemaIntrospection_missingQueryDocument(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema("")
+	require.NoError(t, err)
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url1"},
+	})
+	require.NoError(t, err)
+
+	t.Run("valid query", func(t *testing.T) {
+		t.Parallel()
+		var result interface{}
+		err := gateway.Query(context.Background(), &graphql.QueryInput{
+			Query: `
+			{
+				__type(name: "Query") {
+					name
+				}
+			}
+		`,
+			QueryDocument: nil,
+		}, &result)
+		assert.NoError(t, err)
+		name := "Query"
+		assert.Equal(t, map[string]interface{}{
+			"__type": map[string]interface{}{
+				"name": &name,
+			},
+		}, result)
+	})
+
+	t.Run("invalid query", func(t *testing.T) {
+		t.Parallel()
+		var result interface{}
+		err := gateway.Query(context.Background(), &graphql.QueryInput{
+			Query:         "garbage",
+			QueryDocument: nil,
+		}, &result)
+		assert.EqualError(t, err, "input:1: Unexpected Name \"garbage\"\n")
+	})
+}
+
 func TestSchema_resolveNodeInlineID(t *testing.T) {
 	t.Parallel()
 	type Result struct {
