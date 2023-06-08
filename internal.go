@@ -5,7 +5,9 @@ import (
 
 	"github.com/99designs/gqlgen/graphql/introspection"
 	"github.com/mitchellh/mapstructure"
+	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/nautilus/graphql"
 )
@@ -47,6 +49,18 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 
 	// wrap the schema in something capable of introspection
 	introspectionSchema := introspection.WrapSchema(g.schema)
+
+	if input.QueryDocument == nil && input.Query != "" {
+		internalSchema, err := g.internalSchema()
+		if err != nil {
+			return err
+		}
+		var loadErr gqlerror.List
+		input.QueryDocument, loadErr = gqlparser.LoadQuery(internalSchema, input.Query)
+		if len(loadErr) > 0 {
+			return loadErr
+		}
+	}
 
 	// for local stuff we don't care about fragment directives
 	querySelection, err := graphql.ApplyFragments(input.QueryDocument.Operations[0].SelectionSet, input.QueryDocument.Fragments)
