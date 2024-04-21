@@ -524,7 +524,6 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				selection:  selection.SelectionSet,
 				wrapper:    newWrapper,
 			})
-
 			if err != nil {
 				return nil, err
 			}
@@ -541,7 +540,6 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 }
 
 func (p *MinQueriesPlanner) wrapSelectionSet(ctx *PlanningContext, config *extractSelectionConfig, locationFragments map[string]ast.FragmentDefinitionList, location string, selectionSet ast.SelectionSet) (ast.SelectionSet, error) {
-
 	ctx.Gateway.logger.Debug("wrapping selection", config.wrapper)
 
 	// pointers required to nest the
@@ -634,7 +632,6 @@ func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *e
 }
 
 func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extractSelectionConfig) (map[string]ast.SelectionSet, map[string]ast.FragmentDefinitionList, error) {
-
 	locationFields := map[string]ast.SelectionSet{}
 	locationFragments := map[string]ast.FragmentDefinitionList{}
 

@@ -89,7 +89,6 @@ func TestGateway(t *testing.T) {
 		gateway, err := New([]*graphql.RemoteSchema{sources[0]}, func(schema *Gateway) {
 			schema.sources = append(schema.sources, sources[1])
 		})
-
 		if err != nil {
 			t.Error(err.Error())
 			return
@@ -286,7 +285,6 @@ func TestGateway(t *testing.T) {
 
 		// build a query plan that the executor will follow
 		response, err := gateway.Execute(reqCtx, plan)
-
 		if err != nil {
 			t.Errorf("Encountered error executing plan: %s", err.Error())
 			return
@@ -331,7 +329,6 @@ func TestGateway(t *testing.T) {
 					RootStep: &QueryPlanStep{
 						Then: []*QueryPlanStep{
 							{
-
 								// this is equivalent to
 								// query { allUsers }
 								ParentType:     typeNameQuery,
@@ -554,7 +551,6 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 				RootStep: &QueryPlanStep{
 					Then: []*QueryPlanStep{
 						{
-
 							// this is equivalent to
 							// query { allUsers }
 							ParentType:     typeNameQuery,
@@ -594,7 +590,6 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 				RootStep: &QueryPlanStep{
 					Then: []*QueryPlanStep{
 						{
-
 							// this is equivalent to
 							// query { allUsers }
 							ParentType:     typeNameQuery,
