@@ -44,12 +44,13 @@ func TestExecutor_plansOfOne(t *testing.T) {
 							},
 						},
 						// return a known value we can test against
-						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
-							"values": []string{
-								"hello",
-								"world",
+						Queryer: &graphql.MockSuccessQueryer{
+							Value: map[string]interface{}{
+								"values": []string{
+									"hello",
+									"world",
+								},
 							},
-						},
 						},
 					},
 				},
@@ -90,7 +91,6 @@ func TestExecutor_plansWithDependencies(t *testing.T) {
 			RootStep: &QueryPlanStep{
 				Then: []*QueryPlanStep{
 					{
-
 						// this is equivalent to
 						// query { user }
 						ParentType:     typeNameQuery,
@@ -1146,7 +1146,6 @@ func TestExecutor_insertIntoInlineFragmentsList(t *testing.T) {
 			},
 		},
 	}, result)
-
 }
 
 func TestExecutor_insertIntoLists(t *testing.T) {
@@ -1760,7 +1759,6 @@ func TestExecutor_includeIf(t *testing.T) {
 			RootStep: &QueryPlanStep{
 				Then: []*QueryPlanStep{
 					{
-
 						// this is equivalent to
 						// query { user }
 						ParentType:     typeNameQuery,
@@ -2020,6 +2018,7 @@ func TestExecutor_threadsVariables(t *testing.T) {
 		t.Error(err.Error())
 	}
 }
+
 func TestFindInsertionPoint_rootList(t *testing.T) {
 	t.Parallel()
 	// in this example, the step before would have just resolved (need to be inserted at)
@@ -2525,7 +2524,7 @@ func TestFindInsertionPoint_handlesNullObjects(t *testing.T) {
 
 func TestSingleObjectWithColonInID(t *testing.T) {
 	t.Parallel()
-	var source = make(map[string]interface{})
+	source := make(map[string]interface{})
 	_ = json.Unmarshal([]byte(
 		`{"hello": {"id": "Thing:1337", "firstName": "Foo", "lastName": "bar"}}`),
 		&source,
@@ -2672,7 +2671,8 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 												"id":      "2",
 												"address": "Cats street",
 											},
-										}}},
+										}},
+									},
 									{
 										ParentType:     "User",
 										InsertionPoint: []string{"user", "parent", "parent", "house", "cats"},
@@ -2683,10 +2683,12 @@ func TestExecutor_plansWithManyDeepDependencies(t *testing.T) {
 												Definition: definitionFactory("String"),
 											},
 										},
-										Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
-											"node": map[string]interface{}{
-												"id": "3", "name": "kitty",
-											}},
+										Queryer: &graphql.MockSuccessQueryer{
+											Value: map[string]interface{}{
+												"node": map[string]interface{}{
+													"id": "3", "name": "kitty",
+												},
+											},
 										},
 									},
 								},

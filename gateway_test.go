@@ -3,11 +3,16 @@ package gateway
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
@@ -89,7 +94,6 @@ func TestGateway(t *testing.T) {
 		gateway, err := New([]*graphql.RemoteSchema{sources[0]}, func(schema *Gateway) {
 			schema.sources = append(schema.sources, sources[1])
 		})
-
 		if err != nil {
 			t.Error(err.Error())
 			return
@@ -286,7 +290,6 @@ func TestGateway(t *testing.T) {
 
 		// build a query plan that the executor will follow
 		response, err := gateway.Execute(reqCtx, plan)
-
 		if err != nil {
 			t.Errorf("Encountered error executing plan: %s", err.Error())
 			return
@@ -331,7 +334,6 @@ func TestGateway(t *testing.T) {
 					RootStep: &QueryPlanStep{
 						Then: []*QueryPlanStep{
 							{
-
 								// this is equivalent to
 								// query { allUsers }
 								ParentType:     typeNameQuery,
@@ -554,7 +556,6 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 				RootStep: &QueryPlanStep{
 					Then: []*QueryPlanStep{
 						{
-
 							// this is equivalent to
 							// query { allUsers }
 							ParentType:     typeNameQuery,
@@ -594,7 +595,6 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 				RootStep: &QueryPlanStep{
 					Then: []*QueryPlanStep{
 						{
-
 							// this is equivalent to
 							// query { allUsers }
 							ParentType:     typeNameQuery,
@@ -683,4 +683,73 @@ func TestFieldURLs_concat(t *testing.T) {
 		return
 	}
 	assert.Equal(t, []string{"url2"}, urlLocations3)
+}
+
+// Verifies fix for https://github.com/nautilus/gateway/issues/199
+func TestIncludeIfVariable(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema(`
+type Query {
+	hello: String
+	user: User
+}
+
+type User {
+	firstName: String
+}
+`)
+	require.NoError(t, err)
+	queryerFactory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
+		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
+			query := gqlparser.MustLoadQuery(schema, input.Query)
+			var operation ast.OperationDefinition
+			if assert.Len(t, query.Operations, 1) {
+				operation = *query.Operations[0]
+			}
+			assert.Len(t, operation.VariableDefinitions, 1)
+			assert.NotNil(t, operation.VariableDefinitions.ForName("returnUser"))
+			assert.Equal(t, map[string]interface{}{
+				"returnUser": true,
+			}, input.Variables)
+			return map[string]interface{}{
+				"hello": "world",
+				"user": map[string]interface{}{
+					"firstName": "foo",
+				},
+			}, nil
+		})
+	})
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url1"},
+	}, WithQueryerFactory(&queryerFactory))
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`
+		{
+			"query": %q,
+			"variables": {
+				"returnUser": true
+			}
+		}
+	`, `
+		query($returnUser: Boolean!) {
+			hello
+			user @include(if: $returnUser) {
+				firstName
+			}
+		}
+	`)))
+	resp := httptest.NewRecorder()
+	gateway.GraphQLHandler(resp, req)
+	assert.Equal(t, http.StatusOK, resp.Code)
+	assert.JSONEq(t, `
+		{
+			"data": {
+				"hello": "world",
+				"user": {
+					"firstName": "foo"
+				}
+			}
+		}
+	`, resp.Body.String())
 }
