@@ -708,6 +708,9 @@ type User {
 			}
 			assert.Len(t, operation.VariableDefinitions, 1)
 			assert.NotNil(t, operation.VariableDefinitions.ForName("returnUser"))
+			assert.Equal(t, map[string]interface{}{
+				"returnUser": true,
+			}, input.Variables)
 			return map[string]interface{}{
 				"hello": "world",
 				"user": map[string]interface{}{
