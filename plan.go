@@ -450,6 +450,11 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 			for _, variable := range graphql.ExtractVariables(selection.Arguments) {
 				config.step.Variables.Add(variable)
 			}
+			for _, directive := range selection.Directives {
+				for _, variable := range graphql.ExtractVariables(directive.Arguments) {
+					config.step.Variables.Add(variable)
+				}
+			}
 
 			// add it to the list
 			finalSelection = append(finalSelection, selection)
