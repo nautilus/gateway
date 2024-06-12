@@ -256,7 +256,6 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 			return
 		}
 		assert.Equal(t, "String!", lastNameDefinition.Type.String())
-
 	})
 
 	// the table we are testing
@@ -279,7 +278,7 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 			`
 				directive @foo(url: String!) on OBJECT
 
-				type User @foo {
+				type User @foo(url: "bar") {
 					firstName: String
 				}
 			`,
@@ -322,14 +321,14 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 		{
 			"Conflicting number of directive arguments",
 			`
-				directive @foo(url: String!, url2: String!) on FIELD_DEFINITION
+				directive @foo(url: String!, url2: String) on FIELD_DEFINITION
 
 				type User {
 					firstName: String! @foo(url: "3")
 				}
 			`,
 			`
-				directive @foo(url: String!, url2: String!) on FIELD_DEFINITION
+				directive @foo(url: String!, url2: String) on FIELD_DEFINITION
 
 				type User {
 					firstName: String! @foo(url: "3", url2: "3")
@@ -731,7 +730,6 @@ func TestMergeSchema_interfaces(t *testing.T) {
 		assert.True(t, visited["Foo"], "did not have Foo in possible type")
 		assert.True(t, visited["User"], "did not have User in possible type")
 		assert.True(t, visited["NotUser"], "did not have NotUser in possible type")
-
 	})
 
 	// the table we are testing
@@ -849,7 +847,6 @@ func testMergeSchemas(t *testing.T, schema1 *ast.Schema, schema2Str string) (*as
 		{Schema: schema1, URL: "url1"},
 		{Schema: schema2, URL: "url2"},
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -940,7 +937,9 @@ type Query {
 	node(id: ID!): Node
 }
 type User {
-	"""description"""
+	"""
+	description
+	"""
 	firstName: String!
 }
 `,
@@ -968,7 +967,9 @@ type Query {
 	node(id: ID!): Node
 }
 type User {
-	"""description"""
+	"""
+	description
+	"""
 	firstName: String!
 }
 `,
@@ -996,7 +997,9 @@ interface Node {
 type Query {
 	node(id: ID!): Node
 }
-"""User represents a customer"""
+"""
+User represents a customer
+"""
 type User {
 	firstName: String!
 }
@@ -1024,7 +1027,9 @@ interface Node {
 type Query {
 	node(id: ID!): Node
 }
-"""User represents a customer"""
+"""
+User represents a customer
+"""
 type User {
 	firstName: String!
 }
@@ -1043,7 +1048,9 @@ type User {
 			`,
 			},
 			expectSchema: `
-"""other-description"""
+"""
+other-description
+"""
 directive @foo on FIELD_DEFINITION
 interface Node {
 	id: ID!
@@ -1065,7 +1072,9 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""description"""
+"""
+description
+"""
 directive @foo on FIELD_DEFINITION
 interface Node {
 	id: ID!
@@ -1093,7 +1102,9 @@ type Query {
 			},
 			expectSchema: `
 enum Foo {
-	"""description"""
+	"""
+	description
+	"""
 	Bar
 }
 interface Node {
@@ -1121,7 +1132,9 @@ type Query {
 			},
 			expectSchema: `
 enum Foo {
-	"""description"""
+	"""
+	description
+	"""
 	Bar
 }
 interface Node {
@@ -1149,7 +1162,9 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""description"""
+"""
+description
+"""
 enum Foo {
 	Bar
 }
@@ -1177,7 +1192,9 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""description"""
+"""
+description
+"""
 enum Foo {
 	Bar
 }
@@ -1206,7 +1223,9 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""description"""
+"""
+description
+"""
 interface Foo {
 	name: String
 }
@@ -1234,7 +1253,9 @@ type Query {
 			`,
 			},
 			expectSchema: `
-"""description"""
+"""
+description
+"""
 interface Foo {
 	name: String
 }
@@ -1269,7 +1290,9 @@ type Query {
 			expectSchema: `
 type Foo {
 	name(
-		"""description"""
+		"""
+		description
+		"""
 		arg1: String
 	): String
 }
@@ -1303,7 +1326,9 @@ type Query {
 			expectSchema: `
 type Foo {
 	name(
-		"""description"""
+		"""
+		description
+		"""
 		arg1: String
 	): String
 }
