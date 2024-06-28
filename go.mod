@@ -5,10 +5,10 @@ go 1.17
 require (
 	github.com/99designs/gqlgen v0.17.15
 	github.com/mitchellh/mapstructure v1.4.1
-	github.com/nautilus/graphql v0.0.23
+	github.com/nautilus/graphql v0.0.25
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.9.0
-	github.com/vektah/gqlparser/v2 v2.5.14
+	github.com/vektah/gqlparser/v2 v2.5.16
 	golang.org/x/net v0.23.0
 )
 
