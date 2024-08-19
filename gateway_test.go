@@ -753,3 +753,39 @@ type User {
 		}
 	`, resp.Body.String())
 }
+
+func TestDataAndErrorsBothReturnFromOneServicePartialSuccess(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema(`
+type Query {
+	foo: String
+}
+`)
+	require.NoError(t, err)
+	queryerFactory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
+		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
+			return map[string]interface{}{
+				"foo": "bar",
+			}, errors.New("baz")
+		})
+	})
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "boo"},
+	}, WithQueryerFactory(&queryerFactory))
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"query": "query { foo }"}`))
+	resp := httptest.NewRecorder()
+	gateway.GraphQLHandler(resp, req)
+	assert.Equal(t, http.StatusOK, resp.Code)
+	assert.JSONEq(t, `
+		{
+			"data": {
+				"foo": "bar"
+			},
+			"errors": [
+				{"message": "baz"}
+			]
+		}
+	`, resp.Body.String())
+}
