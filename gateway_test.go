@@ -765,8 +765,10 @@ type Query {
 	queryerFactory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
 		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
 			return map[string]interface{}{
-				"foo": "bar",
-			}, errors.New("baz")
+					"foo": "bar",
+				}, graphql.ErrorList{
+					&graphql.Error{Message: "baz"},
+				}
 		})
 	})
 	gateway, err := New([]*graphql.RemoteSchema{
@@ -784,7 +786,10 @@ type Query {
 				"foo": "bar"
 			},
 			"errors": [
-				{"message": "baz"}
+				{
+					"message": "baz",
+					"extensions": null
+				}
 			]
 		}
 	`, resp.Body.String())

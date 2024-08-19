@@ -33,6 +33,7 @@ type queryExecutionResult struct {
 	InsertionPoint []string
 	Result         map[string]interface{}
 	StripNode      bool
+	Err            error
 }
 
 // execution is broken up into two phases:
@@ -83,7 +84,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 	// the root step could have multiple steps that have to happen
 	for _, step := range ctx.Plan.RootStep.Then {
 		stepWg.Add(1)
-		go executeStep(ctx, ctx.Plan, step, []string{}, resultLock, ctx.Variables, resultCh, errCh, stepWg)
+		go executeStep(ctx, ctx.Plan, step, []string{}, resultLock, ctx.Variables, resultCh, stepWg)
 	}
 
 	// the list of errors we have encountered while executing the plan
@@ -96,26 +97,28 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 			// we have a new result
 			case payload := <-resultCh:
 				if payload == nil {
-					continue
+					continue // TODO this seems like a bug. remove?
 				}
 				ctx.logger.Debug("Inserting result into ", payload.InsertionPoint)
 				ctx.logger.Debug("Result: ", payload.Result)
 
 				// we have to grab the value in the result and write it to the appropriate spot in the
 				// acumulator.
-				err := executorInsertObject(ctx, result, resultLock, payload.InsertionPoint, payload.Result)
-				if err != nil {
-					errCh <- err
-					continue
+				insertErr := executorInsertObject(ctx, result, resultLock, payload.InsertionPoint, payload.Result)
+
+				switch {
+				case payload.Err != nil: // response errors are the highest priority to return
+					errCh <- payload.Err // TODO refactor!
+				case insertErr != nil:
+					errCh <- insertErr
+				default:
+					ctx.logger.Debug("Done. ", result)
+					// one of the queries is done
+					stepWg.Done()
 				}
-
-				ctx.logger.Debug("Done. ", result)
-				// one of the queries is done
-				stepWg.Done()
-
 			case err := <-errCh:
 				if err != nil {
-					errMutex.Lock()
+					errMutex.Lock() // TODO this seems like it could be rewritten without the lock?
 					// if the error was a list
 					var errList graphql.ErrorList
 					if errors.As(err, &errList) {
@@ -158,7 +161,6 @@ func executeStep(
 	resultLock *sync.Mutex,
 	queryVariables map[string]interface{},
 	resultCh chan *queryExecutionResult,
-	errCh chan error,
 	stepWg *sync.WaitGroup,
 ) {
 	ctx.logger.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
@@ -186,13 +188,13 @@ func executeStep(
 		// get the data of the point
 		pointData, err := executorGetPointData(head)
 		if err != nil {
-			errCh <- err
+			resultCh <- &queryExecutionResult{Err: err}
 			return
 		}
 
 		// if we dont have an id
 		if pointData.ID == "" {
-			errCh <- fmt.Errorf("Could not find id in path")
+			resultCh <- &queryExecutionResult{Err: fmt.Errorf("Could not find id in path")}
 			return
 		}
 
@@ -202,7 +204,7 @@ func executeStep(
 
 	// if there is no queryer
 	if step.Queryer == nil {
-		errCh <- errors.New(" could not find queryer for step")
+		resultCh <- &queryExecutionResult{Err: errors.New(" could not find queryer for step")}
 		return
 	}
 
@@ -233,7 +235,11 @@ func executeStep(
 	}, &queryResult)
 	if err != nil {
 		ctx.logger.Warn("Network Error: ", err)
-		errCh <- err
+		resultCh <- &queryExecutionResult{
+			InsertionPoint: insertionPoint,
+			Result:         queryResult,
+			Err:            err,
+		}
 		return
 	}
 
@@ -249,13 +255,13 @@ func executeStep(
 		// get the result from the response that we have to stitch there
 		extractedResult, err := executorExtractValue(ctx, queryResult, resultLock, []string{"node"})
 		if err != nil {
-			errCh <- err
+			resultCh <- &queryExecutionResult{Err: err}
 			return
 		}
 
 		resultObj, ok := extractedResult.(map[string]interface{})
 		if !ok {
-			errCh <- fmt.Errorf("Query result of node query was not an object: %v", queryResult)
+			resultCh <- &queryExecutionResult{Err: fmt.Errorf("Query result of node query was not an object: %v", queryResult)}
 			return
 		}
 
@@ -274,7 +280,7 @@ func executeStep(
 	defer func() {
 		for _, sr := range dependentSteps {
 			ctx.logger.Info("Spawn ", sr.insertionPoint)
-			go executeStep(ctx, plan, sr.step, sr.insertionPoint, resultLock, queryVariables, resultCh, errCh, stepWg)
+			go executeStep(ctx, plan, sr.step, sr.insertionPoint, resultLock, queryVariables, resultCh, stepWg)
 		}
 	}()
 
@@ -290,7 +296,7 @@ func executeStep(
 			if err != nil {
 				// reset dependent steps - result would be discarded anyways
 				dependentSteps = nil
-				errCh <- err
+				resultCh <- &queryExecutionResult{Err: err}
 				return
 			}
 
@@ -386,7 +392,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, 
 		// make sure we are looking at the top of the selection set next time
 		selectionSetRoot = foundSelection.SelectionSet
 
-		var value = resultChunk
+		value := resultChunk
 
 		// the bit of result chunk with the appropriate key should be a list
 		rootValue, ok := value[point]
