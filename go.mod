@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/99designs/gqlgen v0.17.15
 	github.com/mitchellh/mapstructure v1.4.1
-	github.com/nautilus/graphql v0.0.25
+	github.com/nautilus/graphql v0.0.26-0.20240819215711-be7e110f0110
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/vektah/gqlparser/v2 v2.5.16
