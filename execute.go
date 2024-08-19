@@ -162,6 +162,37 @@ func executeStep(
 	resultCh chan *queryExecutionResult,
 	stepWg *sync.WaitGroup,
 ) {
+	queryResult, dependentSteps, queryErr := executeOneStep(ctx, plan, step, insertionPoint, resultLock, queryVariables, stepWg)
+	// send the result to be stitched in with our accumulator
+	resultCh <- &queryExecutionResult{
+		InsertionPoint: insertionPoint,
+		Result:         queryResult,
+		Err:            queryErr,
+	}
+	// we need to collect all the dependent steps and execute them at last in this function
+	// to avoid a race condition, where the result of a dependent request is published to the
+	// result channel even before the result created in this iteration
+	// defer the execution of the dependent steps after the main step has been published
+	for _, sr := range dependentSteps {
+		ctx.logger.Info("Spawn ", sr.insertionPoint)
+		go executeStep(ctx, plan, sr.step, sr.insertionPoint, resultLock, queryVariables, resultCh, stepWg)
+	}
+}
+
+type stepArgs struct {
+	step           *QueryPlanStep
+	insertionPoint []string
+}
+
+func executeOneStep(
+	ctx *ExecutionContext,
+	plan *QueryPlan,
+	step *QueryPlanStep,
+	insertionPoint []string,
+	resultLock *sync.Mutex,
+	queryVariables map[string]interface{},
+	stepWg *sync.WaitGroup,
+) (map[string]interface{}, []stepArgs, error) {
 	ctx.logger.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
 
 	ctx.logger.Debug(step.SelectionSet)
@@ -187,14 +218,12 @@ func executeStep(
 		// get the data of the point
 		pointData, err := executorGetPointData(head)
 		if err != nil {
-			resultCh <- &queryExecutionResult{Err: err}
-			return
+			return nil, nil, err
 		}
 
 		// if we dont have an id
 		if pointData.ID == "" {
-			resultCh <- &queryExecutionResult{Err: fmt.Errorf("Could not find id in path")}
-			return
+			return nil, nil, fmt.Errorf("Could not find id in path")
 		}
 
 		// save the id as a variable to the query
@@ -203,8 +232,7 @@ func executeStep(
 
 	// if there is no queryer
 	if step.Queryer == nil {
-		resultCh <- &queryExecutionResult{Err: errors.New(" could not find queryer for step")}
-		return
+		return nil, nil, errors.New(" could not find queryer for step")
 	}
 
 	// the query we will use
@@ -234,12 +262,7 @@ func executeStep(
 	}, &queryResult)
 	if err != nil {
 		ctx.logger.Warn("Network Error: ", err)
-		resultCh <- &queryExecutionResult{
-			InsertionPoint: insertionPoint,
-			Result:         queryResult,
-			Err:            err,
-		}
-		return
+		return queryResult, nil, err
 	}
 
 	// NOTE: this insertion point could point to a list of values. If it did, we have to have
@@ -254,36 +277,19 @@ func executeStep(
 		// get the result from the response that we have to stitch there
 		extractedResult, err := executorExtractValue(ctx, queryResult, resultLock, []string{"node"})
 		if err != nil {
-			resultCh <- &queryExecutionResult{Err: err}
-			return
+			return nil, nil, err
 		}
 
 		resultObj, ok := extractedResult.(map[string]interface{})
 		if !ok {
-			resultCh <- &queryExecutionResult{Err: fmt.Errorf("Query result of node query was not an object: %v", queryResult)}
-			return
+			return nil, nil, fmt.Errorf("Query result of node query was not an object: %v", queryResult)
 		}
 
 		queryResult = resultObj
 	}
 
-	// we need to collect all the dependent steps and execute them at last in this function
-	// to avoid a race condition, where the result of a dependent request is published to the
-	// result channel even before the result created in this iteration
-	type stepArgs struct {
-		step           *QueryPlanStep
-		insertionPoint []string
-	}
-	var dependentSteps []stepArgs
-	// defer the execution of the dependent steps after the main step has been published
-	defer func() {
-		for _, sr := range dependentSteps {
-			ctx.logger.Info("Spawn ", sr.insertionPoint)
-			go executeStep(ctx, plan, sr.step, sr.insertionPoint, resultLock, queryVariables, resultCh, stepWg)
-		}
-	}()
-
 	// if there are next steps
+	var dependentSteps []stepArgs
 	if len(step.Then) > 0 {
 		ctx.logger.Debug("Kicking off child queries")
 		// we need to find the ids of the objects we are inserting into and then kick of the worker with the right
@@ -293,10 +299,7 @@ func executeStep(
 			copy(copiedInsertionPoint, insertionPoint)
 			insertPoints, err := executorFindInsertionPoints(ctx, resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{copiedInsertionPoint}, step.FragmentDefinitions)
 			if err != nil {
-				// reset dependent steps - result would be discarded anyways
-				dependentSteps = nil
-				resultCh <- &queryExecutionResult{Err: err}
-				return
+				return nil, nil, err
 			}
 
 			// this dependent needs to fire for every object that the insertion point references
@@ -313,10 +316,7 @@ func executeStep(
 	stepWg.Add(len(dependentSteps))
 	ctx.logger.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	// send the result to be stitched in with our accumulator
-	resultCh <- &queryExecutionResult{
-		InsertionPoint: insertionPoint,
-		Result:         queryResult,
-	}
+	return queryResult, dependentSteps, nil
 }
 
 func max(a, b int) int {
