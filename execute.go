@@ -32,7 +32,6 @@ type ParallelExecutor struct{}
 type queryExecutionResult struct {
 	InsertionPoint []string
 	Result         map[string]interface{}
-	StripNode      bool
 	Err            error
 }
 
