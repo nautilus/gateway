@@ -95,9 +95,6 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 			select {
 			// we have a new result
 			case payload := <-resultCh:
-				if payload == nil {
-					continue // TODO this seems like a bug. remove?
-				}
 				ctx.logger.Debug("Inserting result into ", payload.InsertionPoint)
 				ctx.logger.Debug("Result: ", payload.Result)
 
