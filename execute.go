@@ -104,7 +104,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 
 				switch {
 				case payload.Err != nil: // response errors are the highest priority to return
-					errCh <- payload.Err // TODO refactor!
+					errCh <- payload.Err
 				case insertErr != nil:
 					errCh <- insertErr
 				default:
@@ -114,7 +114,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				}
 			case err := <-errCh:
 				if err != nil {
-					errMutex.Lock() // TODO this seems like it could be rewritten without the lock?
+					errMutex.Lock()
 					// if the error was a list
 					var errList graphql.ErrorList
 					if errors.As(err, &errList) {

@@ -767,7 +767,7 @@ type Query {
 			return map[string]interface{}{
 					"foo": "bar",
 				}, graphql.ErrorList{
-					&graphql.Error{Message: "baz"}, // TODO this *should* work with normal error messages too right? or at least mask it with some generic internal error?
+					&graphql.Error{Message: "baz"},
 				}
 		})
 	})
