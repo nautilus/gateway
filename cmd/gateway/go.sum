@@ -78,6 +78,8 @@ github.com/nautilus/graphql v0.0.23 h1:uiQV2SxOfl63xNr4E5Qk9IxecD2llM/gVqKbM2lEH
 github.com/nautilus/graphql v0.0.23/go.mod h1:eoqPxo/+IdRSfLQKZ2V0al2vYeoMJKO72XpTsUYOmFI=
 github.com/nautilus/graphql v0.0.25 h1:N+wwpxnlob3nQK/+HTUPeGfSR0ayehhNqeJq1cdcqSU=
 github.com/nautilus/graphql v0.0.25/go.mod h1:ex8FB+RiAJoWGlL9iUcCWvetFOICVpvYP2jWi0cxp9E=
+github.com/nautilus/graphql v0.0.26 h1:Mfv0Eazj+xKWlSSIcXgJN1zFWhbSQkPsz4IWSk0G5EQ=
+github.com/nautilus/graphql v0.0.26/go.mod h1:ex8FB+RiAJoWGlL9iUcCWvetFOICVpvYP2jWi0cxp9E=
 github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=
 github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYrxe9dPLANfrWvHYVTgc=
