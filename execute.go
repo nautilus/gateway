@@ -162,6 +162,7 @@ func executeStep(
 	queryResult, dependentSteps, queryErr := executeOneStep(ctx, plan, step, insertionPoint, resultLock, queryVariables)
 	// before publishing the current result, tell the wait-group about the dependent steps to wait for
 	stepWg.Add(len(dependentSteps))
+	ctx.logger.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	// send the result to be stitched in with our accumulator
 	resultCh <- &queryExecutionResult{
 		InsertionPoint: insertionPoint,
@@ -309,9 +310,6 @@ func executeOneStep(
 			}
 		}
 	}
-
-	ctx.logger.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
-	// send the result to be stitched in with our accumulator
 	return queryResult, dependentSteps, nil
 }
 
