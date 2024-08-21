@@ -94,7 +94,10 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 		for {
 			select {
 			// we have a new result
-			case payload := <-resultCh:
+			case payload, ok := <-resultCh:
+				if !ok {
+					return
+				}
 				ctx.logger.Debug("Inserting result into ", payload.InsertionPoint)
 				ctx.logger.Debug("Result: ", payload.Result)
 
