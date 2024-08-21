@@ -754,6 +754,7 @@ type User {
 	`, resp.Body.String())
 }
 
+// TestDataAndErrorsBothReturnFromOneServicePartialSuccess verifies fix for https://github.com/nautilus/gateway/issues/212
 func TestDataAndErrorsBothReturnFromOneServicePartialSuccess(t *testing.T) {
 	t.Parallel()
 	schema, err := graphql.LoadSchema(`
@@ -795,6 +796,108 @@ type Query {
 				{
 					"message": "bar is broken",
 					"path": ["bar"],
+					"extensions": null
+				}
+			]
+		}
+	`, resp.Body.String())
+}
+
+// TestPartialSuccessAlsoResolvesValidNodeIDs verifies fix for https://github.com/nautilus/gateway/issues/214
+func TestPartialSuccessAlsoResolvesValidNodeIDs(t *testing.T) {
+	t.Parallel()
+	schemaFoo, err := graphql.LoadSchema(`
+type Query {
+	foo: Foo
+}
+
+type Foo {
+	bar: Bar
+	boo: String
+}
+
+interface Node {
+	id: ID!
+}
+
+type Bar implements Node {
+	id: ID!
+}
+`)
+	require.NoError(t, err)
+	schemaBar, err := graphql.LoadSchema(`
+type Query {
+	node(id: ID!): Node
+}
+
+interface Node {
+	id: ID!
+}
+
+type Bar implements Node {
+	id: ID!
+	baz: String
+}
+`)
+	require.NoError(t, err)
+	const query = `
+		query {
+			foo {
+				bar {
+					baz
+				}
+			}
+		}
+	`
+	queryerFactory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
+		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
+			t.Log("Received request:", input.Query)
+			if strings.Contains(input.Query, "node(") {
+				return map[string]interface{}{
+					"node": map[string]interface{}{
+						"baz": "biff",
+					},
+				}, nil
+			}
+			return map[string]interface{}{
+					"foo": map[string]interface{}{
+						"bar": map[string]interface{}{
+							"id": "bar-id",
+						},
+						"boo": nil,
+					},
+				}, graphql.ErrorList{
+					&graphql.Error{
+						Message: "boo is broken",
+						Path:    []interface{}{"foo", "boo"},
+					},
+				}
+		})
+	})
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schemaFoo, URL: "foo"},
+		{Schema: schemaBar, URL: "bar"},
+	}, WithQueryerFactory(&queryerFactory))
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`{"query": %q}`, query)))
+	resp := httptest.NewRecorder()
+	gateway.GraphQLHandler(resp, req)
+	assert.Equal(t, http.StatusOK, resp.Code)
+	assert.JSONEq(t, `
+		{
+			"data": {
+				"foo": {
+					"bar": {
+						"baz": "biff"
+					},
+					"boo": null
+				}
+			},
+			"errors": [
+				{
+					"message": "boo is broken",
+					"path": ["foo", "boo"],
 					"extensions": null
 				}
 			]
