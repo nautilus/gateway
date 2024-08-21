@@ -803,6 +803,58 @@ type Query {
 	`, resp.Body.String())
 }
 
+// TestGatewayRunsResponseMiddlewaresOnError verifies part of fix for https://github.com/nautilus/gateway/issues/212
+// The issue included the 'id' field not getting scrubbed when an error was returned, and scrubbing is a builtin response middleware.
+func TestGatewayRunsResponseMiddlewaresOnError(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema(`
+type Query {
+	foo: String
+}
+`)
+	require.NoError(t, err)
+	queryerFactory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
+		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
+			return map[string]interface{}{
+					"foo": nil,
+				}, graphql.ErrorList{
+					&graphql.Error{
+						Message: "foo is broken",
+						Path:    []interface{}{"foo"},
+					},
+				}
+		})
+	})
+	executedResponseMiddleware := false
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "boo"},
+	}, WithQueryerFactory(&queryerFactory), WithMiddlewares(ResponseMiddleware(func(*ExecutionContext, map[string]interface{}) error {
+		executedResponseMiddleware = true
+		return nil
+	})))
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"query": "query { foo }"}`))
+	resp := httptest.NewRecorder()
+	gateway.GraphQLHandler(resp, req)
+	assert.Equal(t, http.StatusOK, resp.Code)
+	assert.JSONEq(t, `
+		{
+			"data": {
+				"foo": null
+			},
+			"errors": [
+				{
+					"message": "foo is broken",
+					"path": ["foo"],
+					"extensions": null
+				}
+			]
+		}
+	`, resp.Body.String())
+	assert.True(t, executedResponseMiddleware, "All response middleware should run, even on responses with errors")
+}
+
 // TestPartialSuccessAlsoResolvesValidNodeIDs verifies fix for https://github.com/nautilus/gateway/issues/214
 func TestPartialSuccessAlsoResolvesValidNodeIDs(t *testing.T) {
 	t.Parallel()

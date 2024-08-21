@@ -90,12 +90,9 @@ func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]
 
 	// TODO: handle plans of more than one query
 	// execute the plan and return the results
-	result, err := g.executor.Execute(executionContext)
-	if err != nil {
-		if len(result) == 0 {
-			return nil, err
-		}
-		return result, err
+	result, executeErr := g.executor.Execute(executionContext)
+	if executeErr != nil && len(result) == 0 {
+		result = nil
 	}
 
 	// now that we have our response, throw it through the list of middlewarse
@@ -106,7 +103,7 @@ func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]
 	}
 
 	// we're done here
-	return result, nil
+	return result, executeErr
 }
 
 func (g *Gateway) internalSchema() (*ast.Schema, error) {
@@ -189,7 +186,8 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 			{
 				URL:    internalSchemaLocation,
 				Schema: internal,
-			}},
+			},
+		},
 			false,
 		),
 	)
@@ -337,7 +335,6 @@ func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap 
 	for _, remoteSchema := range schemas {
 		// each type defined by the schema can be found at remoteSchema.URL
 		for name, typeDef := range remoteSchema.Schema.Types {
-
 			// if the type is part of the introspection (and can't be left up to the backing services)
 			if !strings.HasPrefix(typeDef.Name, "__") || !stripInternal {
 				// you can ask for __typename at any service that defines the type
@@ -345,7 +342,6 @@ func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap 
 
 				// each field of each type can be found here
 				for _, fieldDef := range typeDef.Fields {
-
 					// if the field is not an introspection field
 					if !(name == typeNameQuery && strings.HasPrefix(fieldDef.Name, "__")) {
 						locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
@@ -353,7 +349,6 @@ func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap 
 						// register the location for the field
 						locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
 					}
-
 				}
 			}
 		}
