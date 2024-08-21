@@ -256,16 +256,12 @@ func executeOneStep(
 	}
 
 	// fire the query
-	err := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
+	queryErr := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
 		Query:         step.QueryString,
 		QueryDocument: step.QueryDocument,
 		Variables:     variables,
 		OperationName: operationName,
 	}, &queryResult)
-	if err != nil {
-		ctx.logger.Warn("Network Error: ", err)
-		return queryResult, nil, err
-	}
 
 	// NOTE: this insertion point could point to a list of values. If it did, we have to have
 	//       passed it to the this invocation of this function. It is safe to trust this
@@ -313,7 +309,7 @@ func executeOneStep(
 			}
 		}
 	}
-	return queryResult, dependentSteps, nil
+	return queryResult, dependentSteps, queryErr
 }
 
 func max(a, b int) int {
