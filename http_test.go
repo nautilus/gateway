@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/net/html"
 
@@ -969,6 +970,98 @@ func TestGraphQLHandler_postBatchWithMultipleFiles(t *testing.T) {
 	result := responseRecorder.Result()
 	assert.NoError(t, result.Body.Close())
 	assert.Equal(t, http.StatusOK, result.StatusCode)
+}
+
+func TestGraphQLHandler_postBatchParallel(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema(`
+		type Query {
+			queryA: String!
+			queryB: String!
+		}
+	`)
+	assert.NoError(t, err)
+
+	// create gateway schema we can test against
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url-file-upload"},
+	}, WithExecutor(ExecutorFunc(
+		func(ec *ExecutionContext) (map[string]interface{}, error) {
+			if ec.Plan.Operation.Name == "queryAOperation" {
+				time.Sleep(50 * time.Millisecond)
+				return map[string]interface{}{
+					"queryA": "resultA",
+				}, nil
+			}
+			if ec.Plan.Operation.Name == "queryBOperation" {
+				return map[string]interface{}{
+					"queryB": "resultB",
+				}, nil
+			}
+
+			assert.Fail(t, "unexpected operation name", ec.Plan.Operation.Name)
+			return nil, nil
+		},
+	)))
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`[
+			{ 
+				"query": "query queryAOperation { queryA }", 
+				"variables": null 
+			},
+			{ 
+				"query": "query queryBOperation { queryB }", 
+				"variables": null 
+			}
+	]`))
+
+	// a recorder so we can check what the handler responded with
+	responseRecorder := httptest.NewRecorder()
+
+	// call the http hander
+	gateway.GraphQLHandler(responseRecorder, request)
+
+	// make sure we got correct order in response
+	response := responseRecorder.Result()
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+
+	// read the body
+	body, err := io.ReadAll(response.Body)
+	assert.NoError(t, response.Body.Close())
+
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	result := []map[string]interface{}{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// we should have gotten 2 responses
+	if !assert.Len(t, result, 2) {
+		return
+	}
+
+	// make sure there were no errors in the first query
+	if firstQuery := result[0]; assert.Nil(t, firstQuery["errors"]) {
+		// make sure it has the right id
+		assert.Equal(t, map[string]interface{}{"queryA": "resultA"}, firstQuery["data"])
+	}
+
+	// make sure there were no errors in the second query
+	if secondQuery := result[1]; assert.Nil(t, secondQuery["errors"]) {
+		// make sure it has the right id
+		assert.Equal(t, map[string]interface{}{"queryB": "resultB"}, secondQuery["data"])
+	}
 }
 
 func TestGraphQLHandler_postFilesWithError(t *testing.T) {
