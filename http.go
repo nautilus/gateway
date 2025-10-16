@@ -340,7 +340,7 @@ func parseOperations(operationsJSON []byte) (operations []*HTTPOperation, batchM
 // Adds file object to variables of respective operations in case of multipart request
 func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string, batchMode bool) error {
 	for _, path := range paths {
-		var idx = 0
+		idx := 0
 		parts := strings.Split(path, ".")
 		if batchMode {
 			idxVal, err := strconv.Atoi(parts[0])
@@ -379,13 +379,13 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 			case []interface{}:
 				// make sure the path contains another part before looking for an index
 				if i+1 >= len(parts) {
-					return fmt.Errorf("invalid number of parts in path: " + path)
+					return fmt.Errorf("invalid number of parts in path: %s", path)
 				}
 
 				// the next part in the path must be an index (ex: the "2" in: variables.input.files.2)
 				index, err := strconv.Atoi(parts[i+1])
 				if err != nil {
-					return fmt.Errorf("expected numeric index: " + err.Error())
+					return fmt.Errorf("expected numeric index: %w", err)
 				}
 
 				// index might not be within the bounds
