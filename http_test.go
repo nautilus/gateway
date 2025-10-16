@@ -83,7 +83,6 @@ func TestGraphQLHandler(t *testing.T) {
 			}, nil
 		},
 	)))
-
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -172,7 +171,6 @@ func TestGraphQLHandler(t *testing.T) {
 				}, nil
 			},
 		)))
-
 		if err != nil {
 			t.Error(err.Error())
 			return
@@ -209,7 +207,6 @@ func TestGraphQLHandler(t *testing.T) {
 				return nil, errors.New("error string")
 			},
 		)))
-
 		if err != nil {
 			t.Error(err.Error())
 			return
@@ -498,14 +495,14 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 	aField := &QueryField{
 		Name: "a",
 		Type: ast.NamedType("User", &ast.Position{}),
-		Resolver: func(ctx context.Context, arguments map[string]interface{}) (string, error) {
+		Resolver: func(context.Context, map[string]interface{}) (string, error) {
 			return "a", nil
 		},
 	}
 	bField := &QueryField{
 		Name: "b",
 		Type: ast.NamedType("User", &ast.Position{}),
-		Resolver: func(ctx context.Context, arguments map[string]interface{}) (string, error) {
+		Resolver: func(context.Context, map[string]interface{}) (string, error) {
 			return "b", nil
 		},
 	}
@@ -645,7 +642,6 @@ func TestGraphQLHandler_postWithFile(t *testing.T) {
 			}, nil
 		},
 	)))
-
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -676,7 +672,6 @@ func TestGraphQLHandler_postWithFile(t *testing.T) {
 			[]byte("Test file content1"),
 		},
 	} {
-		queryTest := queryTest // enable parallel sub-tests
 		t.Run(queryTest.mess, func(t *testing.T) {
 			t.Parallel()
 			request, err := createMultipartRequest(
@@ -684,7 +679,6 @@ func TestGraphQLHandler_postWithFile(t *testing.T) {
 				[]byte(queryTest.fileMap),
 				queryTest.file,
 			)
-
 			if err != nil {
 				t.Error(err)
 				return
@@ -741,7 +735,6 @@ func TestGraphQLHandler_DeeplyNestedFileInput(t *testing.T) {
 			}, nil
 		},
 	)))
-
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -763,7 +756,6 @@ func TestGraphQLHandler_DeeplyNestedFileInput(t *testing.T) {
 			[]byte("Test file content1"),
 		},
 	} {
-		queryTest := queryTest // enable parallel sub-tests
 		t.Run(queryTest.mess, func(t *testing.T) {
 			t.Parallel()
 			request, err := createMultipartRequest(
@@ -771,7 +763,6 @@ func TestGraphQLHandler_DeeplyNestedFileInput(t *testing.T) {
 				[]byte(queryTest.fileMap),
 				queryTest.file,
 			)
-
 			if err != nil {
 				t.Error(err)
 				return
@@ -825,7 +816,6 @@ func TestGraphQLHandler_postWithMultipleFiles(t *testing.T) {
 			}, nil
 		},
 	)))
-
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -864,7 +854,6 @@ func TestGraphQLHandler_postWithMultipleFiles(t *testing.T) {
 			},
 		},
 	} {
-		queryTest := queryTest // enable parallel sub-tests
 		t.Run(queryTest.mess, func(t *testing.T) {
 			t.Parallel()
 			request, err := createMultipartRequest(
@@ -872,7 +861,6 @@ func TestGraphQLHandler_postWithMultipleFiles(t *testing.T) {
 				[]byte(queryTest.fileMap),
 				queryTest.files...,
 			)
-
 			if err != nil {
 				t.Error(err)
 				return
@@ -924,7 +912,6 @@ func TestGraphQLHandler_postBatchWithMultipleFiles(t *testing.T) {
 			}, nil
 		},
 	)))
-
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -954,7 +941,6 @@ func TestGraphQLHandler_postBatchWithMultipleFiles(t *testing.T) {
 		[]byte("Test file content 5"),
 		[]byte("Test file content 6"),
 	)
-
 	if err != nil {
 		t.Error(err)
 		return
@@ -1003,7 +989,6 @@ func TestGraphQLHandler_postBatchParallel(t *testing.T) {
 			return nil, nil
 		},
 	)))
-
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -1094,7 +1079,6 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 	gateway, err := New([]*graphql.RemoteSchema{
 		{Schema: schema, URL: "url-file-upload"},
 	})
-
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -1369,7 +1353,6 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 			},
 		},
 	} {
-		queryTest := queryTest // enable parallel sub-tests
 		t.Run(queryTest.mess, func(t *testing.T) {
 			t.Parallel()
 			request, err := createMultipartRequest(
@@ -1377,7 +1360,6 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 				[]byte(queryTest.fileMap),
 				queryTest.files...,
 			)
-
 			if err != nil {
 				t.Error(err)
 				return
@@ -1440,7 +1422,7 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 }
 
 func createMultipartRequest(operations, fileMap []byte, filesContent ...[]byte) (*http.Request, error) {
-	var b = bytes.Buffer{}
+	b := bytes.Buffer{}
 	var fw io.Writer
 	var err error
 
@@ -1509,7 +1491,6 @@ func TestStaticPlaygroundHandler(t *testing.T) {
 			}, nil
 		},
 	)))
-
 	if err != nil {
 		t.Error(err.Error())
 		return

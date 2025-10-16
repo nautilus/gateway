@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/nautilus/graphql"
+	"github.com/pkg/errors"
 )
 
 type PersistedQuerySpecification struct {
@@ -250,8 +250,9 @@ func parseGetRequest(r *http.Request) (operations []*HTTPOperation, payloadErr e
 	return []*HTTPOperation{operation}, payloadErr
 }
 
-// Parses post request (plain or multipart) to list of operations
-func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
+// Parses post request (plain or multipart) to list of operations.
+// Returns the list of operations and if this is a batch, where more than one operation was provided.
+func parsePostRequest(r *http.Request) ([]*HTTPOperation, bool, error) {
 	contentTypes := strings.Split(r.Header.Get("Content-Type"), ";")
 	if len(contentTypes) == 0 {
 		return nil, false, errors.New("no content-type specified")
@@ -262,8 +263,7 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 		// read the full request body
 		operationsJSON, err := io.ReadAll(r.Body)
 		if err != nil {
-			payloadErr = fmt.Errorf("encountered error reading body: %w", err)
-			return
+			return nil, false, errors.WithMessage(err, "encountered error reading body")
 		}
 		return parseOperations(operationsJSON)
 	case "multipart/form-data":
@@ -271,24 +271,22 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 		const maxPartSize = 32 << 20 // 32 Mebibytes
 		parseErr := r.ParseMultipartForm(maxPartSize)
 		if parseErr != nil {
-			payloadErr = errors.New("error parse multipart request: " + parseErr.Error())
-			return
+			return nil, false, errors.WithMessage(parseErr, "error parse multipart request")
 		}
 
 		operationsJSON := []byte(r.Form.Get("operations"))
-		operations, batchMode, payloadErr = parseOperations(operationsJSON)
+		operations, batchMode, payloadErr := parseOperations(operationsJSON)
 
 		var filePosMap map[string][]string
 		if err := json.Unmarshal([]byte(r.Form.Get("map")), &filePosMap); err != nil {
-			payloadErr = errors.New("error parsing file map " + err.Error())
-			return
+			return operations, batchMode, errors.WithMessage(err, "error parsing file map")
 		}
 
 		for filePos, paths := range filePosMap {
 			file, header, err := r.FormFile(filePos)
 			if err != nil {
-				payloadErr = errors.New("file with index not found: " + filePos)
-				return
+				payloadErr = errors.Errorf("file with index not found: %s", filePos)
+				return operations, batchMode, payloadErr
 			}
 
 			fileMeta := graphql.Upload{
@@ -298,13 +296,12 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 
 			if err := injectFile(operations, fileMeta, paths, batchMode); err != nil {
 				payloadErr = err
-				return
+				return operations, batchMode, payloadErr
 			}
 		}
-		return
+		return operations, batchMode, payloadErr
 	default:
-		payloadErr = errors.New("unknown content-type: " + contentType)
-		return
+		return nil, false, errors.Errorf("unknown content-type: %s", contentType)
 	}
 }
 
@@ -325,7 +322,7 @@ func parseOperations(operationsJSON []byte) (operations []*HTTPOperation, batchM
 		batch := []*HTTPOperation{}
 
 		if err = json.Unmarshal(operationsJSON, &batch); err != nil {
-			payloadErr = fmt.Errorf("encountered error parsing operationsJSON: %w", err)
+			payloadErr = errors.WithMessage(err, "encountered error parsing operationsJSON")
 		} else {
 			operations = batch
 		}
@@ -340,7 +337,7 @@ func parseOperations(operationsJSON []byte) (operations []*HTTPOperation, batchM
 // Adds file object to variables of respective operations in case of multipart request
 func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string, batchMode bool) error {
 	for _, path := range paths {
-		var idx = 0
+		idx := 0
 		parts := strings.Split(path, ".")
 		if batchMode {
 			idxVal, err := strconv.Atoi(parts[0])
@@ -352,12 +349,12 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 		}
 
 		if parts[0] != "variables" {
-			return errors.New("file locator doesn't have variables in it: " + path)
+			return errors.Errorf("file locator doesn't have variables in it: %s", path)
 		}
 
 		const minPathParts = 2
 		if len(parts) < minPathParts {
-			return errors.New("invalid number of parts in path: " + path)
+			return errors.Errorf("invalid number of parts in path: %s", path)
 		}
 
 		variables := operations[idx].Variables
@@ -366,7 +363,7 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 		for i := 1; i < len(parts); i++ {
 			val, ok := variables[parts[i]]
 			if !ok {
-				return fmt.Errorf("key not found in variables: %s", parts[i])
+				return errors.Errorf("key not found in variables: %s", parts[i])
 			}
 			switch v := val.(type) {
 			// if the path part is a map, then keep stepping through it
@@ -379,29 +376,29 @@ func injectFile(operations []*HTTPOperation, file graphql.Upload, paths []string
 			case []interface{}:
 				// make sure the path contains another part before looking for an index
 				if i+1 >= len(parts) {
-					return fmt.Errorf("invalid number of parts in path: " + path)
+					return errors.Errorf("invalid number of parts in path: %s", path)
 				}
 
 				// the next part in the path must be an index (ex: the "2" in: variables.input.files.2)
 				index, err := strconv.Atoi(parts[i+1])
 				if err != nil {
-					return fmt.Errorf("expected numeric index: " + err.Error())
+					return errors.WithMessage(err, "expected numeric index")
 				}
 
 				// index might not be within the bounds
 				if index >= len(v) {
-					return fmt.Errorf("file index %d out of bound %d", index, len(v))
+					return errors.Errorf("file index %d out of bound %d", index, len(v))
 				}
 				fileVal := v[index]
 				if fileVal != nil {
-					return fmt.Errorf("expected nil value, got %v", fileVal)
+					return errors.Errorf("expected nil value, got %v", fileVal)
 				}
 				v[index] = file
 
 				// skip the final iteration through parts (skips the index definition, ex: the "2" in: variables.input.files.2)
 				i++
 			default:
-				return fmt.Errorf("expected nil value, got %v", v) // possibly duplicate path or path to non-null variable
+				return errors.Errorf("expected nil value, got %v", v) // possibly duplicate path or path to non-null variable
 			}
 		}
 	}

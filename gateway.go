@@ -118,7 +118,7 @@ func (g *Gateway) internalSchema() (*ast.Schema, error) {
 		}
 	`)
 	if schema == nil {
-		return nil, fmt.Errorf("Syntax error in schema string: %w", err)
+		return nil, fmt.Errorf("syntax error in schema string: %w", err)
 	}
 
 	// then we have to add any query fields we have
@@ -309,7 +309,7 @@ func makeNodeField() *QueryField {
 				Type: ast.NonNullNamedType("ID", &ast.Position{}),
 			},
 		},
-		Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+		Resolver: func(_ context.Context, args map[string]interface{}) (string, error) {
 			id := args["id"]
 			if id == nil {
 				return "", fmt.Errorf("argument 'id' is required")
@@ -343,7 +343,7 @@ func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap 
 				// each field of each type can be found here
 				for _, fieldDef := range typeDef.Fields {
 					// if the field is not an introspection field
-					if !(name == typeNameQuery && strings.HasPrefix(fieldDef.Name, "__")) {
+					if name != typeNameQuery || !strings.HasPrefix(fieldDef.Name, "__") {
 						locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
 					} else if !stripInternal { // its an introspection name
 						// register the location for the field
@@ -371,7 +371,7 @@ func (m FieldURLMap) URLFor(parent string, field string) ([]string, error) {
 
 	// if it doesn't exist
 	if !exists {
-		return []string{}, fmt.Errorf("Could not find location for %s", key)
+		return []string{}, fmt.Errorf("could not find location for %s", key)
 	}
 
 	// return the value to the caller

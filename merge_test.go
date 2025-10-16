@@ -236,9 +236,10 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 
 		// look for the definitions
 		for _, field := range definition.Fields {
-			if field.Name == "firstName" {
+			switch field.Name {
+			case "firstName":
 				firstNameDefinition = field
-			} else if field.Name == "lastName" {
+			case "lastName":
 				lastNameDefinition = field
 			}
 		}
@@ -814,7 +815,6 @@ type testMergeTableRow struct {
 func testMergeRunNegativeTable(t *testing.T, table []testMergeTableRow) {
 	t.Helper()
 	for _, row := range table {
-		row := row // enable parallel sub-tests
 		t.Run(row.Message, func(t *testing.T) {
 			t.Helper()
 			t.Parallel()
@@ -1341,7 +1341,6 @@ type Query {
 `,
 		},
 	} {
-		tc := tc // enable parallel sub-tests
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			if len(tc.schemas) < 1 {
@@ -1484,7 +1483,6 @@ type Query {
 `,
 		},
 	} {
-		tc := tc // enable parallel sub-tests
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
 			currentSchema, err := graphql.LoadSchema(tc.schema1)

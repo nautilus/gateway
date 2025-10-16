@@ -122,7 +122,7 @@ func TestGateway(t *testing.T) {
 		// the planner we will assign
 		planner := &MinQueriesPlanner{}
 
-		factory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
+		factory := QueryerFactory(func(ctx *PlanningContext, _ string) graphql.Queryer {
 			return ctx.Gateway
 		})
 
@@ -189,11 +189,11 @@ func TestGateway(t *testing.T) {
 		t.Parallel()
 		// create a new schema with the sources and some configuration
 		gateway, err := New(sources,
-			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
+			WithExecutor(ExecutorFunc(func(*ExecutionContext) (map[string]interface{}, error) {
 				return map[string]interface{}{"goodbye": "moon"}, nil
 			})),
 			WithMiddlewares(
-				ResponseMiddleware(func(ctx *ExecutionContext, response map[string]interface{}) error {
+				ResponseMiddleware(func(*ExecutionContext, map[string]interface{}) error {
 					return errors.New("this string")
 				}),
 			))
@@ -222,11 +222,11 @@ func TestGateway(t *testing.T) {
 		t.Parallel()
 		// create a new schema with the sources and some configuration
 		gateway, err := New(sources,
-			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
+			WithExecutor(ExecutorFunc(func(*ExecutionContext) (map[string]interface{}, error) {
 				return map[string]interface{}{}, errors.New("error string")
 			})),
 			WithMiddlewares(
-				ResponseMiddleware(func(ctx *ExecutionContext, response map[string]interface{}) error {
+				ResponseMiddleware(func(*ExecutionContext, map[string]interface{}) error {
 					return errors.New("this string")
 				}),
 			))
@@ -256,11 +256,11 @@ func TestGateway(t *testing.T) {
 		t.Parallel()
 		// create a new schema with the sources and some configuration
 		gateway, err := New(sources,
-			WithExecutor(ExecutorFunc(func(ctx *ExecutionContext) (map[string]interface{}, error) {
+			WithExecutor(ExecutorFunc(func(*ExecutionContext) (map[string]interface{}, error) {
 				return map[string]interface{}{"goodbye": "moon"}, nil
 			})),
 			WithMiddlewares(
-				ResponseMiddleware(func(ctx *ExecutionContext, response map[string]interface{}) error {
+				ResponseMiddleware(func(_ *ExecutionContext, response map[string]interface{}) error {
 					// clear the previous value
 					for k := range response {
 						delete(response, k)
@@ -442,7 +442,7 @@ func TestGateway(t *testing.T) {
 					Type: ast.NamedType("ID", &ast.Position{}),
 				},
 			},
-			Resolver: func(ctx context.Context, args map[string]interface{}) (string, error) {
+			Resolver: func(_ context.Context, args map[string]interface{}) (string, error) {
 				return args["id"].(string), nil
 			},
 		}
@@ -699,7 +699,7 @@ type User {
 }
 `)
 	require.NoError(t, err)
-	queryerFactory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
+	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
 		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
 			query := gqlparser.MustLoadQuery(schema, input.Query)
 			var operation ast.OperationDefinition
@@ -764,8 +764,8 @@ type Query {
 }
 `)
 	require.NoError(t, err)
-	queryerFactory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
-		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
+	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
+		return graphql.QueryerFunc(func(*graphql.QueryInput) (interface{}, error) {
 			return map[string]interface{}{
 					"foo": "foo",
 					"bar": nil,
@@ -813,8 +813,8 @@ type Query {
 }
 `)
 	require.NoError(t, err)
-	queryerFactory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
-		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
+	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
+		return graphql.QueryerFunc(func(*graphql.QueryInput) (interface{}, error) {
 			return map[string]interface{}{
 					"foo": nil,
 				}, graphql.ErrorList{
@@ -901,7 +901,7 @@ type Bar implements Node {
 			}
 		}
 	`
-	queryerFactory := QueryerFactory(func(ctx *PlanningContext, url string) graphql.Queryer {
+	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
 		return graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
 			t.Log("Received request:", input.Query)
 			if strings.Contains(input.Query, "node(") {

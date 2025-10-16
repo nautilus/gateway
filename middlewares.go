@@ -61,7 +61,7 @@ func scrubInsertionIDs(ctx *ExecutionContext, response map[string]interface{}) e
 				// it has to be an obj
 				obj, ok := value.(map[string]interface{})
 				if !ok {
-					return errors.New("Can not scrub field from non object")
+					return errors.New("can not scrub field from non object")
 				}
 
 				// delete the field we're supposed to
