@@ -16,7 +16,7 @@ jobs:
       - name: Use latest Go version
         uses: actions/setup-go@v3
         with:
-          go-version: ^1.18
+          go-version: ^1.25
 
       - name: Checkout source
         uses: actions/checkout@master
