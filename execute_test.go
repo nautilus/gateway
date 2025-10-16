@@ -1694,7 +1694,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 						},
 						// return a known value we can test against
 						Queryer: graphql.QueryerFunc(
-							func(input *graphql.QueryInput) (interface{}, error) {
+							func(*graphql.QueryInput) (interface{}, error) {
 								return map[string]interface{}{"data": map[string]interface{}{}}, errors.New("message")
 							},
 						),
@@ -1713,7 +1713,7 @@ func TestExecutor_multipleErrors(t *testing.T) {
 						},
 						// return a known value we can test against
 						Queryer: graphql.QueryerFunc(
-							func(input *graphql.QueryInput) (interface{}, error) {
+							func(*graphql.QueryInput) (interface{}, error) {
 								return map[string]interface{}{"data": map[string]interface{}{}}, graphql.ErrorList{errors.New("message"), errors.New("message")}
 							},
 						),
@@ -1855,7 +1855,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 
 	// the middleware to apply
 	called := false
-	middleware := RequestMiddleware(func(r *http.Request) error {
+	middleware := RequestMiddleware(func(*http.Request) error {
 		called = true
 		return nil
 	})
@@ -1863,7 +1863,7 @@ func TestExecutor_appliesRequestMiddlewares(t *testing.T) {
 	// in order to execute the request middleware we need to be dealing with a network queryer
 	// which means we need to fake out the http client
 	httpClient := &http.Client{
-		Transport: roundTripFunc(func(req *http.Request) *http.Response {
+		Transport: roundTripFunc(func(*http.Request) *http.Response {
 			// serialize the json we want to send back
 			result, _ := json.Marshal(map[string]interface{}{
 				"allUsers": []string{
@@ -2386,7 +2386,6 @@ func TestExecutorGetPointData(t *testing.T) {
 	}
 
 	for _, row := range table {
-		row := row // enable parallel sub-tests
 		t.Run(row.point, func(t *testing.T) {
 			t.Parallel()
 			pointData, err := executorGetPointData(row.point)

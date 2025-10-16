@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/nautilus/graphql"
+	"github.com/pkg/errors"
 )
 
 type PersistedQuerySpecification struct {
@@ -250,8 +250,9 @@ func parseGetRequest(r *http.Request) (operations []*HTTPOperation, payloadErr e
 	return []*HTTPOperation{operation}, payloadErr
 }
 
-// Parses post request (plain or multipart) to list of operations
-func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode bool, payloadErr error) {
+// Parses post request (plain or multipart) to list of operations.
+// Returns the list of operations and if this is a batch, where more than one operation was provided.
+func parsePostRequest(r *http.Request) ([]*HTTPOperation, bool, error) {
 	contentTypes := strings.Split(r.Header.Get("Content-Type"), ";")
 	if len(contentTypes) == 0 {
 		return nil, false, errors.New("no content-type specified")
@@ -262,8 +263,7 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 		// read the full request body
 		operationsJSON, err := io.ReadAll(r.Body)
 		if err != nil {
-			payloadErr = fmt.Errorf("encountered error reading body: %w", err)
-			return
+			return nil, false, fmt.Errorf("encountered error reading body: %w", err)
 		}
 		return parseOperations(operationsJSON)
 	case "multipart/form-data":
@@ -271,24 +271,22 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 		const maxPartSize = 32 << 20 // 32 Mebibytes
 		parseErr := r.ParseMultipartForm(maxPartSize)
 		if parseErr != nil {
-			payloadErr = errors.New("error parse multipart request: " + parseErr.Error())
-			return
+			return nil, false, errors.Wrap(parseErr, "error parse multipart request")
 		}
 
 		operationsJSON := []byte(r.Form.Get("operations"))
-		operations, batchMode, payloadErr = parseOperations(operationsJSON)
+		operations, batchMode, payloadErr := parseOperations(operationsJSON)
 
 		var filePosMap map[string][]string
 		if err := json.Unmarshal([]byte(r.Form.Get("map")), &filePosMap); err != nil {
-			payloadErr = errors.New("error parsing file map " + err.Error())
-			return
+			return operations, batchMode, errors.Wrap(err, "error parsing file map")
 		}
 
 		for filePos, paths := range filePosMap {
 			file, header, err := r.FormFile(filePos)
 			if err != nil {
 				payloadErr = errors.New("file with index not found: " + filePos)
-				return
+				return operations, batchMode, payloadErr
 			}
 
 			fileMeta := graphql.Upload{
@@ -298,13 +296,12 @@ func parsePostRequest(r *http.Request) (operations []*HTTPOperation, batchMode b
 
 			if err := injectFile(operations, fileMeta, paths, batchMode); err != nil {
 				payloadErr = err
-				return
+				return operations, batchMode, payloadErr
 			}
 		}
-		return
+		return operations, batchMode, payloadErr
 	default:
-		payloadErr = errors.New("unknown content-type: " + contentType)
-		return
+		return nil, false, errors.Errorf("unknown content-type: %s", contentType)
 	}
 }
 

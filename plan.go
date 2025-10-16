@@ -81,7 +81,7 @@ type MinQueriesPlanner struct {
 
 // WithQueryerFactory returns a version of the planner with the factory set
 func (p *MinQueriesPlanner) WithQueryerFactory(factory *QueryerFactory) QueryPlanner {
-	p.Planner.QueryerFactory = factory
+	p.QueryerFactory = factory
 	return p
 }
 
@@ -353,7 +353,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 		checkForID = true
 
 		// if we have a wrapper to add
-		if config.wrapper != nil && len(config.wrapper) > 0 {
+		if len(config.wrapper) > 0 {
 			ctx.Gateway.logger.Debug("wrapping selection", config.wrapper)
 
 			// use the wrapped version
@@ -596,7 +596,7 @@ func (p *MinQueriesPlanner) wrapSelectionSet(ctx *PlanningContext, config *extra
 
 		// if we couldn't find the definition
 		if defn == nil {
-			return nil, errors.New("Could not find defn")
+			return nil, errors.New("could not find defn")
 		}
 
 		// update its selection set
@@ -679,7 +679,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extr
 				// look in the operation
 				defn = config.plan.FragmentDefinitions.ForName(selection.Name)
 				if defn == nil {
-					return nil, nil, fmt.Errorf("Could not find definition for directive: %s", selection.Name)
+					return nil, nil, fmt.Errorf("could not find definition for directive: %s", selection.Name)
 				}
 			}
 
