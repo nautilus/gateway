@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/go-viper/mapstructure/v2"
+	"github.com/mitchellh/mapstructure"
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
