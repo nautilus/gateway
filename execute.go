@@ -35,6 +35,9 @@ type queryExecutionResult struct {
 	Err            error
 }
 
+// StepHook is a function that can be executed before or after a step
+type StepHook func(ctx *ExecutionContext) error
+
 // execution is broken up into two phases:
 // - the first walks down the dependency graph execute the network request
 // - the second strips the id fields from the response and  provides a
@@ -48,6 +51,8 @@ type ExecutionContext struct {
 	Variables          map[string]interface{}
 	RequestContext     context.Context
 	RequestMiddlewares []graphql.NetworkMiddleware
+	PreExecutionHook   StepHook
+	PostExecutionHook  StepHook
 }
 
 // Execute returns the result of the query plan
@@ -202,6 +207,21 @@ func executeOneStep(
 	// log the query
 	ctx.logger.QueryPlanStep(step)
 
+	// Execute pre-execution hook if present
+	if ctx.PreExecutionHook != nil {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					ctx.logger.Warn("Pre-execution hook panicked: ", r)
+				}
+			}()
+			if hookErr := ctx.PreExecutionHook(ctx); hookErr != nil {
+				ctx.logger.Warn("Pre-execution hook failed: ", hookErr)
+				// Continue execution even if pre-hook fails, but log the error
+			}
+		}()
+	}
+
 	// the list of variables and their definitions that pertain to this query
 	variables := map[string]interface{}{}
 
@@ -286,6 +306,21 @@ func executeOneStep(
 		queryResult = resultObj
 	}
 
+	// Execute post-execution hook if present
+	if ctx.PostExecutionHook != nil {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					ctx.logger.Warn("Post-execution hook panicked: ", r)
+				}
+			}()
+			if hookErr := ctx.PostExecutionHook(ctx); hookErr != nil {
+				ctx.logger.Warn("Post-execution hook failed: ", hookErr)
+				// Continue execution even if post-hook fails, but log the error
+			}
+		}()
+	}
+	
 	// if there are next steps
 	var dependentSteps []dependentStepArgs
 	if len(step.Then) > 0 {
