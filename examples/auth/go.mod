@@ -7,4 +7,4 @@ require (
 	github.com/vektah/gqlparser/v2 v2.5.15
 )
 
-go 1.13
+go 1.26

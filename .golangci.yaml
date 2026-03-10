@@ -6,13 +6,12 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    - exportloopref
     - gochecknoglobals
     - gochecknoinits
     - goconst
     - gocritic
     - gofmt
-    - gomnd
+    - mnd
     - gosec
     - makezero
     - misspell

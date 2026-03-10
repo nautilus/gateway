@@ -1,6 +1,6 @@
 module github.com/amboss-mededu/gateway
 
-go 1.17
+go 1.26.0
 
 require (
 	github.com/99designs/gqlgen v0.17.15
