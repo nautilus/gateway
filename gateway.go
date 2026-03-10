@@ -8,9 +8,15 @@ import (
 	"strings"
 
 	"github.com/vektah/gqlparser/v2/ast"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nautilus/graphql"
 )
+
+const tracerName = "github.com/amboss-mededu/gateway"
 
 // Gateway is the top level entry for interacting with a gateway. It is responsible for merging a list of
 // remote schemas into one, generating a query plan to execute based on an incoming request, and following
@@ -81,10 +87,27 @@ func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]
 		plan = operationPlan
 	}
 
+	// Ensure we have a valid context for tracing
+	reqCtx := ctx.Context
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+
+	// Create a parent span so execute and response are both children
+	tr := otel.Tracer(tracerName)
+	var spanOpts []trace.SpanStartOption
+	if ctx.OperationName != "" {
+		spanOpts = append(spanOpts, trace.WithAttributes(
+			attribute.String("graphql.operation_name", ctx.OperationName),
+		))
+	}
+	reqSpanCtx, reqSpan := tr.Start(reqCtx, "gateway.request", spanOpts...)
+	defer reqSpan.End()
+
 	// build up the execution context
 	executionContext := &ExecutionContext{
 		logger:             g.logger,
-		RequestContext:     ctx.Context,
+		RequestContext:     reqSpanCtx,
 		RequestMiddlewares: g.requestMiddlewares,
 		Plan:               plan,
 		Variables:          ctx.Variables,
@@ -99,14 +122,28 @@ func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]
 		result = nil
 	}
 
-	// now that we have our response, throw it through the list of middlewarse
-	for _, ware := range g.responseMiddlewares {
-		if err := ware(executionContext, result); err != nil {
-			return nil, err
+	// now that we have our response, throw it through the list of middlewares
+	if len(g.responseMiddlewares) > 0 {
+		respCtx, respSpan := tr.Start(reqSpanCtx, "gateway.response_middleware")
+		defer respSpan.End()
+		executionContext = executionContext.withRequestContext(respCtx)
+
+		for _, ware := range g.responseMiddlewares {
+			if err := ware(executionContext, result); err != nil {
+				respSpan.RecordError(err)
+				respSpan.SetStatus(codes.Error, err.Error())
+				reqSpan.RecordError(err)
+				reqSpan.SetStatus(codes.Error, err.Error())
+				return nil, err
+			}
 		}
 	}
 
-	// we're done here
+	if executeErr != nil {
+		reqSpan.RecordError(executeErr)
+		reqSpan.SetStatus(codes.Error, executeErr.Error())
+	}
+
 	return result, executeErr
 }
 
