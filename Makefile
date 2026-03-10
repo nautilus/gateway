@@ -2,7 +2,9 @@
 .PHONY: test
 test:
 	go test -race -coverprofile=cover.out ./...
-	cd ./cmd/gateway && go test -v -race ./...
+	# cmd/gateway depends on a version tag only present in the upstream (nautilus/gateway) repo,
+	# not in this fork. Use a local replace so Go resolves the module from the working tree.
+	cd ./cmd/gateway && go mod edit -replace github.com/amboss-mededu/gateway=../.. && go test -v -race ./...
 
 .PHONY: build-setup
 build-setup:

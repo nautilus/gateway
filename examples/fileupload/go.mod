@@ -1,6 +1,6 @@
 module github.com/amboss-mededu/gateway/example/fileupload
 
-go 1.14
+go 1.24
 
 require (
 	github.com/graphql-go/graphql v0.8.1
