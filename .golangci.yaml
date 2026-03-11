@@ -1,6 +1,6 @@
+version: "2"
 linters:
   enable:
-    # Default linters plus these:
     - bodyclose
     - durationcheck
     - errname
@@ -10,28 +10,43 @@ linters:
     - gochecknoinits
     - goconst
     - gocritic
-    - gofmt
-    - mnd
     - gosec
     - makezero
     - misspell
+    - mnd
     - nakedret
     - nilerr
     - noctx
     - nolintlint
+    - paralleltest
     - revive
     - unconvert
     - unparam
-    - paralleltest
-
-issues:
-  exclude-rules:
-    # Template parsing is slow, so some global templates are ok
-    - text: ".*Template is a global variable"
-      source: ".*Template = template\\.Must\\(.*"
-      linters:
-        - gochecknoglobals
-    # Allow const duplication in tests.
-    - path: '.+_test\.go'
-      linters:
-        - goconst
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gochecknoglobals
+        text: .*Template is a global variable
+        source: .*Template = template\.Must\(.*
+      - linters:
+          - goconst
+        path: .+_test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
