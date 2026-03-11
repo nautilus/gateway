@@ -10,6 +10,10 @@ import (
 
 	"github.com/nautilus/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Common type names for manipulating schemas
@@ -58,8 +62,38 @@ type ExecutionContext struct {
 	PostExecutionHook  PostExecutionStepHook
 }
 
+// withRequestContext returns a shallow copy of the ExecutionContext with a new RequestContext.
+func (ctx *ExecutionContext) withRequestContext(reqCtx context.Context) *ExecutionContext {
+	child := *ctx
+	child.RequestContext = reqCtx
+	return &child
+}
+
 // Execute returns the result of the query plan
 func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
+	// Ensure we have a valid context for tracing
+	reqCtx := ctx.RequestContext
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+
+	// if there are no steps after the root step, there is a problem
+	if len(ctx.Plan.RootStep.Then) == 0 {
+		return nil, errors.New("was given empty plan")
+	}
+
+	tr := otel.Tracer(tracerName)
+	spanOpts := []trace.SpanStartOption{
+		trace.WithAttributes(
+			attribute.Int("gateway.step_count", len(ctx.Plan.RootStep.Then)),
+		),
+	}
+	spanCtx, span := tr.Start(reqCtx, "gateway.execute", spanOpts...)
+	defer span.End()
+
+	// Create a child context so we don't mutate the caller's ExecutionContext
+	childCtx := ctx.withRequestContext(spanCtx)
+
 	// a place to store the result
 	result := map[string]interface{}{}
 
@@ -83,15 +117,10 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 	// a lock for reading and writing to the result
 	resultLock := &sync.Mutex{}
 
-	// if there are no steps after the root step, there is a problem
-	if len(ctx.Plan.RootStep.Then) == 0 {
-		return nil, errors.New("was given empty plan")
-	}
-
 	// the root step could have multiple steps that have to happen
-	for _, step := range ctx.Plan.RootStep.Then {
+	for _, step := range childCtx.Plan.RootStep.Then {
 		stepWg.Add(1)
-		go executeStep(ctx, ctx.Plan, step, []string{}, resultLock, ctx.Variables, resultCh, stepWg)
+		go executeStep(childCtx, childCtx.Plan, step, []string{}, resultLock, childCtx.Variables, resultCh, stepWg)
 	}
 
 	// the list of errors we have encountered while executing the plan
@@ -106,12 +135,12 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				if !ok {
 					return
 				}
-				ctx.logger.Debug("Inserting result into ", payload.InsertionPoint)
-				ctx.logger.Debug("Result: ", payload.Result)
+				childCtx.logger.Debug("Inserting result into ", payload.InsertionPoint)
+				childCtx.logger.Debug("Result: ", payload.Result)
 
 				// we have to grab the value in the result and write it to the appropriate spot in the
 				// acumulator.
-				insertErr := executorInsertObject(ctx, result, resultLock, payload.InsertionPoint, payload.Result)
+				insertErr := executorInsertObject(childCtx, result, resultLock, payload.InsertionPoint, payload.Result)
 
 				switch {
 				case payload.Err != nil: // response errors are the highest priority to return
@@ -119,7 +148,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 				case insertErr != nil:
 					errCh <- insertErr
 				default:
-					ctx.logger.Debug("Done. ", result)
+					childCtx.logger.Debug("Done. ", result)
 					// one of the queries is done
 					stepWg.Done()
 				}
@@ -152,6 +181,8 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 	defer errMutex.Unlock()
 
 	if nErrs > 0 {
+		span.RecordError(errs)
+		span.SetStatus(codes.Error, errs.Error())
 		return result, errs
 	}
 
@@ -170,16 +201,32 @@ func executeStep(
 	resultCh chan *queryExecutionResult,
 	stepWg *sync.WaitGroup,
 ) {
-	queryResult, dependentSteps, queryErr := executeOneStep(ctx, plan, step, insertionPoint, resultLock, queryVariables)
+	tr := otel.Tracer(tracerName)
+	spanCtx, span := tr.Start(ctx.RequestContext, "gateway.step",
+		trace.WithAttributes(
+			attribute.String("gateway.step.parent_type", step.ParentType),
+			attribute.String("gateway.step.insertion_point", strings.Join(insertionPoint, ".")),
+		))
+	defer span.End()
+
+	// Create child context for dependent steps
+	childCtx := ctx.withRequestContext(spanCtx)
+
+	queryResult, dependentSteps, queryErr := executeOneStep(childCtx, plan, step, insertionPoint, resultLock, queryVariables)
 	// before publishing the current result, tell the wait-group about the dependent steps to wait for
+
+	if queryErr != nil {
+		span.RecordError(queryErr)
+		span.SetStatus(codes.Error, queryErr.Error())
+	}
 
 	if queryResult["login"] != nil {
 		fmt.Println(queryResult["login"].(map[string]interface{})["token"].(string))
-		ctx.RequestContext = context.WithValue(ctx.RequestContext, "token", queryResult["login"].(map[string]interface{})["token"].(string))
+		childCtx = childCtx.withRequestContext(context.WithValue(childCtx.RequestContext, "token", queryResult["login"].(map[string]interface{})["token"].(string)))
 	}
 
 	stepWg.Add(len(dependentSteps))
-	ctx.logger.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
+	childCtx.logger.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
 	// send the result to be stitched in with our accumulator
 	resultCh <- &queryExecutionResult{
 		InsertionPoint: insertionPoint,
@@ -191,8 +238,8 @@ func executeStep(
 	// result channel even before the result created in this iteration.
 	// Execute dependent steps after the main step has been published.
 	for _, sr := range dependentSteps {
-		ctx.logger.Info("Spawn ", sr.insertionPoint)
-		go executeStep(ctx, plan, sr.step, sr.insertionPoint, resultLock, queryVariables, resultCh, stepWg)
+		childCtx.logger.Info("Spawn ", sr.insertionPoint)
+		go executeStep(childCtx, plan, sr.step, sr.insertionPoint, resultLock, queryVariables, resultCh, stepWg)
 	}
 }
 
@@ -354,13 +401,6 @@ func executeOneStep(
 		}
 	}
 	return queryResult, dependentSteps, queryErr
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDefs ast.FragmentDefinitionList) (*ast.Field, error) {
