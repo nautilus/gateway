@@ -956,3 +956,64 @@ type Bar implements Node {
 		}
 	`, resp.Body.String())
 }
+
+func TestNodeIsNull(t *testing.T) {
+	t.Parallel()
+	schemaFoo, err := graphql.LoadSchema(`
+type Query {
+	node(id: ID!): Node
+}
+
+interface Node {
+	id: ID!
+}
+
+type Foo implements Node {
+	id: ID!
+	baz: Baz
+}
+
+type Baz {
+	biff: String!
+}
+`)
+	require.NoError(t, err)
+	const query = `
+		query($id: ID!) {
+			node(id: $id) {
+				... on Foo {
+					id
+				}
+			}
+		}
+	`
+	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
+		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
+			t.Log("Received request:", input.Query)
+			switch input.Variables["id"] {
+			case "foo":
+				return map[string]any{"node": nil}, nil
+			case "bar":
+				return map[string]any{"node": map[string]any{"baz": "biff"}}, nil
+			default:
+				return nil, errors.New("unexpected test variables")
+			}
+		})
+	})
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schemaFoo, URL: "foo"},
+	}, WithQueryerFactory(&queryerFactory))
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`{"query": %q, "variables": {"id":"foo"}}`, query)))
+	resp := httptest.NewRecorder()
+	gateway.GraphQLHandler(resp, req)
+	assert.Equal(t, http.StatusOK, resp.Code)
+	assert.JSONEq(t, `
+		{
+			"data": {
+				"node": null
+			}
+		}
+	`, resp.Body.String())
+}
