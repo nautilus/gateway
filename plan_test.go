@@ -2,12 +2,62 @@ package gateway
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/v2/ast"
 )
+
+func logPlans(tb testing.TB, plans []*QueryPlan) {
+	tb.Helper()
+	tb.Log(dumpPlans(plans))
+}
+
+const dumpIndent = "  "
+
+func addIndent(s string) string {
+	var builder strings.Builder
+	for line := range strings.SplitAfterSeq(s, "\n") {
+		builder.WriteString(dumpIndent)
+		builder.WriteString(line)
+	}
+	return builder.String()
+}
+
+func dumpPlans(plans []*QueryPlan) string {
+	var builder strings.Builder
+	for index, plan := range plans {
+		builder.WriteString(fmt.Sprintf("plan %d:\n", index))
+		builder.WriteString(addIndent(dumpPlan(*plan)))
+	}
+	return builder.String()
+}
+
+func dumpPlan(plan QueryPlan) string {
+	var builder strings.Builder
+	builder.WriteString("root step:\n")
+	builder.WriteString(dumpPlanStep(*plan.RootStep))
+	builder.WriteString(addIndent(dumpPlanSteps(plan.RootStep.Then)))
+	return builder.String()
+}
+
+func dumpPlanSteps(steps []*QueryPlanStep) string {
+	var builder strings.Builder
+	for index, step := range steps {
+		builder.WriteString(fmt.Sprintf("then step %d:\n", index))
+		builder.WriteString(addIndent(dumpPlanStep(*step)))
+		builder.WriteString(addIndent(dumpPlanSteps(step.Then)))
+	}
+	return builder.String()
+}
+
+func dumpPlanStep(step QueryPlanStep) string {
+	return fmt.Sprintf(`(parent: %s)
+%v
+`, step.ParentType, strings.ReplaceAll(step.QueryString, "\t", dumpIndent))
+}
 
 func TestPlanQuery_singleRootField(t *testing.T) {
 	t.Parallel()
@@ -1116,6 +1166,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 		t.Error(err.Error())
 		return
 	}
+	logPlans(t, plans)
 
 	// we should return only one plan
 	if !assert.Len(t, plans, 1) {
