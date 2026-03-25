@@ -970,11 +970,21 @@ interface Node {
 
 type Foo implements Node {
 	id: ID!
-	baz: Baz
+}
+`)
+	require.NoError(t, err)
+	schemaBar, err := graphql.LoadSchema(`
+type Query {
+	node(id: ID!): Node
 }
 
-type Baz {
-	biff: String!
+interface Node {
+	id: ID!
+}
+
+type Foo implements Node {
+	id: ID!
+	bar: String
 }
 `)
 	require.NoError(t, err)
@@ -983,6 +993,7 @@ type Baz {
 			node(id: $id) {
 				... on Foo {
 					id
+					bar
 				}
 			}
 		}
@@ -990,18 +1001,16 @@ type Baz {
 	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
 		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
 			t.Log("Received request:", input.Query)
-			switch input.Variables["id"] {
-			case "foo":
-				return map[string]any{"node": nil}, nil
-			case "bar":
-				return map[string]any{"node": map[string]any{"baz": "biff"}}, nil
-			default:
-				return nil, errors.New("unexpected test variables")
+			if !strings.Contains(input.Query, "bar") {
+				t.Error("Foo schema must not be called to resolve 'id', gateway already knows what the ID should be")
+				return nil, errors.New("must not be reached")
 			}
+			return map[string]any{"node": map[string]any{"id": "id", "bar": "bar"}}, nil
 		})
 	})
 	gateway, err := New([]*graphql.RemoteSchema{
 		{Schema: schemaFoo, URL: "foo"},
+		{Schema: schemaBar, URL: "bar"},
 	}, WithQueryerFactory(&queryerFactory))
 	require.NoError(t, err)
 

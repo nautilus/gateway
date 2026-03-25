@@ -7,6 +7,7 @@ import (
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
@@ -685,7 +686,6 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 		t.Error("Did not get an  inner firstName out of the allUsers selection")
 	}
 	assert.Equal(t, "firstName", firstNameInnerField.Name)
-
 }
 
 func TestPlanQuery_subGraphs(t *testing.T) {
@@ -1110,21 +1110,12 @@ func TestPlanQuery_groupSiblings(t *testing.T) {
 
 func TestPlanQuery_nodeField(t *testing.T) {
 	t.Parallel()
-	// the query to test
-	// query {
-	//     node(id: $id) {
-	//     		... on User {
-	//				firstName
-	//				lastName
-	//    		}
-	//     }
-	// }
-
 	// the location map for fields for this query
 	locations := FieldURLMap{}
+	locations.RegisterURL("User", "id", "url1", "url2")
 	locations.RegisterURL("User", "firstName", "url1")
 	locations.RegisterURL("User", "lastName", "url2")
-	locations.RegisterURL(typeNameQuery, "node", "url1", "url2", internalSchemaLocation)
+	locations.RegisterURL(typeNameQuery, "node", "url1", "url2")
 
 	// load the query we're going to query
 	schema, err := graphql.LoadSchema(`
@@ -1148,10 +1139,12 @@ func TestPlanQuery_nodeField(t *testing.T) {
 
 	// plan the query
 	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		// the query to test
 		Query: `
 			query($id: ID!) {
 				node(id: $id) {
 					... on User {
+						id
 						firstName
 						lastName
 					}
@@ -1244,6 +1237,137 @@ func TestPlanQuery_nodeField(t *testing.T) {
 		}
 		assert.Equal(t, "lastName", graphql.SelectedFields(inlineFragment.SelectionSet)[0].Name)
 	})
+}
+
+func TestPlanQuery_nodeFieldOnlyRequestedFromOwningService(t *testing.T) {
+	t.Parallel()
+	locations := FieldURLMap{}
+	locations.RegisterURL(typeNameQuery, "node", "url1", "url2") // url1 can resolve Foos, but not Bars. MUST NOT receive a request for Bars.
+	locations.RegisterURL("Foo", "id", "url1")                   // Foos resolvable by url1
+	locations.RegisterURL("Bar", "id", "url2")                   // Bars resolvable by url2
+
+	schema, err := graphql.LoadSchema(`
+		interface Node {
+			id: ID!
+		}
+		type Query {
+			node(id: ID!): Node
+		}
+
+		type Foo implements Node {  # Only registered to url1
+			id: ID!
+		}
+		type Bar implements Node {  # Only registered to url2
+			id: ID!
+		}
+	`)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query($id: ID!) {
+				node(id: $id) {
+					... on Bar {
+						id
+					}
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	logPlans(t, plans)
+	require.Len(t, plans, 1)
+
+	// this plan should have 1 step that only hits url2
+	require.Len(t, plans[0].RootStep.Then, 1, "incorrect number of steps in plan")
+	step := plans[0].RootStep.Then[0]
+	require.IsType(t, &graphql.SingleRequestQueryer{}, step.Queryer, "first step must go to url2")
+	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, "url2", queryer.URL())
+	assert.Empty(t, step.Then)
+}
+
+func TestPlanQuery_nodeFieldFromOnlyOneSchema(t *testing.T) {
+	t.Parallel()
+	locations := FieldURLMap{}
+	locations.RegisterURL("User", "id", "url1", "url2") // Should not request url1 when same id field can be resolved by url2.
+	locations.RegisterURL(typeNameQuery, "node", "url1", "url2")
+	locations.RegisterURL("User", "firstName", "url2")
+
+	schema, err := graphql.LoadSchema(`
+		interface Node {
+			id: ID!
+		}
+
+		type User implements Node {
+			id: ID!             # Both url1 and url2
+			firstName: String!  # Only url2.
+		}
+
+		type Query {
+			node(id: ID!): Node
+		}
+	`)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query($id: ID!) {
+				node(id: $id) {
+					... on User {
+						firstName
+					}
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	logPlans(t, plans)
+	require.Len(t, plans, 1)
+
+	// this plan should have 1 step that only hits url2
+	require.Len(t, plans[0].RootStep.Then, 1, "incorrect number of steps in plan")
+	step := plans[0].RootStep.Then[0]
+	require.IsType(t, &graphql.SingleRequestQueryer{}, step.Queryer, "first step must go to url2")
+	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, "url2", queryer.URL())
+	assert.Empty(t, step.Then)
+
+	// the url2 step should have Node as the parent type
+	assert.Equal(t, "Node", step.ParentType)
+	// there should be one selection set
+	if !assert.Len(t, step.SelectionSet, 1) {
+		return
+	}
+
+	// it should be an inline fragment on User
+	inlineFragment, ok := step.SelectionSet[0].(*ast.InlineFragment)
+	if !assert.True(t, ok) {
+		return
+	}
+	assert.Equal(t, "User", inlineFragment.TypeCondition)
+
+	// with one selection set: firstName
+	if !assert.Len(t, inlineFragment.SelectionSet, 1) {
+		return
+	}
+	assert.Equal(t, "firstName", graphql.SelectedFields(inlineFragment.SelectionSet)[0].Name)
 }
 
 func TestPlanQuery_stepVariables(t *testing.T) {
@@ -1516,7 +1640,6 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 
 	assert.Equal(t, "lastName", userInfoSelection.Name)
-
 }
 
 func TestPlannerBuildQuery_query(t *testing.T) {
@@ -1703,7 +1826,6 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
-
 		if err != nil {
 			return nil, fmt.Errorf("encountered error when planning query: %w", err)
 		}

@@ -633,7 +633,7 @@ func (p *MinQueriesPlanner) selectLocation(ctx *PlanningContext, fieldName strin
 
 	// if we got here then this field can be found in multiple services and none of the top priority locations.
 	// for now, just use the first one
-	ctx.Gateway.logger.WithFields(LoggerFields{"locations": possibleLocations, "field": fieldName}).Debug("Multiple locations available for field, but none have priority; arbitrarily selecting first one")
+	ctx.Gateway.logger.WithFields(LoggerFields{"locations": possibleLocations, "field": fmt.Sprintf("%s.%s", config.parentType, fieldName)}).Debug("Multiple locations available for field, but none have priority; arbitrarily selecting first one")
 	return possibleLocations[0]
 }
 
