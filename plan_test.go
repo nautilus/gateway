@@ -47,7 +47,14 @@ func dumpPlan(plan QueryPlan) string {
 func dumpPlanSteps(steps []*QueryPlanStep) string {
 	var builder strings.Builder
 	for index, step := range steps {
-		builder.WriteString(fmt.Sprintf("then step %d:\n", index))
+		kind := "unknown"
+		switch queryer := step.Queryer.(type) {
+		case *graphql.SingleRequestQueryer:
+			kind = queryer.URL()
+		case *Gateway:
+			kind = "internal"
+		}
+		builder.WriteString(fmt.Sprintf("then step %d (%s):\n", index, kind))
 		builder.WriteString(addIndent(dumpPlanStep(*step)))
 		builder.WriteString(addIndent(dumpPlanSteps(step.Then)))
 	}
