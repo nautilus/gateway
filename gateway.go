@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/vektah/gqlparser/v2/ast"
@@ -192,16 +191,6 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 			false,
 		),
 	)
-	// If any external 'node(id: ID!): Node' resolver exists, prefer that one over internal. Unregister the internal schema.
-	isInternalSchemaURL := func(url string) bool { return url == internalSchemaLocation }
-	for _, fieldURLKey := range []string{
-		"Node.id",
-		"Query.node",
-	} {
-		if len(urls[fieldURLKey]) > 1 {
-			urls[fieldURLKey] = slices.DeleteFunc(urls[fieldURLKey], isInternalSchemaURL)
-		}
-	}
 
 	// grab the schemas within each source
 	sourceSchemas := []*ast.Schema{}
@@ -321,10 +310,6 @@ func makeNodeField() *QueryField {
 			},
 		},
 		Resolver: func(_ context.Context, args map[string]interface{}) (string, error) {
-			// Always fail to resolve the node, as the gateway doesn't define any implementations of Node.
-			// Gateway should automatically skip registering this resolver once any schema defines it.
-			//
-			// Still, enforce the argument contract, where ID must be non-null and a string-like value.
 			id := args["id"]
 			if id == nil {
 				return "", fmt.Errorf("argument 'id' is required")
@@ -337,7 +322,7 @@ func makeNodeField() *QueryField {
 				}
 				return "", fmt.Errorf("invalid ID type: %s", string(jsonID))
 			}
-			return "", fmt.Errorf("could not find node with ID: %s", idStr)
+			return idStr, nil
 		},
 	}
 }
