@@ -178,6 +178,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 			Fragments:      ast.FragmentDefinitionList{},
 			Wrapper:        ast.SelectionSet{},
 		}
+		ctx.Gateway.logger.Info("operation selection set:", graphql.FormatSelectionSet(operation.SelectionSet))
 
 		// start waiting for steps to be added
 		// NOTE: i dont think this closure is necessary ¯\_(ツ)_/¯
@@ -607,18 +608,23 @@ func (p *MinQueriesPlanner) wrapSelectionSet(ctx *PlanningContext, config *extra
 }
 
 // selects one location out of possibleLocations, prioritizing the parent's location and the internal schema
-func (p *MinQueriesPlanner) selectLocation(ctx *PlanningContext, fieldName string, possibleLocations []string, config *extractSelectionConfig) string {
+func (p *MinQueriesPlanner) selectLocation(ctx *PlanningContext, fieldName string, possibleLocations []string, config *extractSelectionConfig) (string, error) {
 	// if this field can only be found in one location
 	if len(possibleLocations) == 1 {
-		return possibleLocations[0]
+		return possibleLocations[0], nil
 	}
 	// the field can be found in many locations
 
 	// locations to prioritize first
-	initialLocationPriorities := []string{config.parentLocation, internalSchemaLocation}
-	priorities := make([]string, len(p.LocationPriorities), len(p.LocationPriorities)+len(initialLocationPriorities))
-	copy(priorities, p.LocationPriorities)
-	priorities = append(priorities, initialLocationPriorities...)
+	var priorities []string
+	priorities = append(priorities, p.LocationPriorities...)
+	exclusiveChildSelections, err := findSmallestLocationIntersection(config.step.FragmentDefinitions, config.locations, config.selection)
+	if err != nil {
+		return "", err
+	}
+	ctx.Gateway.logger.Info("exclusive priorities:", exclusiveChildSelections)
+	priorities = append(priorities, exclusiveChildSelections.ToSlice()...)
+	priorities = append(priorities, config.parentLocation, internalSchemaLocation)
 
 	for _, priority := range priorities {
 		// look to see if the current location is one of the possible locations
@@ -626,7 +632,7 @@ func (p *MinQueriesPlanner) selectLocation(ctx *PlanningContext, fieldName strin
 			// if the location is the same as the parent
 			if location == priority {
 				// assign this field to the parents entry
-				return priority
+				return priority, nil
 			}
 		}
 	}
@@ -634,7 +640,7 @@ func (p *MinQueriesPlanner) selectLocation(ctx *PlanningContext, fieldName strin
 	// if we got here then this field can be found in multiple services and none of the top priority locations.
 	// for now, just use the first one
 	ctx.Gateway.logger.WithFields(LoggerFields{"locations": possibleLocations, "field": fmt.Sprintf("%s.%s", config.parentType, fieldName)}).Debug("Multiple locations available for field, but none have priority; arbitrarily selecting first one")
-	return possibleLocations[0]
+	return possibleLocations[0], nil
 }
 
 func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extractSelectionConfig) (map[string]ast.SelectionSet, map[string]ast.FragmentDefinitionList, error) {
@@ -664,7 +670,10 @@ func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extr
 				return nil, nil, err
 			}
 
-			location := p.selectLocation(ctx, selection.Name, possibleLocations, config)
+			location, err := p.selectLocation(ctx, selection.Name, possibleLocations, config)
+			if err != nil {
+				return nil, nil, err
+			}
 			locationFields[location] = append(locationFields[location], field)
 		case *ast.FragmentSpread:
 			ctx.Gateway.logger.Debug("Encountered fragment spread ", selection.Name)
@@ -705,7 +714,10 @@ func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extr
 						return nil, nil, err
 					}
 
-					fieldLocation := p.selectLocation(ctx, field.Name, fieldLocations, config)
+					fieldLocation, err := p.selectLocation(ctx, field.Name, fieldLocations, config)
+					if err != nil {
+						return nil, nil, err
+					}
 					fragmentLocations[fieldLocation] = append(fragmentLocations[fieldLocation], field)
 
 				case *ast.FragmentSpread, *ast.InlineFragment:

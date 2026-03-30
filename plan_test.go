@@ -1236,8 +1236,9 @@ func TestPlanQuery_nodeFieldOnlyRequestedFromOwningService(t *testing.T) {
 	t.Parallel()
 	locations := FieldURLMap{}
 	locations.RegisterURL(typeNameQuery, "node", "url1", "url2") // url1 can resolve Foos, but not Bars. MUST NOT receive a request for Bars.
-	locations.RegisterURL("Foo", "id", "url1")                   // Foos resolvable by url1
-	locations.RegisterURL("Bar", "id", "url2")                   // Bars resolvable by url2
+	locations.RegisterURL("Node", "id", "url1", "url2")
+	locations.RegisterURL("Foo", "id", "url1") // Foos resolvable by url1
+	locations.RegisterURL("Bar", "id", "url2") // Bars resolvable by url2
 
 	schema, err := graphql.LoadSchema(`
 		interface Node {
@@ -1342,24 +1343,18 @@ func TestPlanQuery_nodeFieldFromOnlyOneSchema(t *testing.T) {
 	assert.Equal(t, "url2", queryer.URL())
 	assert.Empty(t, step.Then)
 
-	// the url2 step should have Node as the parent type
-	assert.Equal(t, "Node", step.ParentType)
-	// there should be one selection set
-	if !assert.Len(t, step.SelectionSet, 1) {
-		return
-	}
+	assert.Equal(t, "Query", step.ParentType)
 
-	// it should be an inline fragment on User
-	inlineFragment, ok := step.SelectionSet[0].(*ast.InlineFragment)
-	if !assert.True(t, ok) {
-		return
-	}
+	require.Len(t, step.SelectionSet, 1)
+	nodeField, ok := step.SelectionSet[0].(*ast.Field)
+	require.True(t, ok)
+	assert.Equal(t, "node", nodeField.Name)
+
+	require.Len(t, nodeField.SelectionSet, 1)
+	inlineFragment, ok := nodeField.SelectionSet[0].(*ast.InlineFragment)
+	require.True(t, ok)
 	assert.Equal(t, "User", inlineFragment.TypeCondition)
-
-	// with one selection set: firstName
-	if !assert.Len(t, inlineFragment.SelectionSet, 1) {
-		return
-	}
+	require.Len(t, inlineFragment.SelectionSet, 1)
 	assert.Equal(t, "firstName", graphql.SelectedFields(inlineFragment.SelectionSet)[0].Name)
 }
 
