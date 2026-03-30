@@ -1162,21 +1162,15 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	logPlans(t, plans)
 
 	// we should return only one plan
-	if !assert.Len(t, plans, 1) {
-		return
-	}
+	require.Len(t, plans, 1)
 
 	// this plan should have 1 step that should hit the internal API
-	if !assert.Len(t, plans[0].RootStep.Then, 1, "incorrect number of steps in plan") ||
-		!assert.IsType(t, &Gateway{}, plans[0].RootStep.Then[0].Queryer, "first step does not go to the internal API") {
-		return
-	}
+	require.Len(t, plans[0].RootStep.Then, 1, "incorrect number of steps in plan")
+	require.IsType(t, &Gateway{}, plans[0].RootStep.Then[0].Queryer, "first step does not go to the internal API")
 	internalStep := plans[0].RootStep.Then[0]
 
 	// the step should have 2 after it
-	if !assert.Len(t, internalStep.Then, 2) {
-		return
-	}
+	require.Len(t, internalStep.Then, 2)
 
 	// grab the 2 steps
 	var url1Step *QueryPlanStep
@@ -1188,9 +1182,8 @@ func TestPlanQuery_nodeField(t *testing.T) {
 			url2Step = step
 		}
 	}
-	if !assert.NotNil(t, url1Step) || !assert.NotNil(t, url2Step) {
-		return
-	}
+	require.NotNil(t, url1Step)
+	require.NotNil(t, url2Step)
 
 	t.Run("Url1 Step", func(t *testing.T) {
 		t.Parallel()
