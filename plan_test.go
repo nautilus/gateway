@@ -1792,3 +1792,80 @@ func TestPlanQuery_scrubWithAlias(t *testing.T) {
 	assert.Equal(t, "allUsers", firstField.Name)
 	assert.Equal(t, "users", firstField.Alias)
 }
+
+// TestPlanQuery_fragmentSpreadNoDuplicateSteps verifies that a fragment spread
+// mixing fields from two services does not produce duplicate plan steps.
+//
+// When a fragment is used inside a nested field (not at the query root),
+// groupSelectionSet splits it by location and creates a child step for the
+// remote service's fields. The main processing loop must then use the
+// location-filtered fragment definition — not the original plan-level fragment
+// which still contains ALL fields. Without this, extractSelection re-discovers
+// the remote fields and creates a second, identical step.
+func TestPlanQuery_fragmentSpreadNoDuplicateSteps(t *testing.T) {
+	t.Parallel()
+
+	// Service A owns Wrapper.item and Item.name.
+	// Service B owns Item.extra.
+	// A fragment on Item mixes fields from both services.
+	// The bug: when the fragment is used inside a nested field (Wrapper.item),
+	// the planner created two identical steps for service B.
+	schemaA, err := graphql.LoadSchema(`
+		interface Node { id: ID! }
+		type Item implements Node { id: ID! name: String }
+		type Wrapper { item: Item }
+		type Query { node(id: ID!): Node  wrappers: [Wrapper!]! }
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	schemaB, err := graphql.LoadSchema(`
+		interface Node { id: ID! }
+		type Item implements Node { id: ID! extra: String }
+		type Query { node(id: ID!): Node }
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gw, err := New([]*graphql.RemoteSchema{
+		{Schema: schemaA, URL: "A"},
+		{Schema: schemaB, URL: "B"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plans, err := gw.planner.Plan(&PlanningContext{
+		Query: `
+			query {
+				wrappers {
+					item { ...frag }
+				}
+			}
+			fragment frag on Item { name extra }
+		`,
+		Schema:    gw.schema,
+		Locations: gw.fieldURLs,
+		Gateway:   gw,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Count every step that targets service B across the entire plan tree.
+	var countB int
+	var walk func(s *QueryPlanStep)
+	walk = func(s *QueryPlanStep) {
+		if q, ok := s.Queryer.(*graphql.SingleRequestQueryer); ok && q.URL() == "B" {
+			countB++
+		}
+		for _, c := range s.Then {
+			walk(c)
+		}
+	}
+	walk(plans[0].RootStep)
+
+	assert.Equal(t, 1, countB, "expected exactly 1 step for service B, got %d", countB)
+}

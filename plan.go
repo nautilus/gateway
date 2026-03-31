@@ -385,6 +385,20 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 		locationFields[config.parentLocation] = append(locationFields[config.parentLocation], &ast.Field{Name: "id"})
 	}
 
+	// Register the parent location's fragment definitions on the step BEFORE
+	// processing currentLocationFields. Without this, the FragmentSpread case
+	// (line ~470) falls back to config.plan.FragmentDefinitions which contains
+	// the FULL original fragment — including fields that were already split off
+	// to other locations in groupSelectionSet above. That causes duplicate child
+	// steps for those other locations.
+	if parentFrags, ok := locationFragments[config.parentLocation]; ok {
+		for _, frag := range parentFrags {
+			if existing := config.step.FragmentDefinitions.ForName(frag.Name); existing == nil {
+				config.step.FragmentDefinitions = append(config.step.FragmentDefinitions, frag)
+			}
+		}
+	}
+
 	// now we have to generate a selection set for fields that are coming from the same location as the parent
 	currentLocationFields, ok := locationFields[config.parentLocation]
 	if !ok {
