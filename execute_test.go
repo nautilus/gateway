@@ -809,36 +809,40 @@ func TestExecutor_insertIntoInlineFragment(t *testing.T) {
 	// 	   }
 	//  }
 	// }
-	plan := &QueryPlan{
-		RootStep: &QueryPlanStep{
-			Then: []*QueryPlanStep{
-				// a query to satisfy photo.createdBy.firstName
-				{
-					ParentType:     typeNameQuery,
-					InsertionPoint: []string{},
-					SelectionSet: ast.SelectionSet{
-						&ast.Field{
-							Alias: "photo",
-							Name:  "photo",
-							Definition: &ast.FieldDefinition{
-								Type: ast.NamedType("Photo", &ast.Position{}),
-							},
-							SelectionSet: ast.SelectionSet{
-								&ast.InlineFragment{
-									TypeCondition: "Photo",
-									SelectionSet: ast.SelectionSet{
-										&ast.Field{
-											Name: "createdBy",
-											Definition: &ast.FieldDefinition{
+	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
+		logger:         &DefaultLogger{},
+		RequestContext: context.Background(),
+		Plan: &QueryPlan{
+			RootStep: &QueryPlanStep{
+				Then: []*QueryPlanStep{
+					// a query to satisfy photo.createdBy.firstName
+					{
+						ParentType:     typeNameQuery,
+						InsertionPoint: []string{},
+						SelectionSet: ast.SelectionSet{
+							&ast.Field{
+								Alias: "photo",
+								Name:  "photo",
+								Definition: &ast.FieldDefinition{
+									Type: ast.NamedType("Photo", &ast.Position{}),
+								},
+								SelectionSet: ast.SelectionSet{
+									&ast.InlineFragment{
+										TypeCondition: "Photo",
+										SelectionSet: ast.SelectionSet{
+											&ast.Field{
 												Name: "createdBy",
-												Type: ast.NamedType("User", &ast.Position{}),
-											},
-											SelectionSet: ast.SelectionSet{
-												&ast.Field{
-													Name: "firstName",
-													Definition: &ast.FieldDefinition{
+												Definition: &ast.FieldDefinition{
+													Name: "createdBy",
+													Type: ast.NamedType("User", &ast.Position{}),
+												},
+												SelectionSet: ast.SelectionSet{
+													&ast.Field{
 														Name: "firstName",
-														Type: ast.NamedType("String", &ast.Position{}),
+														Definition: &ast.FieldDefinition{
+															Name: "firstName",
+															Type: ast.NamedType("String", &ast.Position{}),
+														},
 													},
 												},
 											},
@@ -847,51 +851,45 @@ func TestExecutor_insertIntoInlineFragment(t *testing.T) {
 								},
 							},
 						},
-					},
-					Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
-						"photo": map[string]interface{}{
-							"createdBy": map[string]interface{}{
-								"firstName": "John",
-								"id":        "1",
+						Queryer: &graphql.MockSuccessQueryer{Value: map[string]interface{}{
+							"photo": map[string]interface{}{
+								"createdBy": map[string]interface{}{
+									"firstName": "John",
+									"id":        "1",
+								},
 							},
-						},
-					}},
-					Then: []*QueryPlanStep{
-						// a query to satisfy User.address
-						{
-							ParentType:     "User",
-							InsertionPoint: []string{"photo", "createdBy"}, // photo is the query name here
-							SelectionSet: ast.SelectionSet{
-								&ast.Field{
-									Name: "address",
-									Definition: &ast.FieldDefinition{
+						}},
+						Then: []*QueryPlanStep{
+							// a query to satisfy User.address
+							{
+								ParentType:     "User",
+								InsertionPoint: []string{"photo", "createdBy"}, // photo is the query name here
+								SelectionSet: ast.SelectionSet{
+									&ast.Field{
 										Name: "address",
-										Type: ast.NamedType("String", &ast.Position{}),
+										Definition: &ast.FieldDefinition{
+											Name: "address",
+											Type: ast.NamedType("String", &ast.Position{}),
+										},
 									},
 								},
+								Queryer: graphql.QueryerFunc(
+									func(input *graphql.QueryInput) (interface{}, error) {
+										assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+										// make sure that we got the right variable inputs
+										return map[string]interface{}{
+											"node": map[string]interface{}{
+												"address": "addressValue",
+											},
+										}, nil
+									},
+								),
 							},
-							Queryer: graphql.QueryerFunc(
-								func(input *graphql.QueryInput) (interface{}, error) {
-									assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
-									// make sure that we got the right variable inputs
-									return map[string]interface{}{
-										"node": map[string]interface{}{
-											"address": "addressValue",
-										},
-									}, nil
-								},
-							),
 						},
 					},
 				},
 			},
 		},
-	}
-	logPlans(t, plan)
-	result, err := (&ParallelExecutor{}).Execute(&ExecutionContext{
-		logger:         &DefaultLogger{},
-		RequestContext: context.Background(),
-		Plan:           plan,
 	})
 	if err != nil {
 		t.Errorf("Encountered error execluting plan: %v", err.Error())
@@ -2135,7 +2133,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, &result, startingPoint, nil)
+	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -2194,7 +2192,7 @@ func TestFindObject(t *testing.T) {
 		},
 	}
 
-	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, &source, &sync.Mutex{}, []string{"hello:0", "friends:1", "friends:0"}, false)
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello:0", "friends:1", "friends:0"})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -2235,7 +2233,7 @@ func TestFindString(t *testing.T) {
 		},
 	}
 
-	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, &source, &sync.Mutex{}, []string{"hello:0", "friends:1", "firstName"}, false)
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello:0", "friends:1", "firstName"})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -2253,7 +2251,7 @@ func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
 	inserted := map[string]interface{}{"hello": "world"}
 
 	// insert the string deeeeep down
-	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, &source, &sync.Mutex{}, []string{"hello:5#1", "message", "body:2"}, inserted)
+	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello:5#1", "message", "body:2"}, inserted)
 	if err != nil {
 		t.Error(err)
 		return
@@ -2333,7 +2331,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 	}
 
 	// insert the object deeeeep down
-	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, &source, &sync.Mutex{}, []string{"hello", "objects:5"}, inserted)
+	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello", "objects:5"}, inserted)
 	if err != nil {
 		t.Error(err)
 		return
@@ -2431,7 +2429,7 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, &result, [][]string{}, nil)
+	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, [][]string{}, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -2508,7 +2506,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, &result, startingPoint, nil)
+	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -2531,7 +2529,7 @@ func TestSingleObjectWithColonInID(t *testing.T) {
 		&source,
 	)
 
-	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, &source, &sync.Mutex{}, []string{"hello#Thing:1337"}, false)
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello#Thing:1337"})
 	if err != nil {
 		t.Error(err.Error())
 		return

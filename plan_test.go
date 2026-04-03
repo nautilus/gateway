@@ -11,7 +11,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
-func logPlans(tb testing.TB, plans ...*QueryPlan) {
+func logPlans(tb testing.TB, plans []*QueryPlan) {
 	tb.Helper()
 	tb.Log(dumpPlans(plans))
 }
@@ -53,10 +53,6 @@ func dumpPlanSteps(steps []*QueryPlanStep) string {
 			kind = queryer.URL()
 		case *Gateway:
 			kind = "internal"
-		case graphql.QueryerFunc:
-			kind = "func"
-		case *graphql.MockSuccessQueryer:
-			kind = "mock"
 		}
 		builder.WriteString(fmt.Sprintf("then step %d (%s):\n", index, kind))
 		builder.WriteString(addIndent(dumpPlanStep(*step)))
@@ -66,13 +62,9 @@ func dumpPlanSteps(steps []*QueryPlanStep) string {
 }
 
 func dumpPlanStep(step QueryPlanStep) string {
-	queryString := step.QueryString
-	if queryString == "" {
-		queryString = graphql.FormatSelectionSet(step.SelectionSet)
-	}
 	return fmt.Sprintf(`(parent: %s)
 %v
-`, step.ParentType, strings.ReplaceAll(queryString, "\t", dumpIndent))
+`, step.ParentType, strings.ReplaceAll(step.QueryString, "\t", dumpIndent))
 }
 
 func TestPlanQuery_singleRootField(t *testing.T) {
@@ -1174,7 +1166,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 		t.Error(err.Error())
 		return
 	}
-	logPlans(t, plans...)
+	logPlans(t, plans)
 
 	// we should return only one plan
 	require.Len(t, plans, 1)
@@ -1245,6 +1237,137 @@ func TestPlanQuery_nodeField(t *testing.T) {
 		}
 		assert.Equal(t, "lastName", graphql.SelectedFields(inlineFragment.SelectionSet)[0].Name)
 	})
+}
+
+func TestPlanQuery_nodeFieldOnlyRequestedFromOwningService(t *testing.T) {
+	t.Parallel()
+	locations := FieldURLMap{}
+	locations.RegisterURL(typeNameQuery, "node", "url1", "url2") // url1 can resolve Foos, but not Bars. MUST NOT receive a request for Bars.
+	locations.RegisterURL("Foo", "id", "url1")                   // Foos resolvable by url1
+	locations.RegisterURL("Bar", "id", "url2")                   // Bars resolvable by url2
+
+	schema, err := graphql.LoadSchema(`
+		interface Node {
+			id: ID!
+		}
+		type Query {
+			node(id: ID!): Node
+		}
+
+		type Foo implements Node {  # Only registered to url1
+			id: ID!
+		}
+		type Bar implements Node {  # Only registered to url2
+			id: ID!
+		}
+	`)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query($id: ID!) {
+				node(id: $id) {
+					... on Bar {
+						id
+					}
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	logPlans(t, plans)
+	require.Len(t, plans, 1)
+
+	// this plan should have 1 step that only hits url2
+	require.Len(t, plans[0].RootStep.Then, 1, "incorrect number of steps in plan")
+	step := plans[0].RootStep.Then[0]
+	require.IsType(t, &graphql.SingleRequestQueryer{}, step.Queryer, "first step must go to url2")
+	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, "url2", queryer.URL())
+	assert.Empty(t, step.Then)
+}
+
+func TestPlanQuery_nodeFieldFromOnlyOneSchema(t *testing.T) {
+	t.Parallel()
+	locations := FieldURLMap{}
+	locations.RegisterURL("User", "id", "url1", "url2") // Should not request url1 when same id field can be resolved by url2.
+	locations.RegisterURL(typeNameQuery, "node", "url1", "url2")
+	locations.RegisterURL("User", "firstName", "url2")
+
+	schema, err := graphql.LoadSchema(`
+		interface Node {
+			id: ID!
+		}
+
+		type User implements Node {
+			id: ID!             # Both url1 and url2
+			firstName: String!  # Only url2.
+		}
+
+		type Query {
+			node(id: ID!): Node
+		}
+	`)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query($id: ID!) {
+				node(id: $id) {
+					... on User {
+						firstName
+					}
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
+	})
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	logPlans(t, plans)
+	require.Len(t, plans, 1)
+
+	// this plan should have 1 step that only hits url2
+	require.Len(t, plans[0].RootStep.Then, 1, "incorrect number of steps in plan")
+	step := plans[0].RootStep.Then[0]
+	require.IsType(t, &graphql.SingleRequestQueryer{}, step.Queryer, "first step must go to url2")
+	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, "url2", queryer.URL())
+	assert.Empty(t, step.Then)
+
+	// the url2 step should have Node as the parent type
+	assert.Equal(t, "Node", step.ParentType)
+	// there should be one selection set
+	if !assert.Len(t, step.SelectionSet, 1) {
+		return
+	}
+
+	// it should be an inline fragment on User
+	inlineFragment, ok := step.SelectionSet[0].(*ast.InlineFragment)
+	if !assert.True(t, ok) {
+		return
+	}
+	assert.Equal(t, "User", inlineFragment.TypeCondition)
+
+	// with one selection set: firstName
+	if !assert.Len(t, inlineFragment.SelectionSet, 1) {
+		return
+	}
+	assert.Equal(t, "firstName", graphql.SelectedFields(inlineFragment.SelectionSet)[0].Name)
 }
 
 func TestPlanQuery_stepVariables(t *testing.T) {
