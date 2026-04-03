@@ -113,7 +113,7 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 					}
 
 					// find the id of the entity
-					_, err := qField.Resolver(ctx, args)
+					id, err := qField.Resolver(ctx, args)
 					if err != nil {
 						return &graphql.Error{
 							Message: err.Error(),
@@ -122,7 +122,14 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 					}
 
 					// assign a null 'node' to the response
-					result[field.Alias] = nil
+					node := map[string]any{"id": id}
+					result[field.Alias] = executeResult(&node)
+					if len(field.SelectionSet) == 1 {
+						if subField, isField := field.SelectionSet[0].(*ast.Field); isField && subField.Name == "id" {
+							// TODO should this fail with an error instead? We don't actually know this node exists.
+							// TODO also consider existing code out there with their own Gateway ID resolver, custom resolvers should keep working
+						}
+					}
 				}
 			}
 		}
