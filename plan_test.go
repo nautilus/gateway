@@ -6,6 +6,7 @@ import (
 
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
@@ -1791,4 +1792,142 @@ func TestPlanQuery_scrubWithAlias(t *testing.T) {
 	firstField := graphql.SelectedFields(firstStep.SelectionSet)[0]
 	assert.Equal(t, "allUsers", firstField.Name)
 	assert.Equal(t, "users", firstField.Alias)
+}
+
+func TestPlanQuery_inlineFragmentFieldsRespectParentLocation(t *testing.T) {
+	t.Parallel()
+
+	authServiceURL := "http://auth-service:8081/graphql"
+	mozartURL := "http://mozart:80"
+
+	schema, err := graphql.LoadSchema(`
+		type Mutation {
+			createUser(data: CreateUserInput!): CreateUserResult!
+			login(login: String!, password: String!, deviceId: String!): AuthToken
+		}
+
+		type Query {
+			node(id: ID!): Node
+		}
+
+		interface Node {
+			id: ID!
+		}
+
+		interface Error {
+			message: String!
+		}
+
+		type AuthToken implements Node {
+			id: ID!
+			token: String!
+			deviceId: String!
+			issued: String!
+			user: User!
+		}
+
+		type User implements Node {
+			id: ID!
+		}
+
+		input CreateUserInput {
+			email: String!
+			password: String
+		}
+
+		union CreateUserResult = AuthToken | CreateUserAlreadyExistsError | CreateUserInputValidationError
+
+		type CreateUserAlreadyExistsError implements Error {
+			message: String!
+			isActive: Boolean!
+		}
+
+		type CreateUserInputValidationError implements Error {
+			message: String!
+			emailErrors: [String!]!
+			passwordErrors: [String!]!
+		}
+	`)
+	require.NoError(t, err)
+
+	locations := FieldURLMap{}
+
+	locations.RegisterURL(typeNameMutation, "login", authServiceURL)
+	locations.RegisterURL("AuthToken", "id", authServiceURL)
+	locations.RegisterURL("AuthToken", "token", authServiceURL)
+	locations.RegisterURL("AuthToken", "deviceId", authServiceURL)
+	locations.RegisterURL("AuthToken", "issued", authServiceURL)
+	locations.RegisterURL("AuthToken", "user", authServiceURL)
+	locations.RegisterURL("AuthToken", "__typename", authServiceURL)
+	locations.RegisterURL("User", "id", authServiceURL)
+	locations.RegisterURL("User", "__typename", authServiceURL)
+	locations.RegisterURL("Node", "id", authServiceURL)
+	locations.RegisterURL("Node", "__typename", authServiceURL)
+	locations.RegisterURL("Error", "message", authServiceURL)
+	locations.RegisterURL("Error", "__typename", authServiceURL)
+	locations.RegisterURL(typeNameQuery, "node", authServiceURL)
+
+	locations.RegisterURL(typeNameMutation, "createUser", mozartURL)
+	locations.RegisterURL(typeNameMutation, "login", mozartURL)
+	locations.RegisterURL("AuthToken", "id", mozartURL)
+	locations.RegisterURL("AuthToken", "token", mozartURL)
+	locations.RegisterURL("AuthToken", "deviceId", mozartURL)
+	locations.RegisterURL("AuthToken", "issued", mozartURL)
+	locations.RegisterURL("AuthToken", "user", mozartURL)
+	locations.RegisterURL("AuthToken", "__typename", mozartURL)
+	locations.RegisterURL("User", "id", mozartURL)
+	locations.RegisterURL("User", "__typename", mozartURL)
+	locations.RegisterURL("Node", "id", mozartURL)
+	locations.RegisterURL("Node", "__typename", mozartURL)
+	locations.RegisterURL("Error", "message", mozartURL)
+	locations.RegisterURL("Error", "__typename", mozartURL)
+	locations.RegisterURL("CreateUserResult", "__typename", mozartURL)
+	locations.RegisterURL("CreateUserAlreadyExistsError", "message", mozartURL)
+	locations.RegisterURL("CreateUserAlreadyExistsError", "isActive", mozartURL)
+	locations.RegisterURL("CreateUserAlreadyExistsError", "__typename", mozartURL)
+	locations.RegisterURL("CreateUserInputValidationError", "message", mozartURL)
+	locations.RegisterURL("CreateUserInputValidationError", "emailErrors", mozartURL)
+	locations.RegisterURL("CreateUserInputValidationError", "passwordErrors", mozartURL)
+	locations.RegisterURL("CreateUserInputValidationError", "__typename", mozartURL)
+	locations.RegisterURL(typeNameQuery, "node", mozartURL)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			mutation CreateUser($data: CreateUserInput!) {
+				createUser(data: $data) {
+					... on AuthToken {
+						id
+						token
+						deviceId
+						issued
+						user {
+							id
+						}
+					}
+					... on CreateUserAlreadyExistsError {
+						message
+						isActive
+					}
+					... on CreateUserInputValidationError {
+						message
+						emailErrors
+						passwordErrors
+					}
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
+	})
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+
+	rootSteps := plans[0].RootStep.Then
+	require.Len(t, rootSteps, 1, "should have exactly one root step")
+
+	step := rootSteps[0]
+	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
+	assert.Equal(t, mozartURL, queryer.URL(), "createUser mutation should be routed to Mozart")
+	assert.Empty(t, step.Then, "should have no dependent sub-steps — all fields should stay on Mozart")
 }
