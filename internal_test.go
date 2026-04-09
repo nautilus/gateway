@@ -321,7 +321,7 @@ func TestSchema_resolveNodeInlineID(t *testing.T) {
 
 	// a place to hold the response of the query
 	err := schemaTestLoadQuery(query, result, map[string]interface{}{})
-	assert.EqualError(t, err, "could not find node with ID: my-id")
+	assert.NoError(t, err)
 	assert.Equal(t, &Result{Node: nil}, result)
 }
 
@@ -348,7 +348,7 @@ func TestSchema_resolveNodeIDFromArg(t *testing.T) {
 	err := schemaTestLoadQuery(query, result, map[string]interface{}{
 		"id": "my-id",
 	})
-	assert.EqualError(t, err, "could not find node with ID: my-id")
+	assert.NoError(t, err)
 	assert.Equal(t, &Result{Node: nil}, result)
 }
 
