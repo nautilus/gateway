@@ -123,6 +123,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 					if errors.As(err, &errList) {
 						errs = append(errs, errList...)
 					} else {
+						ctx.logger.Warn("Unexpected error type executing query plan step: ", err)
 						errs = append(errs, err)
 					}
 					errMutex.Unlock()
