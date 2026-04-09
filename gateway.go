@@ -324,6 +324,7 @@ func makeNodeField() *QueryField {
 			}
 			return idStr, nil
 		},
+		ResolveToNull: true,
 	}
 }
 
