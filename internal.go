@@ -97,7 +97,7 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 		default:
 
 			// look for the right field
-			for _, qField := range g.queryFields {
+			for qIndex, qField := range g.queryFields {
 				if field.Name == qField.Name {
 					// consolidate the arguments in something that's easy to use
 					args := map[string]interface{}{}
@@ -113,16 +113,18 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 					}
 
 					// find the id of the entity
-					_, err := qField.Resolver(ctx, args)
+					id, err := qField.Resolver(ctx, args)
 					if err != nil {
 						return &graphql.Error{
 							Message: err.Error(),
 							Path:    []interface{}{field.Alias},
 						}
 					}
-
-					// assign a null 'node' to the response
-					result[field.Alias] = nil
+					if qIndex == 0 { // TODO find some better identifier, maybe internal field
+						result[field.Alias] = nil
+					} else {
+						result[field.Alias] = map[string]any{"id": id}
+					}
 				}
 			}
 		}
