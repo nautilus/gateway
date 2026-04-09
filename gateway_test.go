@@ -988,29 +988,58 @@ type Foo implements Node {
 }
 `)
 	require.NoError(t, err)
-	const query = `
-		query($id: ID!) {
-			node(id: $id) {
-				... on Foo {
-					id
-					bar
+	const (
+		query = `
+			query($id: ID!) {
+				node(id: $id) {
+					... on Foo {
+						id
+						bar
+					}
 				}
 			}
-		}
-	`
-	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
+		`
+		fooURL = "foo"
+		barURL = "bar"
+	)
+	queryerFactory := QueryerFactory(func(_ *PlanningContext, url string) graphql.Queryer {
 		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
-			t.Log("Received request:", input.Query)
-			if !strings.Contains(input.Query, "bar") {
-				t.Error("Foo schema must not be called to resolve 'id', gateway already knows what the ID should be")
-				return nil, errors.New("must not be reached")
+			t.Log("Received request for", url, "service:", input.Query)
+			switch url {
+			case fooURL:
+				assert.Equal(t, strings.TrimSpace(`
+query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				id
 			}
-			return map[string]any{"node": map[string]any{"id": "id", "bar": "bar"}}, nil
+		}
+	}
+}
+`), strings.TrimSpace(input.Query), fooURL)
+				return map[string]any{"node": nil}, nil
+			case barURL:
+				assert.Equal(t, strings.TrimSpace(`
+query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				bar
+			}
+		}
+	}
+}
+`), strings.TrimSpace(input.Query), barURL)
+				return map[string]any{"node": nil}, nil
+			default:
+				return nil, &graphql.Error{Message: "must not be reached"}
+			}
 		})
 	})
 	gateway, err := New([]*graphql.RemoteSchema{
-		{Schema: schemaFoo, URL: "foo"},
-		{Schema: schemaBar, URL: "bar"},
+		{Schema: schemaFoo, URL: fooURL},
+		{Schema: schemaBar, URL: barURL},
 	}, WithQueryerFactory(&queryerFactory))
 	require.NoError(t, err)
 
