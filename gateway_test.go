@@ -1002,12 +1002,13 @@ type Foo implements Node {
 		fooURL = "foo"
 		barURL = "bar"
 	)
-	queryerFactory := QueryerFactory(func(_ *PlanningContext, url string) graphql.Queryer {
-		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
-			t.Log("Received request for", url, "service:", input.Query)
-			switch url {
-			case fooURL:
-				assert.Equal(t, strings.TrimSpace(`
+	makeQueryerFactory := func(t *testing.T, barResponse map[string]any) *QueryerFactory {
+		queryerFactory := QueryerFactory(func(_ *PlanningContext, url string) graphql.Queryer {
+			return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
+				t.Log("Received request for", url, "service:", input.Query)
+				switch url {
+				case fooURL:
+					assert.Equal(t, strings.TrimSpace(`
 query ($id: ID!) {
 	node(id: $id) {
 		... on Node {
@@ -1018,9 +1019,9 @@ query ($id: ID!) {
 	}
 }
 `), strings.TrimSpace(input.Query), fooURL)
-				return map[string]any{"node": nil}, nil
-			case barURL:
-				assert.Equal(t, strings.TrimSpace(`
+					return map[string]any{"node": nil}, nil
+				case barURL:
+					assert.Equal(t, strings.TrimSpace(`
 query ($id: ID!) {
 	node(id: $id) {
 		... on Node {
@@ -1031,27 +1032,54 @@ query ($id: ID!) {
 	}
 }
 `), strings.TrimSpace(input.Query), barURL)
-				return map[string]any{"node": nil}, nil
-			default:
-				return nil, &graphql.Error{Message: "must not be reached"}
-			}
+					return barResponse, nil
+				default:
+					return nil, &graphql.Error{Message: "must not be reached"}
+				}
+			})
 		})
-	})
-	gateway, err := New([]*graphql.RemoteSchema{
-		{Schema: schemaFoo, URL: fooURL},
-		{Schema: schemaBar, URL: barURL},
-	}, WithQueryerFactory(&queryerFactory))
-	require.NoError(t, err)
+		return &queryerFactory
+	}
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`{"query": %q, "variables": {"id":"foo"}}`, query)))
-	resp := httptest.NewRecorder()
-	gateway.GraphQLHandler(resp, req)
-	assert.Equal(t, http.StatusOK, resp.Code)
-	assert.JSONEq(t, `
-		{
+	reqBody := fmt.Sprintf(`{"query": %q, "variables": {"id":"foo"}}`, query)
+
+	t.Run("not found", func(t *testing.T) {
+		t.Parallel()
+		barResponse := map[string]any{"node": nil}
+		gateway, err := New([]*graphql.RemoteSchema{
+			{Schema: schemaFoo, URL: fooURL},
+			{Schema: schemaBar, URL: barURL},
+		}, WithQueryerFactory(makeQueryerFactory(t, barResponse)))
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
+		resp := httptest.NewRecorder()
+		gateway.GraphQLHandler(resp, req)
+		assert.Equal(t, http.StatusOK, resp.Code)
+		assert.JSONEq(t, `{
 			"data": {
 				"node": null
 			}
-		}
-	`, resp.Body.String())
+		}`, resp.Body.String())
+	})
+
+	t.Run("found", func(t *testing.T) {
+		t.Parallel()
+		barResponse := map[string]any{"node": map[string]any{"bar": "bar"}} // found
+		gateway, err := New([]*graphql.RemoteSchema{
+			{Schema: schemaFoo, URL: fooURL},
+			{Schema: schemaBar, URL: barURL},
+		}, WithQueryerFactory(makeQueryerFactory(t, barResponse)))
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
+		resp := httptest.NewRecorder()
+		gateway.GraphQLHandler(resp, req)
+		assert.Equal(t, http.StatusOK, resp.Code)
+		assert.JSONEq(t, `{
+			"data": {
+				"node": {
+					"bar": "bar"
+				}
+			}
+		}`, resp.Body.String())
+	})
 }
