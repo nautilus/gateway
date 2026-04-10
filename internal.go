@@ -39,11 +39,7 @@ type QueryField struct {
 	Name      string
 	Type      *ast.Type
 	Arguments ast.ArgumentDefinitionList
-	// ResolveToNull always resolve this Query field to null when true.
-	//
-	// For 'node(id: ID!): Node' resolvers, this defers object lookup to more authoritative (non-Gateway) resolvers.
-	ResolveToNull bool
-	Resolver      func(context.Context, map[string]interface{}) (string, error)
+	Resolver  func(context.Context, map[string]interface{}) (string, error)
 }
 
 // Query takes a query definition and writes the result to the receiver
@@ -124,11 +120,9 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 							Path:    []interface{}{field.Alias},
 						}
 					}
-					if qField.ResolveToNull {
-						result[field.Alias] = nil
-					} else {
-						result[field.Alias] = map[string]any{"id": id}
-					}
+
+					// assign the id to the response
+					result[field.Alias] = map[string]interface{}{"id": id}
 				}
 			}
 		}
