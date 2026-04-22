@@ -309,6 +309,7 @@ func makeNodeField() *QueryField {
 				Type: ast.NonNullNamedType("ID", &ast.Position{}),
 			},
 		},
+		// WeakObject: true,
 		Resolver: func(_ context.Context, args map[string]interface{}) (string, error) {
 			id := args["id"]
 			if id == nil {

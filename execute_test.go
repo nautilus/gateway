@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"testing"
 
+	"github.com/nautilus/gateway/internal/execresult"
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -2085,7 +2085,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 	}
 
 	// the result of the step
-	result := map[string]interface{}{
+	result := execresult.MustNewObjectFromMap(map[string]interface{}{
 		"users": []interface{}{
 			map[string]interface{}{
 				"photoGallery": []interface{}{
@@ -2131,9 +2131,9 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
-	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
+	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -2145,7 +2145,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 func TestFindObject(t *testing.T) {
 	t.Parallel()
 	// create an object we want to extract
-	source := map[string]interface{}{
+	source := execresult.MustNewObjectFromMap(map[string]interface{}{
 		"hello": []interface{}{
 			map[string]interface{}{
 				"firstName": "0",
@@ -2190,9 +2190,9 @@ func TestFindObject(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
-	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello:0", "friends:1", "friends:0"})
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, []string{"hello:0", "friends:1", "friends:0"})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -2200,176 +2200,112 @@ func TestFindObject(t *testing.T) {
 
 	assert.Equal(t, map[string]interface{}{
 		"firstName": "Hello2",
-	}, value)
-}
-
-func TestFindString(t *testing.T) {
-	t.Parallel()
-	// create an object we want to extract
-	source := map[string]interface{}{
-		"hello": []interface{}{
-			map[string]interface{}{
-				"firstName": "0",
-				"friends": []interface{}{
-					map[string]interface{}{
-						"firstName": "2",
-					},
-					map[string]interface{}{
-						"firstName": "3",
-					},
-				},
-			},
-			map[string]interface{}{
-				"firstName": "4",
-				"friends": []interface{}{
-					map[string]interface{}{
-						"firstName": "5",
-					},
-					map[string]interface{}{
-						"firstName": "6",
-					},
-				},
-			},
-		},
-	}
-
-	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello:0", "friends:1", "firstName"})
-	if err != nil {
-		t.Error(err.Error())
-		return
-	}
-
-	assert.Equal(t, "3", value)
+	}, value.ToMap())
 }
 
 func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
 	t.Parallel()
 	// the object to mutate
-	source := map[string]interface{}{}
+	source := execresult.NewObject()
 
 	// the object to insert
 	inserted := map[string]interface{}{"hello": "world"}
+	insertedObj := execresult.MustNewObjectFromMap(inserted)
 
 	// insert the string deeeeep down
-	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello:5#1", "message", "body:2"}, inserted)
+	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, []string{"hello:5#1", "message", "body:2"}, insertedObj)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
 	// there should be a list under the key "hello"
-	rootList, ok := source["hello"]
+	list, ok := source.GetList("hello")
 	if !ok {
 		t.Error("Did not add root list")
 		return
 	}
-	list, ok := rootList.([]interface{})
-	if !ok {
-		t.Error("root list is not a list")
-		return
-	}
 
-	if len(list) != 6 {
+	if list.Length() != 6 {
 		t.Errorf("Root list did not have enough entries.")
-		assert.Equal(t, 6, len(list))
+		assert.Equal(t, 6, list.Length())
 		return
 	}
 
-	entry, ok := list[5].(map[string]interface{})
+	entry, ok := list.GetObjectAtIndex(5)
 	if !ok {
 		t.Error("6th entry wasn't an object")
 		return
 	}
 
 	// the object we care about is index 5
-	message := entry["message"]
-	if message == nil {
+	message, ok := entry.GetObject("message")
+	if message == nil || !ok {
 		t.Error("Did not add message to object")
 		return
 	}
 
-	msgObj, ok := message.(map[string]interface{})
-	if !ok {
-		t.Error("message is not a list")
-		return
-	}
-
 	// there should be a list under it called body
-	bodiesList, ok := msgObj["body"]
+	bodies, ok := message.GetList("body")
 	if !ok {
 		t.Error("Did not add body list")
 		return
 	}
-	bodies, ok := bodiesList.([]interface{})
-	if !ok {
-		t.Error("bodies list is not a list")
-		return
-	}
 
-	if len(bodies) != 3 {
+	if bodies.Length() != 3 {
 		t.Error("bodies list did not have enough entries")
 		return
 	}
-	body, ok := bodies[2].(map[string]interface{})
+	body, ok := bodies.GetObjectAtIndex(2)
 	if !ok {
 		t.Error("Body was not an object")
 		return
 	}
 
 	// make sure that the value is what we expect
-	assert.Equal(t, inserted, body)
+	assert.Equal(t, inserted, body.ToMap())
 }
 
 func TestExecutorInsertObject_insertListElements(t *testing.T) {
 	t.Parallel()
 	// the object to mutate
-	source := map[string]interface{}{}
+	source := execresult.NewObject()
 
 	// the object to insert
 	inserted := map[string]interface{}{
 		"hello": "world",
 	}
+	insertedObj := execresult.MustNewObjectFromMap(inserted)
 
 	// insert the object deeeeep down
-	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello", "objects:5"}, inserted)
+	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, []string{"hello", "objects:5"}, insertedObj)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
 	// there should be an object under the key "hello"
-	rootEntry, ok := source["hello"]
+	root, ok := source.GetObject("hello")
 	if !ok {
 		t.Error("Did not add root entry")
 		return
 	}
 
-	root, ok := rootEntry.(map[string]interface{})
-	if !ok {
-		t.Error("root object is not an object")
-		return
-	}
-
-	rootList, ok := root["objects"]
+	list, ok := root.GetList("objects")
 	if !ok {
 		t.Error("did not add objects list")
 		return
 	}
 
-	list, ok := rootList.([]interface{})
-	if !ok {
-		t.Error("objects is not a list")
-		return
-	}
-
-	if len(list) != 6 {
+	if list.Length() != 6 {
 		t.Errorf("Root list did not have enough entries.")
-		assert.Equal(t, 6, len(list))
+		assert.Equal(t, 6, list.Length())
 		return
 	}
 
 	// make sure that the value is what we expect
-	assert.Equal(t, inserted, list[5])
+	actualInserted, _ := list.GetObjectAtIndex(5)
+	assert.Equal(t, inserted, actualInserted.ToMap())
 }
 
 func TestExecutorGetPointData(t *testing.T) {
@@ -2405,11 +2341,11 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 	planInsertionPoint := []string{"post", "author"}
 	expected := [][]string{}
 
-	result := map[string]interface{}{
+	result := execresult.MustNewObjectFromMap(map[string]interface{}{
 		"post": map[string]interface{}{
 			"author": nil,
 		},
-	}
+	})
 
 	// the selection we're going to make
 	stepSelectionSet := ast.SelectionSet{
@@ -2429,7 +2365,7 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, [][]string{}, nil)
+	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, planInsertionPoint, stepSelectionSet, result, [][]string{}, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -2486,7 +2422,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	}
 
 	// the result of the step
-	result := map[string]interface{}{
+	result := execresult.MustNewObjectFromMap(map[string]interface{}{
 		"photoGallery": []interface{}{
 			map[string]interface{}{
 				"author": map[string]interface{}{
@@ -2504,9 +2440,9 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
-	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, &sync.Mutex{}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
+	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
@@ -2529,7 +2465,7 @@ func TestSingleObjectWithColonInID(t *testing.T) {
 		&source,
 	)
 
-	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, &sync.Mutex{}, []string{"hello#Thing:1337"})
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, execresult.MustNewObjectFromMap(source), []string{"hello#Thing:1337"})
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -2537,7 +2473,7 @@ func TestSingleObjectWithColonInID(t *testing.T) {
 
 	assert.Equal(t, map[string]interface{}{
 		"id": "Thing:1337", "firstName": "Foo", "lastName": "bar",
-	}, value)
+	}, value.ToMap())
 }
 
 // TestExecutor_plansWithManyDeepDependencies test that two `Then` works without races

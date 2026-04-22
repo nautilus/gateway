@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -508,7 +509,9 @@ func TestGateway(t *testing.T) {
 		}
 
 		// make sure the result of the queryer matches exepctations
-		assert.Equal(t, map[string]interface{}{"viewer": map[string]interface{}{"id": "1"}}, res)
+		resJSON, err := json.Marshal(res)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"viewer":{"id":"1"}}`, string(resJSON))
 	})
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
+	"github.com/nautilus/gateway/internal/execresult"
 	"github.com/nautilus/graphql"
 )
 
@@ -40,6 +41,7 @@ type QueryField struct {
 	Type      *ast.Type
 	Arguments ast.ArgumentDefinitionList
 	Resolver  func(context.Context, map[string]interface{}) (string, error)
+	// WeakObject bool // TODO rename, make ergonomic
 }
 
 // Query takes a query definition and writes the result to the receiver
@@ -122,7 +124,12 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 					}
 
 					// assign the id to the response
-					result[field.Alias] = map[string]interface{}{"id": id}
+					node := execresult.NewObject()
+					// if qField.WeakObject {
+					// 	node.SetWeak() // TODO add weak support to omit null response values
+					// }
+					node.Set("id", id)
+					result[field.Alias] = node
 				}
 			}
 		}
