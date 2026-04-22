@@ -35,7 +35,7 @@ func toObjectTypes(v any) any {
 	switch v := v.(type) {
 	case map[string]any:
 		if v == nil {
-			return nil
+			return newWeakObject()
 		}
 		obj := NewObject()
 		for key, value := range v {
@@ -64,13 +64,20 @@ func (o *Object) SetWeak() {
 	o.isWeak.Store(true)
 }
 
-func (o *Object) MergeOverrides(overrides map[string]any) {
+func (o *Object) MergeOverrides(overrides *Object) {
 	if o.isWeak.CompareAndSwap(true, false) {
 		o.fields.Clear()
+		if overrides == nil { // This object should become 'null' when marshaling to a map
+			o.isWeak.Store(true)
+		}
 	}
-	for key, value := range overrides {
-		o.Set(key, value)
+	if overrides == nil {
+		return
 	}
+	overrides.fields.Range(func(key, value any) bool {
+		o.Set(key.(string), value)
+		return true
+	})
 }
 
 func (o *Object) ToMap() map[string]any {
@@ -86,7 +93,7 @@ func toMap(value any) any {
 	switch valueKind := value.(type) {
 	case *Object:
 		var mappedValues map[string]any
-		if /*!valueKind.isWeak.Load() && TODO add weak support to omit null response values */ valueKind != nil {
+		if valueKind != nil && !valueKind.isWeak.Load() {
 			mappedValues = make(map[string]any)
 			valueKind.fields.Range(func(key, value any) bool {
 				mappedValues[key.(string)] = toMap(value)

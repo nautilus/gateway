@@ -13,9 +13,7 @@ func TestNewObject(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, &Object{}, NewObject())
 
-	assert.PanicsWithError(t, "interface conversion: interface {} is nil, not *execresult.Object", func() {
-		MustNewObjectFromMap(nil)
-	})
+	assert.Equal(t, newWeakObject(), MustNewObjectFromMap(nil))
 
 	mapValue := map[string]any{
 		"foo": true,
@@ -54,7 +52,7 @@ func TestNewObject(t *testing.T) {
 		"humbug":         map[string]any{},
 		"woop":           []any{},
 		"nil":            nil,
-		"map-typed nil":  nil,
+		"map-typed nil":  map[string]any(nil),
 		"list-typed nil": nil,
 	}
 	obj, ok := NewObjectFromMap(mapValue)
@@ -104,9 +102,9 @@ func TestObject_MergeOverrides(t *testing.T) {
 			"foo": "bar",
 			"baz": "biff",
 		})
-		obj.MergeOverrides(map[string]any{
+		obj.MergeOverrides(MustNewObjectFromMap(map[string]any{
 			"foo": "boo",
-		})
+		}))
 		assert.Equal(t, map[string]any{
 			"foo": "boo",
 			"baz": "biff",
@@ -120,9 +118,9 @@ func TestObject_MergeOverrides(t *testing.T) {
 			"baz": "biff",
 		})
 		obj.SetWeak()
-		obj.MergeOverrides(map[string]any{
+		obj.MergeOverrides(MustNewObjectFromMap(map[string]any{
 			"foo": "boo",
-		})
+		}))
 		assert.Equal(t, map[string]any{
 			"foo": "boo",
 		}, obj.ToMap())
@@ -135,12 +133,12 @@ func TestObject_MergeOverrides(t *testing.T) {
 				"bar": "baz",
 			},
 		})
-		obj.MergeOverrides(map[string]any{
+		obj.MergeOverrides(MustNewObjectFromMap(map[string]any{
 			"foo": "biff",
 			"boo": map[string]any{
 				"bah": "bam",
 			},
-		})
+		}))
 		_, ok := obj.GetObject("boo")
 		assert.True(t, ok, "nested value is an Object now")
 		assert.Equal(t, map[string]any{

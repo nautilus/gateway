@@ -55,7 +55,6 @@ type ExecutionContext struct {
 func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
 	// a place to store the result
 	result := execresult.NewObject()
-	// result.SetWeak() // TODO add weak support to omit null response values
 
 	// a channel to receive query results
 	const maxResultBuffer = 10
@@ -557,8 +556,11 @@ func executorExtractValue(ctx *ExecutionContext, source *execresult.Object, path
 			}
 			obj, ok := recent.EnsureObject(pointData.Field)
 			if !ok {
-				value, _ := recent.Get(pointData.Field)
-				return nil, fmt.Errorf("thisone, Target was not an object. %v, %T %v", pointData.Field, value, value)
+				value, exists := recent.Get(pointData.Field)
+				if exists && value == nil { // 'recent' is a strong object and field is already present and set to 'null'
+					return nil, nil
+				}
+				return nil, fmt.Errorf("target is non-null but not an object: %v, %T %v", pointData.Field, value, value)
 			}
 			recent = obj
 		}
@@ -568,19 +570,11 @@ func executorExtractValue(ctx *ExecutionContext, source *execresult.Object, path
 }
 
 func executorInsertObject(ctx *ExecutionContext, target *execresult.Object, path []string, value *execresult.Object) error {
-	// ctx.logger.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
-	if len(path) > 0 { // TODO is this 'if' even needed? executorExtractValue already does this
-		// a pointer to the objects we are modifying
-		obj, err := executorExtractValue(ctx, target, path)
-		if err != nil {
-			return err
-		}
-
-		// if the value we are assigning is an object
-		obj.MergeOverrides(value.ToMap()) // TODO is merge only used with objects? remove double conversion?
-	} else {
-		target.MergeOverrides(value.ToMap()) // TODO is merge only used with objects? remove double conversion?
+	obj, err := executorExtractValue(ctx, target, path)
+	if err != nil {
+		return err
 	}
+	obj.MergeOverrides(value)
 	return nil
 }
 
