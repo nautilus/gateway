@@ -433,10 +433,8 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 							if !ok {
 								return nil, errors.New("could not find the id for elements in target list")
 							}
-
 							// add the id to the entry so that the executor can use it to form its query
 							entryPoint = fmt.Sprintf("%s#%v", entryPoint, id)
-
 						}
 
 						// add the point for this entry in the list
@@ -488,11 +486,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 					if !ok {
 						return nil, errors.New("could not find the id for the object")
 					}
-
-					// ctx.logger.Debug("Adding id to ", oldBranch[i][pointI])
-
 					oldBranch[i][pointI] = fmt.Sprintf("%s:%v#%v", oldBranch[i][pointI], i, id)
-
 				}
 			} else {
 				rootObj, ok := rootValue.(*execresult.Object)
@@ -505,12 +499,10 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 					if !ok {
 						return nil, errors.New("could not find the id for the object")
 					}
-
 					oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
 				}
 			}
 		}
-
 	}
 
 	// return the aggregation
