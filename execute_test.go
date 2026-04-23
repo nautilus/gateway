@@ -2339,7 +2339,6 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 	t.Parallel()
 	// we want the list of insertion points that point to
 	planInsertionPoint := []string{"post", "author"}
-	expected := [][]string{}
 
 	result := execresult.MustNewObjectFromMap(map[string]interface{}{
 		"post": map[string]interface{}{
@@ -2371,7 +2370,7 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 		return
 	}
 
-	assert.Equal(t, expected, generatedPoint)
+	assert.Empty(t, generatedPoint)
 }
 
 func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {

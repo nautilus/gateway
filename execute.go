@@ -328,185 +328,165 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 // executorFindInsertionPoints returns the list of insertion points where this step should be executed.
 func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, selectionSet ast.SelectionSet, result *execresult.Object, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) ([][]string, error) {
 	ctx.logger.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
-	oldBranch := startingPoints
-
-	// track the root of the selection set while  we walk
-	selectionSetRoot := selectionSet
-
-	// a place to refer to parts of the results
-	resultChunk := result
-
-	// the index to start at
 	startingIndex := 0
-	if len(oldBranch) > 0 {
-		startingIndex = len(oldBranch[0])
+	if len(startingPoints) > 0 {
+		startingIndex = len(startingPoints[0])
 
-		if len(targetPoints) == len(oldBranch[0]) {
+		if len(targetPoints) == len(startingPoints[0]) {
 			return startingPoints, nil
 		}
 	}
 
-	ctx.logger.Debug("First meaningful path point: ", targetPoints[startingIndex])
-	ctx.logger.Debug("result ", resultChunk)
+	ctx.logger.Debug("traversing path point: ", targetPoints[startingIndex])
 
 	// if our starting point is []string{"users:0"} then we know everything so far
 	// is along the path of the steps insertion point
-	for pointI := startingIndex; pointI < len(targetPoints); pointI++ {
-		// the point in the steps insertion path that we want to add
-		point := targetPoints[pointI]
+	point := targetPoints[startingIndex]
+	isLastPoint := startingIndex == len(targetPoints)-1
 
-		// find the selection node in the AST corresponding to the point
-		var foundSelection *ast.Field
-		foundSelection, err := findSelection(point, selectionSetRoot, fragmentDefs)
-		if err != nil {
-			ctx.logger.Debug("Error looking for selection")
-			return [][]string{}, err
+	// find the selection node in the AST corresponding to the point
+	var foundSelection *ast.Field
+	foundSelection, err := findSelection(point, selectionSet, fragmentDefs)
+	if err != nil {
+		ctx.logger.Debug("Error looking for selection")
+		return nil, err
+	}
+
+	// if we didn't find a selection
+	if foundSelection == nil {
+		ctx.logger.Debug("No selection")
+		return nil, nil
+	}
+
+	ctx.logger.Debug("Found Selection for: ", point)
+	ctx.logger.Debug("Result Chunk: ", result)
+	// make sure we are looking at the top of the selection set next time
+	selectionSet = foundSelection.SelectionSet
+
+	pointValue, ok := result.Get(point)
+	if !ok {
+		return nil, nil
+	}
+
+	// get the type of the object in question
+	selectionType := foundSelection.Definition.Type
+
+	if pointValue == nil {
+		if selectionType.NonNull {
+			err := fmt.Errorf("received null for required field: %v", foundSelection.Name)
+			ctx.logger.Warn(err)
+			return nil, err
 		}
+		return nil, nil
+	}
 
-		// if we didn't find a selection
-		if foundSelection == nil {
-			ctx.logger.Debug("No selection")
-			return [][]string{}, nil
-		}
-
-		ctx.logger.Debug("Found Selection for: ", point)
-		ctx.logger.Debug("Result Chunk: ", resultChunk)
-		// make sure we are looking at the top of the selection set next time
-		selectionSetRoot = foundSelection.SelectionSet
-
-		value := resultChunk
-
-		rootValue, ok := value.Get(point)
+	if selectionType.Elem != nil {
+		ctx.logger.Debug("Selection should be a list")
+		list, ok := pointValue.(*execresult.List)
 		if !ok {
-			return [][]string{}, nil
+			return nil, fmt.Errorf("point value should be list, but was not: %v", pointValue)
 		}
 
-		// get the type of the object in question
-		selectionType := foundSelection.Definition.Type
+		// build up a new list of insertion points
+		var newInsertionPoints [][]string
 
-		if rootValue == nil {
-			if selectionType.NonNull {
-				err := fmt.Errorf("received null for required field: %v", foundSelection.Name)
-				ctx.logger.Warn(err)
-				return nil, err
-			}
-			return nil, nil
-		}
-
-		if selectionType.Elem != nil {
-			ctx.logger.Debug("Selection should be a list")
-			rootList, ok := rootValue.(*execresult.List)
+		// each value in the result contributes an insertion point
+		for entryI, iEntry := range list.All() {
+			resultEntry, ok := iEntry.(*execresult.Object)
 			if !ok {
-				return nil, fmt.Errorf("root value of result chunk should be list, but was not: %v", rootValue)
+				return nil, errors.New("entry in result wasn't an object")
 			}
 
-			// build up a new list of insertion points
-			var newInsertionPoints [][]string
+			// the point we are going to add to the list
+			entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
+			if foundSelection.Alias != "" {
+				entryPoint = fmt.Sprintf("%s:%v", foundSelection.Alias, entryI)
+			}
+			ctx.logger.Debug("Adding ", entryPoint, " to list")
 
-			// each value in the result contributes an insertion point
-			for entryI, iEntry := range rootList.All() {
-				resultEntry, ok := iEntry.(*execresult.Object)
-				if !ok {
-					return nil, errors.New("entry in result wasn't an object")
-				}
+			var newBranchSet [][]string
+			for _, c := range startingPoints {
+				newBranchSet = append(newBranchSet, copyStrings(c))
+			}
 
-				// the point we are going to add to the list
-				entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
-				if foundSelection.Alias != "" {
-					entryPoint = fmt.Sprintf("%s:%v", foundSelection.Alias, entryI)
-				}
-				ctx.logger.Debug("Adding ", entryPoint, " to list")
-
-				var newBranchSet [][]string
-				for _, c := range oldBranch {
-					newBranchSet = append(newBranchSet, copyStrings(c))
-				}
-
-				// if we are adding to an existing branch
-				if len(newBranchSet) > 0 {
-					// add the path to the end of this for the entry we just added
-					for i, newBranch := range newBranchSet {
-						// if we are looking at the last thing in the insertion list
-						if pointI == len(targetPoints)-1 {
-							// look for an id
-							id, ok := resultEntry.Get("id")
-							if !ok {
-								return nil, errors.New("could not find the id for elements in target list")
-							}
-							// add the id to the entry so that the executor can use it to form its query
-							entryPoint = fmt.Sprintf("%s#%v", entryPoint, id)
+			// if we are adding to an existing branch
+			if len(newBranchSet) > 0 {
+				// add the path to the end of this for the entry we just added
+				for i, newBranch := range newBranchSet {
+					// if we are looking at the last thing in the insertion list
+					if isLastPoint {
+						// look for an id
+						id, ok := resultEntry.Get("id")
+						if !ok {
+							return nil, errors.New("could not find the id for elements in target list")
 						}
-
-						// add the point for this entry in the list
-						newBranchSet[i] = append(newBranch, entryPoint)
-					}
-				} else {
-					newBranchSet = append(newBranchSet, []string{entryPoint})
-				}
-
-				// compute the insertion points for that entry
-				entryInsertionPoints, err := executorFindInsertionPoints(ctx, targetPoints, selectionSetRoot, resultEntry, newBranchSet, fragmentDefs)
-				if err != nil {
-					return nil, err
-				}
-
-				// add the list of insertion points to the acumulator
-				newInsertionPoints = append(newInsertionPoints, entryInsertionPoints...)
-			}
-
-			// return the flat list of insertion points created by our children
-			return newInsertionPoints, nil
-		}
-
-		// traverse down the resultChunk for the next iteration
-		if rootValueMap, ok := rootValue.(*execresult.Object); ok {
-			resultChunk = rootValueMap
-		}
-
-		// we are encountering something that isn't a list so it must be an object or a scalar
-		// regardless, we just need to add the point to the end of each list
-		for i, points := range oldBranch {
-			oldBranch[i] = append(points, point)
-		}
-
-		if pointI == len(targetPoints)-1 {
-			// the root value could be a list in which case the id is the id of the corresponding entry
-			// or the root value could be an object in which case the id is the id of the root value
-
-			// if the root value is a list
-			if rootList, ok := rootValue.(*execresult.List); ok {
-				for i := range oldBranch {
-					entry, ok := rootList.GetObjectAtIndex(i)
-					if !ok {
-						return nil, errors.New("item in root list isn't an object")
+						// add the id to the entry so that the executor can use it to form its query
+						entryPoint = fmt.Sprintf("%s#%v", entryPoint, id)
 					}
 
-					// look up the id of the object
-					id, ok := entry.Get("id")
-					if !ok {
-						return nil, errors.New("could not find the id for the object")
-					}
-					oldBranch[i][pointI] = fmt.Sprintf("%s:%v#%v", oldBranch[i][pointI], i, id)
+					// add the point for this entry in the list
+					newBranchSet[i] = append(newBranch, entryPoint)
 				}
 			} else {
-				rootObj, ok := rootValue.(*execresult.Object)
+				newBranchSet = append(newBranchSet, []string{entryPoint})
+			}
+
+			// compute the insertion points for that entry
+			entryInsertionPoints, err := executorFindInsertionPoints(ctx, targetPoints, selectionSet, resultEntry, newBranchSet, fragmentDefs)
+			if err != nil {
+				return nil, err
+			}
+
+			// add the list of insertion points to the acumulator
+			newInsertionPoints = append(newInsertionPoints, entryInsertionPoints...)
+		}
+
+		// return the flat list of insertion points created by our children
+		return newInsertionPoints, nil
+	}
+
+	// traverse down the resultChunk for the next iteration
+	if pointValueObj, ok := pointValue.(*execresult.Object); ok {
+		result = pointValueObj
+	}
+
+	// we are encountering something that isn't a list so it must be an object or a scalar
+	// regardless, we just need to add the point to the end of each list
+	for i, points := range startingPoints {
+		startingPoints[i] = append(points, point)
+	}
+
+	if isLastPoint {
+		if list, ok := pointValue.(*execresult.List); ok {
+			for i := range startingPoints {
+				entry, ok := list.GetObjectAtIndex(i)
 				if !ok {
-					return nil, fmt.Errorf("root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
+					return nil, errors.New("item in list isn't an object")
 				}
-				for i := range oldBranch {
-					// look up the id of the object
-					id, ok := rootObj.Get("id")
-					if !ok {
-						return nil, errors.New("could not find the id for the object")
-					}
-					oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
+
+				// look up the id of the object
+				id, ok := entry.Get("id")
+				if !ok {
+					return nil, errors.New("could not find the id for the object")
 				}
+				startingPoints[i][startingIndex] = fmt.Sprintf("%s:%v#%v", startingPoints[i][startingIndex], i, id)
+			}
+		} else {
+			obj, ok := pointValue.(*execresult.Object)
+			if !ok {
+				return nil, fmt.Errorf("point value was not an object. Point: %v Value: %v", point, pointValue)
+			}
+			for i := range startingPoints {
+				// look up the id of the object
+				id, ok := obj.Get("id")
+				if !ok {
+					return nil, fmt.Errorf("could not find the id field for object: %v", obj)
+				}
+				startingPoints[i][startingIndex] = fmt.Sprintf("%s#%v", startingPoints[i][startingIndex], id)
 			}
 		}
 	}
-
-	// return the aggregation
-	return oldBranch, nil
+	return executorFindInsertionPoints(ctx, targetPoints, selectionSet, result, startingPoints, fragmentDefs)
 }
 
 func isListElement(path string) bool {
