@@ -413,6 +413,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 			if len(newBranchSet) > 0 {
 				// add the path to the end of this for the entry we just added
 				for i, newBranch := range newBranchSet {
+					branchEntryPoint := entryPoint // avoid mutating shared list entrypoint
 					// if we are looking at the last thing in the insertion list
 					if isLastPoint {
 						// look for an id
@@ -421,11 +422,9 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 							return nil, errors.New("could not find the id for elements in target list")
 						}
 						// add the id to the entry so that the executor can use it to form its query
-						entryPoint = fmt.Sprintf("%s#%v", entryPoint, id)
+						branchEntryPoint = fmt.Sprintf("%s#%v", branchEntryPoint, id)
 					}
-
-					// add the point for this entry in the list
-					newBranchSet[i] = append(newBranch, entryPoint)
+					newBranchSet[i] = append(newBranch, branchEntryPoint)
 				}
 			} else {
 				newBranchSet = append(newBranchSet, []string{entryPoint})
