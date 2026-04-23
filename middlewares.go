@@ -47,7 +47,7 @@ func scrubInsertionIDs(ctx *ExecutionContext, response map[string]interface{}) e
 	for field, locations := range ctx.Plan.FieldsToScrub {
 		for _, location := range locations {
 			// look for the insertion points in the response for the field
-			insertionPoints, err := executorFindInsertionPoints(ctx, location, ctx.Plan.Operation.SelectionSet, responseObj, [][]string{{}}, ctx.Plan.FragmentDefinitions)
+			insertionPoints, _, err := executorFindInsertionPoints(ctx, location, ctx.Plan.Operation.SelectionSet, responseObj, [][]string{{}}, ctx.Plan.FragmentDefinitions)
 			if err != nil {
 				return err
 			}

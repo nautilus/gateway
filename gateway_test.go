@@ -1086,3 +1086,75 @@ query ($id: ID!) {
 		}`, resp.Body.String())
 	})
 }
+
+func TestSingleObjectOnlyRequestingNonIDFieldScrubsIDs(t *testing.T) {
+	t.Parallel()
+	const (
+		schemaStr = `
+			type Query {
+				node(id: ID!): Node
+			}
+
+			interface Node {
+				id: ID!
+			}
+
+			type User implements Node {
+				id: ID!
+				firstName: String!
+				lastName: String!
+			}
+		`
+	)
+	schema, err := graphql.LoadSchema(schemaStr)
+	require.NoError(t, err)
+	source := &graphql.RemoteSchema{Schema: schema, URL: "url1"}
+	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
+		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
+			assert.Equal(t, map[string]any{
+				"id": "foo",
+			}, input.Variables)
+			return map[string]any{
+				"node": map[string]any{
+					"lastName": "bar",
+				},
+			}, nil
+		})
+	})
+
+	gateway, err := New([]*graphql.RemoteSchema{source}, WithQueryerFactory(&queryerFactory))
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`
+		{
+			"query": %q,
+			"variables": {
+				"id": "foo"
+			}
+		}
+	`, `
+		query($id: ID!) {
+			node(id: $id) {
+				... on User {
+					lastName
+				}
+			}
+		}
+	`)))
+	resp := httptest.NewRecorder()
+	gateway.GraphQLHandler(resp, req)
+	t.Log("Response:", resp.Body.String())
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+
+	// make sure we didn't get any ids
+	assert.Equal(t, map[string]any{
+		"data": map[string]any{
+			"node": map[string]any{
+				"lastName": "bar",
+			},
+		},
+	}, response, "Response must not contain ID fields and not fail while scrubbing them.")
+}

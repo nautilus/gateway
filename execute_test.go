@@ -2133,13 +2133,14 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 		},
 	})
 
-	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
+	generatedPoint, missingIDPoints, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
 	}
 
 	assert.Equal(t, finalInsertionPoint, generatedPoint)
+	assert.Empty(t, missingIDPoints)
 }
 
 func TestFindObject(t *testing.T) {
@@ -2364,13 +2365,14 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 		},
 	}
 
-	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, planInsertionPoint, stepSelectionSet, result, [][]string{}, nil)
+	generatedPoint, missingIDPoints, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, planInsertionPoint, stepSelectionSet, result, [][]string{}, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
 	}
 
 	assert.Empty(t, generatedPoint)
+	assert.Empty(t, missingIDPoints)
 }
 
 func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
@@ -2441,13 +2443,14 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 		},
 	})
 
-	generatedPoint, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
+	generatedPoint, missingIDPoints, err := executorFindInsertionPoints(&ExecutionContext{logger: &DefaultLogger{}}, planInsertionPoint, stepSelectionSet, result, startingPoint, nil)
 	if err != nil {
 		t.Error(t, err)
 		return
 	}
 
 	assert.Equal(t, finalInsertionPoint, generatedPoint)
+	assert.Empty(t, missingIDPoints)
 }
 
 func TestSingleObjectWithColonInID(t *testing.T) {

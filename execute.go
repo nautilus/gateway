@@ -292,9 +292,12 @@ func executeOneStep(
 		for _, dependent := range step.Then {
 			copiedInsertionPoint := make([]string, len(insertionPoint))
 			copy(copiedInsertionPoint, insertionPoint)
-			insertPoints, err := executorFindInsertionPoints(ctx, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{copiedInsertionPoint}, step.FragmentDefinitions)
+			insertPoints, missingIDPoints, err := executorFindInsertionPoints(ctx, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{copiedInsertionPoint}, step.FragmentDefinitions)
 			if err != nil {
 				return nil, nil, err
+			}
+			if len(missingIDPoints) > 0 {
+				return nil, nil, fmt.Errorf("could not find IDs for insertion points: %v", missingIDPoints)
 			}
 
 			// this dependent needs to fire for every object that the insertion point references
@@ -326,14 +329,14 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 }
 
 // executorFindInsertionPoints returns the list of insertion points where this step should be executed.
-func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, selectionSet ast.SelectionSet, result *execresult.Object, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) ([][]string, error) {
+func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, selectionSet ast.SelectionSet, result *execresult.Object, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) (insertionPoints [][]string, missingIDPoints [][]string, err error) {
 	ctx.logger.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
 	startingIndex := 0
 	if len(startingPoints) > 0 {
 		startingIndex = len(startingPoints[0])
 
 		if len(targetPoints) == len(startingPoints[0]) {
-			return startingPoints, nil
+			return startingPoints, missingIDPoints, nil
 		}
 	}
 
@@ -346,16 +349,16 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 
 	// find the selection node in the AST corresponding to the point
 	var foundSelection *ast.Field
-	foundSelection, err := findSelection(point, selectionSet, fragmentDefs)
+	foundSelection, err = findSelection(point, selectionSet, fragmentDefs)
 	if err != nil {
 		ctx.logger.Debug("Error looking for selection")
-		return nil, err
+		return nil, nil, err
 	}
 
 	// if we didn't find a selection
 	if foundSelection == nil {
 		ctx.logger.Debug("No selection")
-		return nil, nil
+		return nil, missingIDPoints, nil
 	}
 
 	ctx.logger.Debug("Found Selection for: ", point)
@@ -365,7 +368,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 
 	pointValue, ok := result.Get(point)
 	if !ok {
-		return nil, nil
+		return nil, missingIDPoints, nil
 	}
 
 	// get the type of the object in question
@@ -375,16 +378,16 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 		if selectionType.NonNull {
 			err := fmt.Errorf("received null for required field: %v", foundSelection.Name)
 			ctx.logger.Warn(err)
-			return nil, err
+			return nil, nil, err
 		}
-		return nil, nil
+		return nil, missingIDPoints, nil
 	}
 
 	if selectionType.Elem != nil {
 		ctx.logger.Debug("Selection should be a list")
 		list, ok := pointValue.(*execresult.List)
 		if !ok {
-			return nil, fmt.Errorf("point value should be list, but was not: %v", pointValue)
+			return nil, nil, fmt.Errorf("point value should be list, but was not: %v", pointValue)
 		}
 
 		// build up a new list of insertion points
@@ -394,7 +397,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 		for entryI, iEntry := range list.All() {
 			resultEntry, ok := iEntry.(*execresult.Object)
 			if !ok {
-				return nil, errors.New("entry in result wasn't an object")
+				return nil, nil, errors.New("entry in result wasn't an object")
 			}
 
 			// the point we are going to add to the list
@@ -411,6 +414,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 
 			// if we are adding to an existing branch
 			if len(newBranchSet) > 0 {
+				notFoundIndices := make(map[int]struct{})
 				// add the path to the end of this for the entry we just added
 				for i, newBranch := range newBranchSet {
 					branchEntryPoint := entryPoint // avoid mutating shared list entrypoint
@@ -419,29 +423,34 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 						// look for an id
 						id, ok := resultEntry.Get("id")
 						if !ok {
-							return nil, errors.New("could not find the id for elements in target list")
+							notFoundIndices[i] = struct{}{}
+						} else {
+							// add the id to the entry so that the executor can use it to form its query
+							branchEntryPoint = fmt.Sprintf("%s#%v", branchEntryPoint, id)
 						}
-						// add the id to the entry so that the executor can use it to form its query
-						branchEntryPoint = fmt.Sprintf("%s#%v", branchEntryPoint, id)
 					}
 					newBranchSet[i] = append(newBranch, branchEntryPoint)
 				}
+				var deletedBranchSet [][]string
+				newBranchSet, deletedBranchSet = deleteIndices(newBranchSet, notFoundIndices)
+				missingIDPoints = append(missingIDPoints, deletedBranchSet...)
 			} else {
 				newBranchSet = append(newBranchSet, []string{entryPoint})
 			}
 
 			// compute the insertion points for that entry
-			entryInsertionPoints, err := executorFindInsertionPoints(ctx, targetPoints, selectionSet, resultEntry, newBranchSet, fragmentDefs)
+			entryInsertionPoints, missingEntryIDPoints, err := executorFindInsertionPoints(ctx, targetPoints, selectionSet, resultEntry, newBranchSet, fragmentDefs)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 
 			// add the list of insertion points to the acumulator
 			newInsertionPoints = append(newInsertionPoints, entryInsertionPoints...)
+			missingIDPoints = append(missingIDPoints, missingEntryIDPoints...)
 		}
 
 		// return the flat list of insertion points created by our children
-		return newInsertionPoints, nil
+		return newInsertionPoints, missingIDPoints, nil
 	}
 
 	// traverse down the resultChunk for the next iteration
@@ -456,36 +465,41 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 	}
 
 	if isLastPoint {
+		notFoundIndices := make(map[int]struct{})
 		if list, ok := pointValue.(*execresult.List); ok {
 			for i := range startingPoints {
 				entry, ok := list.GetObjectAtIndex(i)
 				if !ok {
-					return nil, errors.New("item in list isn't an object")
+					return nil, nil, errors.New("item in list isn't an object")
 				}
 
 				// look up the id of the object
 				id, ok := entry.Get("id")
 				if !ok {
-					return nil, errors.New("could not find the id for the object")
+					notFoundIndices[i] = struct{}{}
 				}
 				startingPoints[i][startingIndex] = fmt.Sprintf("%s:%v#%v", startingPoints[i][startingIndex], i, id)
 			}
 		} else {
 			obj, ok := pointValue.(*execresult.Object)
 			if !ok {
-				return nil, fmt.Errorf("point value was not an object. Point: %v Value: %v", point, pointValue)
+				return nil, nil, fmt.Errorf("point value was not an object. Point: %v Value: %v", point, pointValue)
 			}
 			for i := range startingPoints {
 				// look up the id of the object
 				id, ok := obj.Get("id")
 				if !ok {
-					return nil, fmt.Errorf("could not find the id field for object: %v", obj)
+					notFoundIndices[i] = struct{}{}
 				}
 				startingPoints[i][startingIndex] = fmt.Sprintf("%s#%v", startingPoints[i][startingIndex], id)
 			}
 		}
+		var deletedStartingPoints [][]string
+		startingPoints, deletedStartingPoints = deleteIndices(startingPoints, notFoundIndices)
+		missingIDPoints = append(missingIDPoints, deletedStartingPoints...)
 	}
-	return executorFindInsertionPoints(ctx, targetPoints, selectionSet, result, startingPoints, fragmentDefs)
+	insertionPoints, missingSubIDPoints, err := executorFindInsertionPoints(ctx, targetPoints, selectionSet, result, startingPoints, fragmentDefs)
+	return insertionPoints, append(missingIDPoints, missingSubIDPoints...), err
 }
 
 func isListElement(path string) bool {
@@ -622,4 +636,15 @@ func copyStrings(s []string) []string {
 	var result []string
 	result = append(result, s...)
 	return result
+}
+
+func deleteIndices[Value any](values []Value, indices map[int]struct{}) (newValues, deletedValues []Value) {
+	for index, value := range values {
+		if _, shouldDelete := indices[index]; shouldDelete {
+			deletedValues = append(deletedValues, value)
+		} else {
+			newValues = append(newValues, value)
+		}
+	}
+	return
 }
