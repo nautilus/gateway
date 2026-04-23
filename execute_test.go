@@ -2451,12 +2451,6 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	assert.Equal(t, finalInsertionPoint, generatedPoint)
 }
 
-/* TODO
-func TestFindInsertionPoint_handlesNullObjects(t *testing.T) {
-	t.Skip("Not yet implemented")
-}
-*/
-
 func TestSingleObjectWithColonInID(t *testing.T) {
 	t.Parallel()
 	source := make(map[string]interface{})
