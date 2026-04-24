@@ -322,7 +322,9 @@ func TestSchema_resolveNodeInlineID(t *testing.T) {
 	// a place to hold the response of the query
 	err := schemaTestLoadQuery(query, result, map[string]interface{}{})
 	assert.NoError(t, err)
-	assert.Equal(t, &Result{Node: nil}, result)
+	assert.Equal(t, &Result{Node: &struct {
+		ID string `json:"id"`
+	}{ID: "my-id"}}, result)
 }
 
 func TestSchema_resolveNodeIDFromArg(t *testing.T) {
@@ -349,7 +351,9 @@ func TestSchema_resolveNodeIDFromArg(t *testing.T) {
 		"id": "my-id",
 	})
 	assert.NoError(t, err)
-	assert.Equal(t, &Result{Node: nil}, result)
+	assert.Equal(t, &Result{Node: &struct {
+		ID string `json:"id"`
+	}{ID: "my-id"}}, result)
 }
 
 func TestSchema_resolveNodeWrongIDType(t *testing.T) {

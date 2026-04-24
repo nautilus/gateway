@@ -60,7 +60,9 @@ func (o *Object) SetWeak() {
 func (o *Object) MergeOverrides(overrides *Object) {
 	if o.isWeak.CompareAndSwap(true, false) {
 		o.fields.Clear()
-		if overrides == nil { // This object should become 'null' when marshaling to a map
+		if overrides == nil || overrides.isWeak.Load() {
+			// When overrides is nil, then this object should become 'null' when marshaling to a map.
+			// Weak overrides are assumed to be empty (nil map) and also become 'null'.
 			o.isWeak.Store(true)
 		}
 	}
@@ -79,19 +81,30 @@ func (o *Object) ToMap() map[string]any {
 
 // String implements [fmt.Stringer] for easy debugging
 func (o *Object) String() string {
-	return fmt.Sprint(o.ToMap())
+	value := o.ToMap()
+	s := fmt.Sprint(value)
+	if value == nil {
+		s = "map(nil)"
+	}
+	if o.isWeak.Load() {
+		s += "(weak)"
+	}
+	return s
 }
 
 func toMap(value any) any {
 	switch valueKind := value.(type) {
 	case *Object:
 		var mappedValues map[string]any
-		if valueKind != nil && !valueKind.isWeak.Load() {
-			mappedValues = make(map[string]any)
+		if valueKind != nil {
+			newValues := make(map[string]any)
 			valueKind.fields.Range(func(key, value any) bool {
-				mappedValues[key.(string)] = toMap(value)
+				newValues[key.(string)] = toMap(value)
 				return true
 			})
+			if !valueKind.isWeak.Load() || len(newValues) > 0 {
+				mappedValues = newValues
+			}
 		}
 		return mappedValues
 	case *List:

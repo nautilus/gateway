@@ -1,6 +1,7 @@
 package execresult
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -108,7 +109,7 @@ func TestObject_MergeOverrides(t *testing.T) {
 		}, obj.ToMap())
 	})
 
-	t.Run("weak", func(t *testing.T) {
+	t.Run("weak self", func(t *testing.T) {
 		t.Parallel()
 		obj := NewObjectFromMap(map[string]any{
 			"foo": "bar",
@@ -121,6 +122,31 @@ func TestObject_MergeOverrides(t *testing.T) {
 		assert.Equal(t, map[string]any{
 			"foo": "boo",
 		}, obj.ToMap())
+	})
+
+	t.Run("weak self and nil overrides", func(t *testing.T) {
+		t.Parallel()
+		obj := NewObjectFromMap(map[string]any{
+			"foo": "bar",
+			"baz": "biff",
+		})
+		obj.SetWeak()
+		obj.MergeOverrides(nil) // nil overrides can come from a failed query (had an error)
+		assert.Equal(t, map[string]any(nil), obj.ToMap())
+		assert.True(t, obj.isWeak.Load(), "Merging a nil override must result in a weak null value, so future strong merges succeed")
+	})
+
+	t.Run("weak self and weak empty other", func(t *testing.T) {
+		t.Parallel()
+		obj := NewObjectFromMap(map[string]any{
+			"foo": "bar",
+			"baz": "biff",
+		})
+		obj.SetWeak()
+		other := newWeakObject()
+		obj.MergeOverrides(other)
+		assert.Equal(t, map[string]any(nil), obj.ToMap())
+		assert.True(t, obj.isWeak.Load(), "Merging weak into weak must remain weak")
 	})
 
 	t.Run("nested objects", func(t *testing.T) {
@@ -396,4 +422,12 @@ func TestObject_MarshalJSON(t *testing.T) {
 		},
 		"boo": [true]
 	}`, string(value))
+}
+
+func TestObject_String(t *testing.T) {
+	t.Parallel()
+	value := map[string]any{"foo": "bar"}
+	assert.Equal(t, fmt.Sprint(value), NewObjectFromMap(value).String())
+
+	assert.Equal(t, "map(nil)(weak)", newWeakObject().String())
 }

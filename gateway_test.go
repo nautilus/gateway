@@ -1005,7 +1005,7 @@ type Foo implements Node {
 		fooURL = "foo"
 		barURL = "bar"
 	)
-	makeQueryerFactory := func(t *testing.T, barResponse map[string]any) *QueryerFactory {
+	makeQueryerFactory := func(t *testing.T, barResponse any, barErr error) *QueryerFactory {
 		queryerFactory := QueryerFactory(func(_ *PlanningContext, url string) graphql.Queryer {
 			return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
 				t.Log("Received request for", url, "service:", input.Query)
@@ -1035,7 +1035,7 @@ query ($id: ID!) {
 	}
 }
 `), strings.TrimSpace(input.Query), barURL)
-					return barResponse, nil
+					return barResponse, barErr
 				default:
 					return nil, &graphql.Error{Message: "must not be reached"}
 				}
@@ -1052,7 +1052,7 @@ query ($id: ID!) {
 		gateway, err := New([]*graphql.RemoteSchema{
 			{Schema: schemaFoo, URL: fooURL},
 			{Schema: schemaBar, URL: barURL},
-		}, WithQueryerFactory(makeQueryerFactory(t, barResponse)))
+		}, WithQueryerFactory(makeQueryerFactory(t, barResponse, nil)))
 		require.NoError(t, err)
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
 		resp := httptest.NewRecorder()
@@ -1071,7 +1071,7 @@ query ($id: ID!) {
 		gateway, err := New([]*graphql.RemoteSchema{
 			{Schema: schemaFoo, URL: fooURL},
 			{Schema: schemaBar, URL: barURL},
-		}, WithQueryerFactory(makeQueryerFactory(t, barResponse)))
+		}, WithQueryerFactory(makeQueryerFactory(t, barResponse, nil)))
 		require.NoError(t, err)
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
 		resp := httptest.NewRecorder()
@@ -1083,6 +1083,32 @@ query ($id: ID!) {
 					"bar": "bar"
 				}
 			}
+		}`, resp.Body.String())
+	})
+
+	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+		gateway, err := New([]*graphql.RemoteSchema{
+			{Schema: schemaFoo, URL: fooURL},
+			{Schema: schemaBar, URL: barURL},
+		}, WithQueryerFactory(makeQueryerFactory(t, nil, graphql.ErrorList{
+			&graphql.Error{Message: "some error"},
+		})))
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
+		resp := httptest.NewRecorder()
+		gateway.GraphQLHandler(resp, req)
+		assert.Equal(t, http.StatusOK, resp.Code)
+		assert.JSONEq(t, `{
+			"data": {
+				"node": null
+			},
+			"errors": [
+				{
+					"message": "some error",
+					"extensions": null
+				}
+			]
 		}`, resp.Body.String())
 	})
 }
