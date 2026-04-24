@@ -41,7 +41,7 @@ type QueryField struct {
 	Type             *ast.Type
 	Arguments        ast.ArgumentDefinitionList
 	Resolver         func(context.Context, map[string]interface{}) (string, error)
-	NonAuthoritative bool // Set to true to indicate the resolved Node is not authoritative, and therefore should be resolved to null when no other resolvers return a value.
+	NotAuthoritative bool // Set to true to indicate the resolved Node is not authoritative, and therefore should be resolved to null when no other resolvers return a value.
 }
 
 // Query takes a query definition and writes the result to the receiver
@@ -127,7 +127,7 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 					node := execresult.NewObjectFromMap(map[string]any{
 						"id": id,
 					})
-					if qField.NonAuthoritative {
+					if qField.NotAuthoritative {
 						node.SetWeak()
 					}
 					result[field.Alias] = node
