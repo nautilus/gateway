@@ -344,8 +344,7 @@ func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, s
 	isLastPoint := startingIndex == len(targetPoints)-1
 
 	// find the selection node in the AST corresponding to the point
-	var foundSelection *ast.Field
-	foundSelection, err = findSelection(point, selectionSet, fragmentDefs)
+	foundSelection, err := findSelection(point, selectionSet, fragmentDefs)
 	if err != nil {
 		ctx.logger.Debug("Error looking for selection")
 		return nil, nil, err
