@@ -103,7 +103,11 @@ func TestList_Get(t *testing.T) {
 			"foo": 2,
 		},
 	})
-	value, ok := list.Get(0)
+	value, ok := list.Get(-1)
+	assert.False(t, ok)
+	assert.Nil(t, value)
+
+	value, ok = list.Get(0)
 	assert.True(t, ok)
 	assert.Equal(t, 1, value)
 	value, ok = list.GetObjectAtIndex(0)

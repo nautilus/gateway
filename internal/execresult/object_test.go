@@ -274,7 +274,7 @@ func TestObject_SetsAndEnsures(t *testing.T) {
 		t.Parallel()
 		t.Run("single set", func(t *testing.T) {
 			t.Parallel()
-			obj.Set("set", 1)
+			obj.set("set", 1)
 			value, ok := obj.Get("set")
 			assert.True(t, ok)
 			assert.Equal(t, 1, value)
@@ -282,10 +282,10 @@ func TestObject_SetsAndEnsures(t *testing.T) {
 
 		t.Run("single set nested values", func(t *testing.T) {
 			t.Parallel()
-			obj.Set("set nested 1", map[string]any{
+			obj.set("set nested 1", map[string]any{
 				"foo": "bar",
 			})
-			obj.Set("set nested 2", []any{"foo"})
+			obj.set("set nested 2", []any{"foo"})
 			_, ok := obj.GetObject("set nested 1")
 			assert.True(t, ok)
 			_, ok = obj.GetList("set nested 2")
@@ -298,7 +298,7 @@ func TestObject_SetsAndEnsures(t *testing.T) {
 			const concurrentRoutines = 10
 			for range concurrentRoutines {
 				wait.Go(func() {
-					obj.Set("set concurrent", 1)
+					obj.set("set concurrent", 1)
 					value, ok := obj.Get("set concurrent")
 					assert.True(t, ok)
 					assert.Equal(t, 1, value)
@@ -310,7 +310,7 @@ func TestObject_SetsAndEnsures(t *testing.T) {
 
 	t.Run("delete", func(t *testing.T) {
 		t.Parallel()
-		obj.Set("deletable", 1)
+		obj.set("deletable", 1)
 		value, ok := obj.Get("deletable")
 		assert.True(t, ok)
 		assert.Equal(t, 1, value)

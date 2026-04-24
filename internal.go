@@ -124,11 +124,12 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 					}
 
 					// assign the id to the response
-					node := execresult.NewObject()
+					node := execresult.NewObjectFromMap(map[string]any{
+						"id": id,
+					})
 					if qField.NonAuthoritative {
 						node.SetWeak()
 					}
-					node.Set("id", id)
 					result[field.Alias] = node
 				}
 			}
