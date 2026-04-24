@@ -539,7 +539,9 @@ func executorExtractValue(ctx *ExecutionContext, source *execresult.Object, path
 			if !ok {
 				value, exists := recent.Get(pointData.Field)
 				if exists && value == nil { // 'recent' is a strong object and field is already present and set to 'null'
-					return nil, nil
+					weakObj := execresult.NewObject()
+					weakObj.SetWeak()
+					return weakObj, nil
 				}
 				return nil, fmt.Errorf("target is non-null but not an object: %v, %T %v", pointData.Field, value, value)
 			}

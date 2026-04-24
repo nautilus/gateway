@@ -13,6 +13,7 @@ import (
 	"github.com/nautilus/gateway/internal/execresult"
 	"github.com/nautilus/graphql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
@@ -2202,6 +2203,24 @@ func TestFindObject(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{
 		"firstName": "Hello2",
 	}, value.ToMap())
+}
+
+func TestFindNull(t *testing.T) {
+	t.Parallel()
+	// create an object we want to extract
+	source := execresult.NewObjectFromMap(map[string]any{
+		"foo": map[string]any{
+			"bar": nil,
+		},
+	})
+
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, source, []string{"foo", "bar"})
+	require.NoError(t, err)
+
+	weakObj := execresult.NewObject()
+	weakObj.SetWeak()
+	assert.Equal(t, weakObj, value)
+	assert.Equal(t, map[string]any(nil), value.ToMap())
 }
 
 func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
