@@ -1,6 +1,6 @@
 module github.com/nautilus/gateway/cmd/gateway
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/nautilus/gateway v0.3.17
@@ -14,7 +14,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/graph-gophers/dataloader v5.0.0+incompatible // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
