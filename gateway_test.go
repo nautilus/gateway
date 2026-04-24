@@ -727,7 +727,7 @@ type User {
 	}, WithQueryerFactory(&queryerFactory))
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`
 		{
 			"query": %q,
 			"variables": {
@@ -785,7 +785,7 @@ type Query {
 	}, WithQueryerFactory(&queryerFactory))
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"query": "query { foo bar }"}`))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"query": "query { foo bar }"}`))
 	resp := httptest.NewRecorder()
 	gateway.GraphQLHandler(resp, req)
 	assert.Equal(t, http.StatusOK, resp.Code)
@@ -837,7 +837,7 @@ type Query {
 	})))
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"query": "query { foo }"}`))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"query": "query { foo }"}`))
 	resp := httptest.NewRecorder()
 	gateway.GraphQLHandler(resp, req)
 	assert.Equal(t, http.StatusOK, resp.Code)
@@ -935,7 +935,7 @@ type Bar implements Node {
 	}, WithQueryerFactory(&queryerFactory))
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`{"query": %q}`, query)))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`{"query": %q}`, query)))
 	resp := httptest.NewRecorder()
 	gateway.GraphQLHandler(resp, req)
 	assert.Equal(t, http.StatusOK, resp.Code)
@@ -1054,7 +1054,7 @@ query ($id: ID!) {
 			{Schema: schemaBar, URL: barURL},
 		}, WithQueryerFactory(makeQueryerFactory(t, barResponse, nil)))
 		require.NoError(t, err)
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(reqBody))
 		resp := httptest.NewRecorder()
 		gateway.GraphQLHandler(resp, req)
 		assert.Equal(t, http.StatusOK, resp.Code)
@@ -1073,7 +1073,7 @@ query ($id: ID!) {
 			{Schema: schemaBar, URL: barURL},
 		}, WithQueryerFactory(makeQueryerFactory(t, barResponse, nil)))
 		require.NoError(t, err)
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(reqBody))
 		resp := httptest.NewRecorder()
 		gateway.GraphQLHandler(resp, req)
 		assert.Equal(t, http.StatusOK, resp.Code)
@@ -1095,7 +1095,7 @@ query ($id: ID!) {
 			&graphql.Error{Message: "some error"},
 		})))
 		require.NoError(t, err)
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(reqBody))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(reqBody))
 		resp := httptest.NewRecorder()
 		gateway.GraphQLHandler(resp, req)
 		assert.Equal(t, http.StatusOK, resp.Code)
@@ -1151,7 +1151,7 @@ func TestSingleObjectOnlyRequestingNonIDFieldScrubsIDs(t *testing.T) {
 	gateway, err := New([]*graphql.RemoteSchema{source}, WithQueryerFactory(&queryerFactory))
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`
 		{
 			"query": %q,
 			"variables": {
