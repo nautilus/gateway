@@ -13,7 +13,7 @@ func TestNewObject(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, &Object{}, NewObject())
 
-	assert.Equal(t, newWeakObject(), MustNewObjectFromMap(nil))
+	assert.Equal(t, newWeakObject(), NewObjectFromMap(nil))
 
 	mapValue := map[string]any{
 		"foo": true,
@@ -55,10 +55,7 @@ func TestNewObject(t *testing.T) {
 		"map-typed nil":  map[string]any(nil),
 		"list-typed nil": nil,
 	}
-	obj, ok := NewObjectFromMap(mapValue)
-	require.True(t, ok)
-	require.Equal(t, expected, obj.ToMap())
-	assert.Equal(t, expected, MustNewObjectFromMap(mapValue).ToMap())
+	require.Equal(t, expected, NewObjectFromMap(mapValue).ToMap())
 }
 
 func TestToMap_niladic_values(t *testing.T) {
@@ -98,11 +95,11 @@ func TestObject_MergeOverrides(t *testing.T) {
 	t.Parallel()
 	t.Run("strong", func(t *testing.T) {
 		t.Parallel()
-		obj := MustNewObjectFromMap(map[string]any{
+		obj := NewObjectFromMap(map[string]any{
 			"foo": "bar",
 			"baz": "biff",
 		})
-		obj.MergeOverrides(MustNewObjectFromMap(map[string]any{
+		obj.MergeOverrides(NewObjectFromMap(map[string]any{
 			"foo": "boo",
 		}))
 		assert.Equal(t, map[string]any{
@@ -113,12 +110,12 @@ func TestObject_MergeOverrides(t *testing.T) {
 
 	t.Run("weak", func(t *testing.T) {
 		t.Parallel()
-		obj := MustNewObjectFromMap(map[string]any{
+		obj := NewObjectFromMap(map[string]any{
 			"foo": "bar",
 			"baz": "biff",
 		})
 		obj.SetWeak()
-		obj.MergeOverrides(MustNewObjectFromMap(map[string]any{
+		obj.MergeOverrides(NewObjectFromMap(map[string]any{
 			"foo": "boo",
 		}))
 		assert.Equal(t, map[string]any{
@@ -128,12 +125,12 @@ func TestObject_MergeOverrides(t *testing.T) {
 
 	t.Run("nested objects", func(t *testing.T) {
 		t.Parallel()
-		obj := MustNewObjectFromMap(map[string]any{
+		obj := NewObjectFromMap(map[string]any{
 			"foo": map[string]any{
 				"bar": "baz",
 			},
 		})
-		obj.MergeOverrides(MustNewObjectFromMap(map[string]any{
+		obj.MergeOverrides(NewObjectFromMap(map[string]any{
 			"foo": "biff",
 			"boo": map[string]any{
 				"bah": "bam",
@@ -161,7 +158,7 @@ func TestObject_Gets(t *testing.T) {
 			"boo",
 		},
 	}
-	obj := MustNewObjectFromMap(data)
+	obj := NewObjectFromMap(data)
 
 	t.Run("get basic value", func(t *testing.T) {
 		t.Parallel()
@@ -245,7 +242,7 @@ func TestObject_SetsAndEnsures(t *testing.T) {
 			"boo",
 		},
 	}
-	obj := MustNewObjectFromMap(data)
+	obj := NewObjectFromMap(data)
 
 	t.Run("set", func(t *testing.T) {
 		t.Parallel()
@@ -382,7 +379,7 @@ func TestObject_SetsAndEnsures(t *testing.T) {
 
 func TestObject_MarshalJSON(t *testing.T) {
 	t.Parallel()
-	value, err := MustNewObjectFromMap(map[string]any{
+	value, err := NewObjectFromMap(map[string]any{
 		"foo": "foo",
 		"bar": 1,
 		"baz": map[string]any{

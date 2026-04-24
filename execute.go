@@ -259,11 +259,7 @@ func executeOneStep(
 			Variables:     variables,
 			OperationName: operationName,
 		}, &queryResultMap)
-		var nonNullData bool
-		queryResult, nonNullData = execresult.NewObjectFromMap(queryResultMap)
-		if !nonNullData {
-			return nil, nil, queryErr
-		}
+		queryResult = execresult.NewObjectFromMap(queryResultMap)
 	}
 
 	// NOTE: this insertion point could point to a list of values. If it did, we have to have

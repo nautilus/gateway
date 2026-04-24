@@ -19,15 +19,8 @@ func NewObject() *Object {
 	return &Object{}
 }
 
-// NewObjectFromMap returns an [Object] to represent the given map m and true. If m is nil, returns nil and false.
-func NewObjectFromMap(m map[string]any) (*Object, bool) {
-	obj, isNonNil := toObjectTypes(m).(*Object)
-	return obj, isNonNil
-}
-
-// MustNewObjectFromMap is the same as [NewObjectFromMap] but panics if m is nil.
-// Only safe for use in test cases.
-func MustNewObjectFromMap(m map[string]any) *Object {
+// NewObjectFromMap returns an [Object] to represent the given map m
+func NewObjectFromMap(m map[string]any) *Object {
 	return toObjectTypes(m).(*Object)
 }
 

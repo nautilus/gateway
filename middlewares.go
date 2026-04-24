@@ -40,10 +40,7 @@ func (p ResponseMiddleware) ExecutionMiddleware() {}
 // explicitly ask for
 func scrubInsertionIDs(ctx *ExecutionContext, response map[string]interface{}) error {
 	// there are many fields to scrub
-	responseObj, responseIsNonNull := execresult.NewObjectFromMap(response)
-	if !responseIsNonNull {
-		return nil
-	}
+	responseObj := execresult.NewObjectFromMap(response)
 	for field, locations := range ctx.Plan.FieldsToScrub {
 		for _, location := range locations {
 			// look for the insertion points in the response for the field

@@ -2085,7 +2085,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 	}
 
 	// the result of the step
-	result := execresult.MustNewObjectFromMap(map[string]interface{}{
+	result := execresult.NewObjectFromMap(map[string]interface{}{
 		"users": []interface{}{
 			map[string]interface{}{
 				"photoGallery": []interface{}{
@@ -2146,7 +2146,7 @@ func TestFindInsertionPoint_rootList(t *testing.T) {
 func TestFindObject(t *testing.T) {
 	t.Parallel()
 	// create an object we want to extract
-	source := execresult.MustNewObjectFromMap(map[string]interface{}{
+	source := execresult.NewObjectFromMap(map[string]interface{}{
 		"hello": []interface{}{
 			map[string]interface{}{
 				"firstName": "0",
@@ -2211,7 +2211,7 @@ func TestExecutorInsertObject_insertObjectValues(t *testing.T) {
 
 	// the object to insert
 	inserted := map[string]interface{}{"hello": "world"}
-	insertedObj := execresult.MustNewObjectFromMap(inserted)
+	insertedObj := execresult.NewObjectFromMap(inserted)
 
 	// insert the string deeeeep down
 	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, []string{"hello:5#1", "message", "body:2"}, insertedObj)
@@ -2276,7 +2276,7 @@ func TestExecutorInsertObject_insertListElements(t *testing.T) {
 	inserted := map[string]interface{}{
 		"hello": "world",
 	}
-	insertedObj := execresult.MustNewObjectFromMap(inserted)
+	insertedObj := execresult.NewObjectFromMap(inserted)
 
 	// insert the object deeeeep down
 	err := executorInsertObject(&ExecutionContext{logger: &DefaultLogger{}}, source, []string{"hello", "objects:5"}, insertedObj)
@@ -2341,7 +2341,7 @@ func TestFindInsertionPoint_bailOnNil(t *testing.T) {
 	// we want the list of insertion points that point to
 	planInsertionPoint := []string{"post", "author"}
 
-	result := execresult.MustNewObjectFromMap(map[string]interface{}{
+	result := execresult.NewObjectFromMap(map[string]interface{}{
 		"post": map[string]interface{}{
 			"author": nil,
 		},
@@ -2423,7 +2423,7 @@ func TestFindInsertionPoint_stitchIntoObject(t *testing.T) {
 	}
 
 	// the result of the step
-	result := execresult.MustNewObjectFromMap(map[string]interface{}{
+	result := execresult.NewObjectFromMap(map[string]interface{}{
 		"photoGallery": []interface{}{
 			map[string]interface{}{
 				"author": map[string]interface{}{
@@ -2461,7 +2461,7 @@ func TestSingleObjectWithColonInID(t *testing.T) {
 		&source,
 	)
 
-	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, execresult.MustNewObjectFromMap(source), []string{"hello#Thing:1337"})
+	value, err := executorExtractValue(&ExecutionContext{logger: &DefaultLogger{}}, execresult.NewObjectFromMap(source), []string{"hello#Thing:1337"})
 	if err != nil {
 		t.Error(err.Error())
 		return
