@@ -607,7 +607,7 @@ func (p *MinQueriesPlanner) wrapSelectionSet(ctx *PlanningContext, config *extra
 }
 
 // selects one location out of possibleLocations, prioritizing the parent's location and the internal schema
-func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *extractSelectionConfig) string {
+func (p *MinQueriesPlanner) selectLocation(ctx *PlanningContext, fieldName string, possibleLocations []string, config *extractSelectionConfig) string {
 	// if this field can only be found in one location
 	if len(possibleLocations) == 1 {
 		return possibleLocations[0]
@@ -633,6 +633,7 @@ func (p *MinQueriesPlanner) selectLocation(possibleLocations []string, config *e
 
 	// if we got here then this field can be found in multiple services and none of the top priority locations.
 	// for now, just use the first one
+	ctx.Gateway.logger.WithFields(LoggerFields{"locations": possibleLocations, "field": fmt.Sprintf("%s.%s", config.parentType, fieldName)}).Debug("Multiple locations available for field, but none have priority; arbitrarily selecting first one")
 	return possibleLocations[0]
 }
 
@@ -663,7 +664,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extr
 				return nil, nil, err
 			}
 
-			location := p.selectLocation(possibleLocations, config)
+			location := p.selectLocation(ctx, selection.Name, possibleLocations, config)
 			locationFields[location] = append(locationFields[location], field)
 		case *ast.FragmentSpread:
 			ctx.Gateway.logger.Debug("Encountered fragment spread ", selection.Name)
@@ -704,7 +705,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extr
 						return nil, nil, err
 					}
 
-					fieldLocation := p.selectLocation(fieldLocations, config)
+					fieldLocation := p.selectLocation(ctx, field.Name, fieldLocations, config)
 					fragmentLocations[fieldLocation] = append(fragmentLocations[fieldLocation], field)
 
 				case *ast.FragmentSpread, *ast.InlineFragment:

@@ -48,7 +48,7 @@ func TestGraphQLHandler_postMissingQuery(t *testing.T) {
 		return
 	}
 	// the incoming request
-	request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`
 		{
 			"query": ""
 		}
@@ -91,7 +91,7 @@ func TestGraphQLHandler(t *testing.T) {
 	t.Run("Missing query", func(t *testing.T) {
 		t.Parallel()
 		// the incoming request
-		request := httptest.NewRequest("GET", "/graphql", strings.NewReader(""))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/graphql", strings.NewReader(""))
 		// a recorder so we can check what the handler responded with
 		responseRecorder := httptest.NewRecorder()
 
@@ -114,7 +114,7 @@ func TestGraphQLHandler(t *testing.T) {
 	t.Run("Non-object variables fails", func(t *testing.T) {
 		t.Parallel()
 		// the incoming request
-		request := httptest.NewRequest("GET", `/graphql?query={allUsers}&variables=true`, strings.NewReader(""))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, `/graphql?query={allUsers}&variables=true`, strings.NewReader(""))
 
 		// a recorder so we can check what the handler responded with
 		responseRecorder := httptest.NewRecorder()
@@ -130,7 +130,7 @@ func TestGraphQLHandler(t *testing.T) {
 	t.Run("Object variables succeeds", func(t *testing.T) {
 		t.Parallel()
 		// the incoming request
-		request := httptest.NewRequest("GET", `/graphql?query={allUsers}&variables={"foo":2}`, strings.NewReader(""))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, `/graphql?query={allUsers}&variables={"foo":2}`, strings.NewReader(""))
 		// a recorder so we can check what the handler responded with
 		responseRecorder := httptest.NewRecorder()
 
@@ -146,7 +146,7 @@ func TestGraphQLHandler(t *testing.T) {
 	t.Run("OperationName", func(t *testing.T) {
 		t.Parallel()
 		// the incoming request
-		request := httptest.NewRequest("GET", `/graphql?query={allusers}&operationName=Hello`, strings.NewReader(""))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, `/graphql?query={allusers}&operationName=Hello`, strings.NewReader(""))
 		// a recorder so we can check what the handler responded with
 		responseRecorder := httptest.NewRecorder()
 
@@ -177,7 +177,7 @@ func TestGraphQLHandler(t *testing.T) {
 		}
 
 		// the incoming request
-		request := httptest.NewRequest("GET", `/graphql?query={allUsers}`, strings.NewReader(""))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, `/graphql?query={allUsers}`, strings.NewReader(""))
 		// a recorder so we can check what the handler responded with
 		responseRecorder := httptest.NewRecorder()
 
@@ -213,7 +213,7 @@ func TestGraphQLHandler(t *testing.T) {
 		}
 
 		// the incoming request
-		request := httptest.NewRequest("GET", `/graphql?query={allUsers}`, strings.NewReader(""))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, `/graphql?query={allUsers}`, strings.NewReader(""))
 		// a recorder so we can check what the handler responded with
 		responseRecorder := httptest.NewRecorder()
 
@@ -276,7 +276,7 @@ func TestQueryPlanCacheParameters_post(t *testing.T) {
 	}
 
 	// make a request for an unknown persisted query
-	request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`
 		{
 			"extensions": {
 				"persistedQuery": {
@@ -318,7 +318,7 @@ func TestQueryPlanCacheParameters_post(t *testing.T) {
 	}
 
 	// passing in a valid query along with the hash
-	request = httptest.NewRequest("POST", "/graphql", strings.NewReader(`
+	request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`
 		{
 			"query": "{ allUsers }",
 			"extensions": {
@@ -392,9 +392,9 @@ func TestQueryPlanCacheParameters_get(t *testing.T) {
 	}
 
 	// make a request for an unknown persisted query
-	// request := httptesot.NewRequest("POST", "/graphql?extensions={\"persistedQuery\": {\"version\": 1, \"sha256Hash\": \"1234\"}}", strings.NewReader(""))
+	// request := httptesot.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql?extensions={\"persistedQuery\": {\"version\": 1, \"sha256Hash\": \"1234\"}}", strings.NewReader(""))
 	request := &http.Request{
-		Method: "GET",
+		Method: http.MethodGet,
 		URL: &url.URL{
 			RawPath:  "/graphql",
 			RawQuery: "extensions={\"persistedQuery\": {\"version\": 1, \"sha256Hash\": \"1234\"}}",
@@ -453,7 +453,7 @@ func TestPlaygroundHandler_postRequest(t *testing.T) {
 		return
 	}
 	// the incoming request
-	request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`
 		{
 			"query": "{ allUsers }"
 		}
@@ -517,7 +517,7 @@ func TestPlaygroundHandler_postRequestList(t *testing.T) {
 	// we need to send a list of two queries ({ a } and { b }) and make sure they resolve in the right order
 
 	// the incoming request
-	request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`
 		[
 			{
 				"query": "{ a { id } }"
@@ -594,7 +594,7 @@ func TestPlaygroundHandler_getRequest(t *testing.T) {
 		return
 	}
 	// the incoming request
-	request := httptest.NewRequest("GET", "/graphql", strings.NewReader(``))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/graphql", strings.NewReader(``))
 	// a recorder so we can check what the handler responded with
 	responseRecorder := httptest.NewRecorder()
 
@@ -994,7 +994,7 @@ func TestGraphQLHandler_postBatchParallel(t *testing.T) {
 		return
 	}
 
-	request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`[
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`[
 			{ 
 				"query": "query queryAOperation { queryA }", 
 				"variables": null 
@@ -1381,7 +1381,7 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 	t.Run("Not multipart request", func(t *testing.T) {
 		t.Parallel()
 		// the incoming request
-		request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`{ 
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`{ 
 				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
 				"variables": { "someFile": null } 
 			}`))
@@ -1402,7 +1402,7 @@ func TestGraphQLHandler_postFilesWithError(t *testing.T) {
 	t.Run("Unknown content-type", func(t *testing.T) {
 		t.Parallel()
 		// the incoming request
-		request := httptest.NewRequest("POST", "/graphql", strings.NewReader(`{ 
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`{ 
 				"query": "mutation ($someFile: Upload!) { upload(file: $someFile) }", 
 				"variables": { "someFile": null } 
 			}`))
@@ -1466,7 +1466,7 @@ func createMultipartRequest(operations, fileMap []byte, filesContent ...[]byte) 
 	}
 
 	// the incoming request
-	request := httptest.NewRequest("POST", "/graphql", &b)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/graphql", &b)
 	request.Header.Set("Content-Type", w.FormDataContentType())
 
 	return request, nil
@@ -1498,7 +1498,7 @@ func TestStaticPlaygroundHandler(t *testing.T) {
 
 	t.Run("static UI", func(t *testing.T) {
 		t.Parallel()
-		request := httptest.NewRequest(http.MethodGet, "/graphql", strings.NewReader(""))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/graphql", strings.NewReader(""))
 		responseRecorder := httptest.NewRecorder()
 		gateway.StaticPlaygroundHandler(PlaygroundConfig{
 			Endpoint: "some-url",
@@ -1513,7 +1513,7 @@ func TestStaticPlaygroundHandler(t *testing.T) {
 
 	t.Run("queries fail", func(t *testing.T) {
 		t.Parallel()
-		request := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(`query { allUsers { firstName } }`))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`query { allUsers { firstName } }`))
 		responseRecorder := httptest.NewRecorder()
 		gateway.StaticPlaygroundHandler(PlaygroundConfig{}).ServeHTTP(responseRecorder, request)
 
@@ -1539,7 +1539,7 @@ func TestGraphQLHandler_OptionsMethod(t *testing.T) {
 		t.Error(err.Error())
 		return
 	}
-	request := httptest.NewRequest(http.MethodOptions, "/graphql", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "/graphql", nil)
 	response := httptest.NewRecorder()
 
 	gateway.GraphQLHandler(response, request)

@@ -303,7 +303,7 @@ func TestSchemaIntrospection_missingQueryDocument(t *testing.T) {
 func TestSchema_resolveNodeInlineID(t *testing.T) {
 	t.Parallel()
 	type Result struct {
-		Node struct {
+		Node *struct {
 			ID string `json:"id"`
 		} `json:"node"`
 	}
@@ -321,12 +321,8 @@ func TestSchema_resolveNodeInlineID(t *testing.T) {
 
 	// a place to hold the response of the query
 	err := schemaTestLoadQuery(query, result, map[string]interface{}{})
-	if err != nil {
-		t.Error(err.Error())
-		return
-	}
-
-	assert.Equal(t, &Result{Node: struct {
+	assert.NoError(t, err)
+	assert.Equal(t, &Result{Node: &struct {
 		ID string `json:"id"`
 	}{ID: "my-id"}}, result)
 }
@@ -334,7 +330,7 @@ func TestSchema_resolveNodeInlineID(t *testing.T) {
 func TestSchema_resolveNodeIDFromArg(t *testing.T) {
 	t.Parallel()
 	type Result struct {
-		Node struct {
+		Node *struct {
 			ID string `json:"id"`
 		} `json:"node"`
 	}
@@ -354,12 +350,8 @@ func TestSchema_resolveNodeIDFromArg(t *testing.T) {
 	err := schemaTestLoadQuery(query, result, map[string]interface{}{
 		"id": "my-id",
 	})
-	if err != nil {
-		t.Error(err.Error())
-		return
-	}
-
-	assert.Equal(t, &Result{Node: struct {
+	assert.NoError(t, err)
+	assert.Equal(t, &Result{Node: &struct {
 		ID string `json:"id"`
 	}{ID: "my-id"}}, result)
 }

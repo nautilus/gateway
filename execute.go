@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/nautilus/gateway/internal/execresult"
 	"github.com/nautilus/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
 )
@@ -31,7 +32,7 @@ type ParallelExecutor struct{}
 
 type queryExecutionResult struct {
 	InsertionPoint []string
-	Result         map[string]interface{}
+	Result         *execresult.Object
 	Err            error
 }
 
@@ -53,7 +54,7 @@ type ExecutionContext struct {
 // Execute returns the result of the query plan
 func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]interface{}, error) {
 	// a place to store the result
-	result := map[string]interface{}{}
+	result := execresult.NewObject()
 
 	// a channel to receive query results
 	const maxResultBuffer = 10
@@ -72,9 +73,6 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 	closeCh := make(chan bool)
 	defer close(closeCh)
 
-	// a lock for reading and writing to the result
-	resultLock := &sync.Mutex{}
-
 	// if there are no steps after the root step, there is a problem
 	if len(ctx.Plan.RootStep.Then) == 0 {
 		return nil, errors.New("was given empty plan")
@@ -83,7 +81,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 	// the root step could have multiple steps that have to happen
 	for _, step := range ctx.Plan.RootStep.Then {
 		stepWg.Add(1)
-		go executeStep(ctx, ctx.Plan, step, []string{}, resultLock, ctx.Variables, resultCh, stepWg)
+		go executeStep(ctx, ctx.Plan, step, []string{}, ctx.Variables, resultCh, stepWg)
 	}
 
 	// the list of errors we have encountered while executing the plan
@@ -103,7 +101,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 
 				// we have to grab the value in the result and write it to the appropriate spot in the
 				// acumulator.
-				insertErr := executorInsertObject(ctx, result, resultLock, payload.InsertionPoint, payload.Result)
+				insertErr := executorInsertObject(ctx, result, payload.InsertionPoint, payload.Result)
 
 				switch {
 				case payload.Err != nil: // response errors are the highest priority to return
@@ -123,6 +121,7 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 					if errors.As(err, &errList) {
 						errs = append(errs, errList...)
 					} else {
+						ctx.logger.Warn("Unexpected error type executing query plan step: ", err)
 						errs = append(errs, err)
 					}
 					errMutex.Unlock()
@@ -144,11 +143,11 @@ func (executor *ParallelExecutor) Execute(ctx *ExecutionContext) (map[string]int
 	defer errMutex.Unlock()
 
 	if nErrs > 0 {
-		return result, errs
+		return result.ToMap(), errs
 	}
 
 	// we didn't encounter any errors
-	return result, nil
+	return result.ToMap(), nil
 }
 
 // TODO: ugh... so... many... variables...
@@ -157,12 +156,11 @@ func executeStep(
 	plan *QueryPlan,
 	step *QueryPlanStep,
 	insertionPoint []string,
-	resultLock *sync.Mutex,
 	queryVariables map[string]interface{},
 	resultCh chan *queryExecutionResult,
 	stepWg *sync.WaitGroup,
 ) {
-	queryResult, dependentSteps, queryErr := executeOneStep(ctx, plan, step, insertionPoint, resultLock, queryVariables)
+	queryResult, dependentSteps, queryErr := executeOneStep(ctx, plan, step, insertionPoint, queryVariables)
 	// before publishing the current result, tell the wait-group about the dependent steps to wait for
 	stepWg.Add(len(dependentSteps))
 	ctx.logger.Debug("Pushing Result. Insertion point: ", insertionPoint, ". Value: ", queryResult)
@@ -178,7 +176,7 @@ func executeStep(
 	// Execute dependent steps after the main step has been published.
 	for _, sr := range dependentSteps {
 		ctx.logger.Info("Spawn ", sr.insertionPoint)
-		go executeStep(ctx, plan, sr.step, sr.insertionPoint, resultLock, queryVariables, resultCh, stepWg)
+		go executeStep(ctx, plan, sr.step, sr.insertionPoint, queryVariables, resultCh, stepWg)
 	}
 }
 
@@ -192,9 +190,8 @@ func executeOneStep(
 	plan *QueryPlan,
 	step *QueryPlanStep,
 	insertionPoint []string,
-	resultLock *sync.Mutex,
 	queryVariables map[string]interface{},
-) (map[string]interface{}, []dependentStepArgs, error) {
+) (*execresult.Object, []dependentStepArgs, error) {
 	ctx.logger.Debug("Executing step to be inserted in ", step.ParentType, ". Insertion point: ", insertionPoint)
 
 	ctx.logger.Debug(step.SelectionSet)
@@ -237,10 +234,7 @@ func executeOneStep(
 		return nil, nil, errors.New(" could not find queryer for step")
 	}
 
-	// the query we will use
 	queryer := step.Queryer
-	// a place to save the result
-	queryResult := map[string]interface{}{}
 
 	// if we have middlewares
 	if len(ctx.RequestMiddlewares) > 0 {
@@ -255,13 +249,18 @@ func executeOneStep(
 		operationName = plan.Operation.Name
 	}
 
-	// fire the query
-	queryErr := queryer.Query(ctx.RequestContext, &graphql.QueryInput{
-		Query:         step.QueryString,
-		QueryDocument: step.QueryDocument,
-		Variables:     variables,
-		OperationName: operationName,
-	}, &queryResult)
+	var queryResult *execresult.Object
+	var queryErr error
+	{ // fire the query
+		var queryResultMap map[string]any
+		queryErr = queryer.Query(ctx.RequestContext, &graphql.QueryInput{
+			Query:         step.QueryString,
+			QueryDocument: step.QueryDocument,
+			Variables:     variables,
+			OperationName: operationName,
+		}, &queryResultMap)
+		queryResult = execresult.NewObjectFromMap(queryResultMap)
+	}
 
 	// NOTE: this insertion point could point to a list of values. If it did, we have to have
 	//       passed it to the this invocation of this function. It is safe to trust this
@@ -273,17 +272,11 @@ func executeOneStep(
 	if stripNode {
 		ctx.logger.Debug("Should strip node")
 		// get the result from the response that we have to stitch there
-		extractedResult, err := executorExtractValue(ctx, queryResult, resultLock, []string{"node"})
+		extractedResult, err := executorExtractValue(ctx, queryResult, []string{"node"})
 		if err != nil {
 			return nil, nil, err
 		}
-
-		resultObj, ok := extractedResult.(map[string]interface{})
-		if !ok {
-			return nil, nil, fmt.Errorf("query result of node query was not an object: %v", queryResult)
-		}
-
-		queryResult = resultObj
+		queryResult = extractedResult
 	}
 
 	// if there are next steps
@@ -295,9 +288,12 @@ func executeOneStep(
 		for _, dependent := range step.Then {
 			copiedInsertionPoint := make([]string, len(insertionPoint))
 			copy(copiedInsertionPoint, insertionPoint)
-			insertPoints, err := executorFindInsertionPoints(ctx, resultLock, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{copiedInsertionPoint}, step.FragmentDefinitions)
+			insertPoints, missingIDPoints, err := executorFindInsertionPoints(ctx, dependent.InsertionPoint, step.SelectionSet, queryResult, [][]string{copiedInsertionPoint}, step.FragmentDefinitions)
 			if err != nil {
 				return nil, nil, err
+			}
+			if len(missingIDPoints) > 0 {
+				return nil, nil, fmt.Errorf("could not find IDs for insertion points: %v", missingIDPoints)
 			}
 
 			// this dependent needs to fire for every object that the insertion point references
@@ -329,199 +325,176 @@ func findSelection(matchString string, selectionSet ast.SelectionSet, fragmentDe
 }
 
 // executorFindInsertionPoints returns the list of insertion points where this step should be executed.
-func executorFindInsertionPoints(ctx *ExecutionContext, resultLock *sync.Mutex, targetPoints []string, selectionSet ast.SelectionSet, result map[string]interface{}, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) ([][]string, error) {
+func executorFindInsertionPoints(ctx *ExecutionContext, targetPoints []string, selectionSet ast.SelectionSet, result *execresult.Object, startingPoints [][]string, fragmentDefs ast.FragmentDefinitionList) (insertionPoints [][]string, missingIDPoints [][]string, err error) {
 	ctx.logger.Debug("Looking for insertion points. target: ", targetPoints, " Starting from ", startingPoints)
-	oldBranch := startingPoints
-
-	// track the root of the selection set while  we walk
-	selectionSetRoot := selectionSet
-
-	// a place to refer to parts of the results
-	resultChunk := result
-
-	// the index to start at
 	startingIndex := 0
-	if len(oldBranch) > 0 {
-		startingIndex = len(oldBranch[0])
+	if len(startingPoints) > 0 {
+		startingIndex = len(startingPoints[0])
 
-		if len(targetPoints) == len(oldBranch[0]) {
-			return startingPoints, nil
+		if len(targetPoints) == len(startingPoints[0]) {
+			return startingPoints, missingIDPoints, nil
 		}
 	}
 
-	ctx.logger.Debug("First meaningful path point: ", targetPoints[startingIndex])
-	ctx.logger.Debug("result ", resultChunk)
+	ctx.logger.Debug("traversing path point: ", targetPoints[startingIndex])
 
 	// if our starting point is []string{"users:0"} then we know everything so far
 	// is along the path of the steps insertion point
-	for pointI := startingIndex; pointI < len(targetPoints); pointI++ {
-		// the point in the steps insertion path that we want to add
-		point := targetPoints[pointI]
+	point := targetPoints[startingIndex]
+	isLastPoint := startingIndex == len(targetPoints)-1
 
-		// find the selection node in the AST corresponding to the point
-		var foundSelection *ast.Field
-		foundSelection, err := findSelection(point, selectionSetRoot, fragmentDefs)
-		if err != nil {
-			ctx.logger.Debug("Error looking for selection")
-			return [][]string{}, err
-		}
-
-		// if we didn't find a selection
-		if foundSelection == nil {
-			ctx.logger.Debug("No selection")
-			return [][]string{}, nil
-		}
-
-		ctx.logger.Debug("Found Selection for: ", point)
-		ctx.logger.Debug("Result Chunk: ", resultChunk)
-		// make sure we are looking at the top of the selection set next time
-		selectionSetRoot = foundSelection.SelectionSet
-
-		value := resultChunk
-
-		// the bit of result chunk with the appropriate key should be a list
-		rootValue, ok := value[point]
-		if !ok {
-			return [][]string{}, nil
-		}
-
-		// get the type of the object in question
-		selectionType := foundSelection.Definition.Type
-
-		if rootValue == nil {
-			if selectionType.NonNull {
-				err := fmt.Errorf("received null for required field: %v", foundSelection.Name)
-				ctx.logger.Warn(err)
-				return nil, err
-			}
-			return nil, nil
-		}
-
-		// if the type is a list
-		if selectionType.Elem != nil {
-			ctx.logger.Debug("Selection should be a list")
-			// make sure the root value is a list
-			rootList, ok := rootValue.([]interface{})
-			if !ok {
-				return nil, fmt.Errorf("root value of result chunk was not a list: %v", rootValue)
-			}
-			// build up a new list of insertion points
-			var newInsertionPoints [][]string
-
-			// each value in the result contributes an insertion point
-			for entryI, iEntry := range rootList {
-				resultEntry, ok := iEntry.(map[string]interface{})
-				if !ok {
-					return nil, errors.New("entry in result wasn't a map")
-				}
-
-				// the point we are going to add to the list
-				entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
-				if foundSelection.Alias != "" {
-					entryPoint = fmt.Sprintf("%s:%v", foundSelection.Alias, entryI)
-				}
-				ctx.logger.Debug("Adding ", entryPoint, " to list")
-
-				var newBranchSet [][]string
-				for _, c := range oldBranch {
-					newBranchSet = append(newBranchSet, copyStrings(c))
-				}
-
-				// if we are adding to an existing branch
-				if len(newBranchSet) > 0 {
-					// add the path to the end of this for the entry we just added
-					for i, newBranch := range newBranchSet {
-						// if we are looking at the last thing in the insertion list
-						if pointI == len(targetPoints)-1 {
-							// look for an id
-							id, ok := resultEntry["id"]
-							if !ok {
-								return nil, errors.New("could not find the id for elements in target list")
-							}
-
-							// add the id to the entry so that the executor can use it to form its query
-							entryPoint = fmt.Sprintf("%s#%v", entryPoint, id)
-
-						}
-
-						// add the point for this entry in the list
-						newBranchSet[i] = append(newBranch, entryPoint)
-					}
-				} else {
-					newBranchSet = append(newBranchSet, []string{entryPoint})
-				}
-
-				// compute the insertion points for that entry
-				entryInsertionPoints, err := executorFindInsertionPoints(ctx, resultLock, targetPoints, selectionSetRoot, resultEntry, newBranchSet, fragmentDefs)
-				if err != nil {
-					return nil, err
-				}
-
-				// add the list of insertion points to the acumulator
-				newInsertionPoints = append(newInsertionPoints, entryInsertionPoints...)
-			}
-
-			// return the flat list of insertion points created by our children
-			return newInsertionPoints, nil
-		}
-		// traverse down the resultChunk for the next iteration
-		if rootValueMap, ok := rootValue.(map[string]interface{}); ok {
-			resultChunk = rootValueMap
-		}
-
-		// we are encountering something that isn't a list so it must be an object or a scalar
-		// regardless, we just need to add the point to the end of each list
-		for i, points := range oldBranch {
-			oldBranch[i] = append(points, point)
-		}
-
-		if pointI == len(targetPoints)-1 {
-			// the root value could be a list in which case the id is the id of the corresponding entry
-			// or the root value could be an object in which case the id is the id of the root value
-
-			// if the root value is a list
-			if rootList, ok := rootValue.([]interface{}); ok {
-				for i := range oldBranch {
-					entry, ok := rootList[i].(map[string]interface{})
-					if !ok {
-						return nil, errors.New("item in root list isn't a map")
-					}
-
-					// look up the id of the object
-					resultLock.Lock()
-					id, ok := entry["id"]
-					resultLock.Unlock()
-					if !ok {
-						return nil, errors.New("could not find the id for the object")
-					}
-
-					// ctx.logger.Debug("Adding id to ", oldBranch[i][pointI])
-
-					oldBranch[i][pointI] = fmt.Sprintf("%s:%v#%v", oldBranch[i][pointI], i, id)
-
-				}
-			} else {
-				rootObj, ok := rootValue.(map[string]interface{})
-				if !ok {
-					return nil, fmt.Errorf("root value of result chunk was not an object. Point: %v Value: %v", point, rootValue)
-				}
-
-				for i := range oldBranch {
-					// look up the id of the object
-					id := rootObj["id"]
-					if !ok {
-						return nil, errors.New("could not find the id for the object")
-					}
-
-					oldBranch[i][pointI] = fmt.Sprintf("%s#%v", oldBranch[i][pointI], id)
-				}
-			}
-		}
-
+	// find the selection node in the AST corresponding to the point
+	foundSelection, err := findSelection(point, selectionSet, fragmentDefs)
+	if err != nil {
+		ctx.logger.Debug("Error looking for selection")
+		return nil, nil, err
 	}
 
-	// return the aggregation
-	return oldBranch, nil
+	// if we didn't find a selection
+	if foundSelection == nil {
+		ctx.logger.Debug("No selection")
+		return nil, missingIDPoints, nil
+	}
+
+	ctx.logger.Debug("Found Selection for: ", point)
+	ctx.logger.Debug("Result Chunk: ", result)
+	// make sure we are looking at the top of the selection set next time
+	selectionSet = foundSelection.SelectionSet
+
+	pointValue, ok := result.Get(point)
+	if !ok {
+		return nil, missingIDPoints, nil
+	}
+
+	// get the type of the object in question
+	selectionType := foundSelection.Definition.Type
+
+	if pointValue == nil {
+		if selectionType.NonNull {
+			err := fmt.Errorf("received null for required field: %v", foundSelection.Name)
+			ctx.logger.Warn(err)
+			return nil, nil, err
+		}
+		return nil, missingIDPoints, nil
+	}
+
+	if selectionType.Elem != nil {
+		ctx.logger.Debug("Selection should be a list")
+		list, ok := pointValue.(*execresult.List)
+		if !ok {
+			return nil, nil, fmt.Errorf("point value should be list, but was not: %v", pointValue)
+		}
+
+		// build up a new list of insertion points
+		var newInsertionPoints [][]string
+
+		// each value in the result contributes an insertion point
+		for entryI, iEntry := range list.All() {
+			resultEntry, ok := iEntry.(*execresult.Object)
+			if !ok {
+				return nil, nil, errors.New("entry in result wasn't an object")
+			}
+
+			// the point we are going to add to the list
+			entryPoint := fmt.Sprintf("%s:%v", foundSelection.Name, entryI)
+			if foundSelection.Alias != "" {
+				entryPoint = fmt.Sprintf("%s:%v", foundSelection.Alias, entryI)
+			}
+			ctx.logger.Debug("Adding ", entryPoint, " to list")
+
+			var newBranchSet [][]string
+			for _, c := range startingPoints {
+				newBranchSet = append(newBranchSet, copyStrings(c))
+			}
+
+			// if we are adding to an existing branch
+			if len(newBranchSet) > 0 {
+				notFoundIndices := make(map[int]struct{})
+				// add the path to the end of this for the entry we just added
+				for i, newBranch := range newBranchSet {
+					branchEntryPoint := entryPoint // avoid mutating shared list entrypoint
+					// if we are looking at the last thing in the insertion list
+					if isLastPoint {
+						// look for an id
+						id, ok := resultEntry.Get("id")
+						if !ok {
+							notFoundIndices[i] = struct{}{}
+						} else {
+							// add the id to the entry so that the executor can use it to form its query
+							branchEntryPoint = fmt.Sprintf("%s#%v", branchEntryPoint, id)
+						}
+					}
+					newBranchSet[i] = append(newBranch, branchEntryPoint)
+				}
+				var deletedBranchSet [][]string
+				newBranchSet, deletedBranchSet = deleteIndices(newBranchSet, notFoundIndices)
+				missingIDPoints = append(missingIDPoints, deletedBranchSet...)
+			} else {
+				newBranchSet = append(newBranchSet, []string{entryPoint})
+			}
+
+			// compute the insertion points for that entry
+			entryInsertionPoints, missingEntryIDPoints, err := executorFindInsertionPoints(ctx, targetPoints, selectionSet, resultEntry, newBranchSet, fragmentDefs)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			// add the list of insertion points to the acumulator
+			newInsertionPoints = append(newInsertionPoints, entryInsertionPoints...)
+			missingIDPoints = append(missingIDPoints, missingEntryIDPoints...)
+		}
+
+		// return the flat list of insertion points created by our children
+		return newInsertionPoints, missingIDPoints, nil
+	}
+
+	// traverse down the resultChunk for the next iteration
+	if pointValueObj, ok := pointValue.(*execresult.Object); ok {
+		result = pointValueObj
+	}
+
+	// we are encountering something that isn't a list so it must be an object or a scalar
+	// regardless, we just need to add the point to the end of each list
+	for i, points := range startingPoints {
+		startingPoints[i] = append(points, point)
+	}
+
+	if isLastPoint {
+		notFoundIndices := make(map[int]struct{})
+		if list, ok := pointValue.(*execresult.List); ok {
+			for i := range startingPoints {
+				entry, ok := list.GetObjectAtIndex(i)
+				if !ok {
+					return nil, nil, errors.New("item in list isn't an object")
+				}
+
+				// look up the id of the object
+				id, ok := entry.Get("id")
+				if !ok {
+					notFoundIndices[i] = struct{}{}
+				}
+				startingPoints[i][startingIndex] = fmt.Sprintf("%s:%v#%v", startingPoints[i][startingIndex], i, id)
+			}
+		} else {
+			obj, ok := pointValue.(*execresult.Object)
+			if !ok {
+				return nil, nil, fmt.Errorf("point value was not an object. Point: %v Value: %v", point, pointValue)
+			}
+			for i := range startingPoints {
+				// look up the id of the object
+				id, ok := obj.Get("id")
+				if !ok {
+					notFoundIndices[i] = struct{}{}
+				}
+				startingPoints[i][startingIndex] = fmt.Sprintf("%s#%v", startingPoints[i][startingIndex], id)
+			}
+		}
+		var deletedStartingPoints [][]string
+		startingPoints, deletedStartingPoints = deleteIndices(startingPoints, notFoundIndices)
+		missingIDPoints = append(missingIDPoints, deletedStartingPoints...)
+	}
+	insertionPoints, missingSubIDPoints, err := executorFindInsertionPoints(ctx, targetPoints, selectionSet, result, startingPoints, fragmentDefs)
+	return insertionPoints, append(missingIDPoints, missingSubIDPoints...), err
 }
 
 func isListElement(path string) bool {
@@ -531,12 +504,12 @@ func isListElement(path string) bool {
 	return strings.Contains(path, ":")
 }
 
-func executorExtractValue(ctx *ExecutionContext, source map[string]interface{}, resultLock *sync.Mutex, path []string) (interface{}, error) {
+func executorExtractValue(ctx *ExecutionContext, source *execresult.Object, path []string) (*execresult.Object, error) {
 	// a pointer to the objects we are modifying
-	var recent interface{} = source
+	recent := source
 	ctx.logger.Debug("Pulling ", path, " from ", source)
 
-	for i, point := range path {
+	for _, point := range path {
 		// if the point designates an element in the list
 		if isListElement(point) {
 			pointData, err := executorGetPointData(point)
@@ -544,115 +517,46 @@ func executorExtractValue(ctx *ExecutionContext, source map[string]interface{}, 
 				return nil, err
 			}
 
-			recentObj, ok := recent.(map[string]interface{})
+			list, ok := recent.EnsureList(pointData.Field)
 			if !ok {
-				return nil, fmt.Errorf("list was not a child of an object. %v", pointData)
+				value, _ := recent.Get(pointData.Field)
+				return nil, fmt.Errorf("unexpected type at list insertion point %q: %T %v", pointData.Field, value, value)
 			}
-
-			// if the field does not exist
-			if _, ok := recentObj[pointData.Field]; !ok {
-				resultLock.Lock()
-				recentObj[pointData.Field] = []interface{}{}
-				resultLock.Unlock()
-			}
-
-			// it should be a list
-			resultLock.Lock()
-			field := recentObj[pointData.Field]
-			resultLock.Unlock()
-
-			targetList, ok := field.([]interface{})
+			obj, ok := list.EnsureObjectAtIndex(pointData.Index)
 			if !ok {
-				return nil, fmt.Errorf("did not encounter a list when expected. Point: %v. Field: %v. Result %v", point, pointData.Field, field)
+				value, _ := list.Get(pointData.Index)
+				return nil, fmt.Errorf("unexpected type at list item insertion point %q: %T %v", pointData.Field, value, value)
 			}
-
-			// if the field exists but does not have enough spots
-			if len(targetList) <= pointData.Index {
-				for i := len(targetList) - 1; i < pointData.Index; i++ {
-					targetList = append(targetList, map[string]interface{}{})
-				}
-
-				// update the list with what we just made
-				resultLock.Lock()
-				recentObj[pointData.Field] = targetList
-				resultLock.Unlock()
-			}
-
-			// focus on the right element
-			resultLock.Lock()
-			recent = targetList[pointData.Index]
-			resultLock.Unlock()
+			recent = obj
 		} else {
 			// it's possible that there's an id
 			pointData, err := executorGetPointData(point)
 			if err != nil {
 				return nil, err
 			}
-
-			pointField := pointData.Field
-
-			recentObj, ok := recent.(map[string]interface{})
+			obj, ok := recent.EnsureObject(pointData.Field)
 			if !ok {
-				return nil, fmt.Errorf("thisone, Target was not an object. %v, %v", pointData, recent)
+				value, exists := recent.Get(pointData.Field)
+				if exists && value == nil { // 'recent' is a strong object and field is already present and set to 'null'
+					weakObj := execresult.NewObject()
+					weakObj.SetWeak()
+					return weakObj, nil
+				}
+				return nil, fmt.Errorf("target is non-null but not an object: %v, %T %v", pointData.Field, value, value)
 			}
-
-			// we are add an object value
-			resultLock.Lock()
-			targetObject := recentObj[pointField]
-			resultLock.Unlock()
-
-			if i != len(path)-1 && targetObject == nil {
-				resultLock.Lock()
-				recentObj[pointField] = map[string]interface{}{}
-				resultLock.Unlock()
-			}
-			// if we haven't created an object there with that field
-			if targetObject == nil {
-				recentObj[pointField] = map[string]interface{}{}
-			}
-
-			// look there next
-			recent = recentObj[pointField]
+			recent = obj
 		}
 	}
 
 	return recent, nil
 }
 
-func executorInsertObject(ctx *ExecutionContext, target map[string]interface{}, resultLock *sync.Mutex, path []string, value interface{}) error {
-	// ctx.logger.Debug("Inserting object\n    Target: ", target, "\n    Path: ", path, "\n    Value: ", value)
-	if len(path) > 0 {
-		// a pointer to the objects we are modifying
-		obj, err := executorExtractValue(ctx, target, resultLock, path)
-		if err != nil {
-			return err
-		}
-
-		targetObj, ok := obj.(map[string]interface{})
-		if !ok {
-			return errors.New("target object is not an object")
-		}
-
-		// if the value we are assigning is an object
-		if newValue, ok := value.(map[string]interface{}); ok {
-			for k, v := range newValue {
-				resultLock.Lock()
-				targetObj[k] = v
-				resultLock.Unlock()
-			}
-		}
-	} else {
-		targetObj, ok := value.(map[string]interface{})
-		if !ok {
-			return errors.New("something went wrong")
-		}
-
-		for key, value := range targetObj {
-			resultLock.Lock()
-			target[key] = value
-			resultLock.Unlock()
-		}
+func executorInsertObject(ctx *ExecutionContext, target *execresult.Object, path []string, value *execresult.Object) error {
+	obj, err := executorExtractValue(ctx, target, path)
+	if err != nil {
+		return err
 	}
+	obj.MergeOverrides(value)
 	return nil
 }
 
@@ -729,4 +633,15 @@ func copyStrings(s []string) []string {
 	var result []string
 	result = append(result, s...)
 	return result
+}
+
+func deleteIndices[Value any](values []Value, indices map[int]struct{}) (newValues, deletedValues []Value) {
+	for index, value := range values {
+		if _, shouldDelete := indices[index]; shouldDelete {
+			deletedValues = append(deletedValues, value)
+		} else {
+			newValues = append(newValues, value)
+		}
+	}
+	return
 }
