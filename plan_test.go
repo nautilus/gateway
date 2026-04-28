@@ -636,7 +636,6 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 		t.Error("Did not get an  inner firstName out of the allUsers selection")
 	}
 	assert.Equal(t, "firstName", firstNameInnerField.Name)
-
 }
 
 func TestPlanQuery_subGraphs(t *testing.T) {
@@ -1466,7 +1465,6 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 
 	assert.Equal(t, "lastName", userInfoSelection.Name)
-
 }
 
 func TestPlannerBuildQuery_query(t *testing.T) {
@@ -1653,7 +1651,6 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
-
 		if err != nil {
 			return nil, fmt.Errorf("encountered error when planning query: %w", err)
 		}
