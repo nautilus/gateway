@@ -1,9 +1,9 @@
 package gateway
 
 import (
-	"errors"
-	"sync"
+	"maps"
 
+	"github.com/nautilus/gateway/internal/execresult"
 	"github.com/nautilus/graphql"
 )
 
@@ -39,13 +39,12 @@ func (p ResponseMiddleware) ExecutionMiddleware() {}
 // scrubInsertionIDs removes the fields from the final response that the user did not
 // explicitly ask for
 func scrubInsertionIDs(ctx *ExecutionContext, response map[string]interface{}) error {
-	lock := sync.Mutex{}
-
 	// there are many fields to scrub
+	responseObj := execresult.NewObjectFromMap(response)
 	for field, locations := range ctx.Plan.FieldsToScrub {
 		for _, location := range locations {
 			// look for the insertion points in the response for the field
-			insertionPoints, err := executorFindInsertionPoints(ctx, &lock, location, ctx.Plan.Operation.SelectionSet, response, [][]string{{}}, ctx.Plan.FragmentDefinitions)
+			insertionPoints, _, err := executorFindInsertionPoints(ctx, location, ctx.Plan.Operation.SelectionSet, responseObj, [][]string{{}}, ctx.Plan.FragmentDefinitions)
 			if err != nil {
 				return err
 			}
@@ -53,22 +52,19 @@ func scrubInsertionIDs(ctx *ExecutionContext, response map[string]interface{}) e
 			// each insertion point needs to be cleaned up
 			for _, point := range insertionPoints {
 				// extract the obj at that point
-				value, err := executorExtractValue(ctx, response, &lock, point)
+				value, err := executorExtractValue(ctx, responseObj, point)
 				if err != nil {
 					return err
 				}
-
-				// it has to be an obj
-				obj, ok := value.(map[string]interface{})
-				if !ok {
-					return errors.New("can not scrub field from non object")
-				}
-
-				// delete the field we're supposed to
-				delete(obj, field)
+				value.Delete(field)
 			}
 		}
 	}
+	// We cannot replace response by pointer without changing function signature, which would break backward compatibility, so clear it and add keys back in
+	for key := range response {
+		delete(response, key)
+	}
+	maps.Copy(response, responseObj.ToMap())
 
 	// the first thing we have to do is flatten all of the fragments into a single
 	return nil

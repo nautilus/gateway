@@ -9,6 +9,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
+	"github.com/nautilus/gateway/internal/execresult"
 	"github.com/nautilus/graphql"
 )
 
@@ -36,10 +37,11 @@ const (
 // QueryField is a hook to add gateway-level fields to a gateway. Limited to only being able to resolve
 // an id of an already existing type in order to keep business logic out of the gateway.
 type QueryField struct {
-	Name      string
-	Type      *ast.Type
-	Arguments ast.ArgumentDefinitionList
-	Resolver  func(context.Context, map[string]interface{}) (string, error)
+	Name             string
+	Type             *ast.Type
+	Arguments        ast.ArgumentDefinitionList
+	Resolver         func(context.Context, map[string]interface{}) (string, error)
+	NotAuthoritative bool // Set to true to indicate the resolved Node is not authoritative, and therefore should be resolved to null when no other resolvers return a value.
 }
 
 // Query takes a query definition and writes the result to the receiver
@@ -122,7 +124,13 @@ func (g *Gateway) Query(ctx context.Context, input *graphql.QueryInput, receiver
 					}
 
 					// assign the id to the response
-					result[field.Alias] = map[string]interface{}{"id": id}
+					node := execresult.NewObjectFromMap(map[string]any{
+						"id": id,
+					})
+					if qField.NotAuthoritative {
+						node.SetWeak()
+					}
+					result[field.Alias] = node
 				}
 			}
 		}
