@@ -636,7 +636,6 @@ func TestPlanQuery_singleRootObject(t *testing.T) {
 		t.Error("Did not get an  inner firstName out of the allUsers selection")
 	}
 	assert.Equal(t, "firstName", firstNameInnerField.Name)
-
 }
 
 func TestPlanQuery_subGraphs(t *testing.T) {
@@ -1466,7 +1465,6 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	}
 
 	assert.Equal(t, "lastName", userInfoSelection.Name)
-
 }
 
 func TestPlannerBuildQuery_query(t *testing.T) {
@@ -1653,7 +1651,6 @@ func TestPlanQuery_forcedPriorityResolution(t *testing.T) {
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
 		})
-
 		if err != nil {
 			return nil, fmt.Errorf("encountered error when planning query: %w", err)
 		}
@@ -1796,124 +1793,34 @@ func TestPlanQuery_scrubWithAlias(t *testing.T) {
 
 func TestPlanQuery_inlineFragmentFieldsRespectParentLocation(t *testing.T) {
 	t.Parallel()
-
-	location0 := "url0"
-	location1 := "url1"
-
 	schema, err := graphql.LoadSchema(`
-		type Mutation {
-			createUser(data: CreateUserInput!): CreateUserResult!
-			login(login: String!, password: String!, deviceId: String!): AuthToken
-		}
-
 		type Query {
-			node(id: ID!): Node
+			foo: Foo!
 		}
-
-		interface Node {
-			id: ID!
-		}
-
-		interface Error {
-			message: String!
-		}
-
-		type AuthToken implements Node {
-			id: ID!
-			token: String!
-			deviceId: String!
-			issued: String!
-			user: User!
-		}
-
-		type User implements Node {
-			id: ID!
-		}
-
-		input CreateUserInput {
-			email: String!
-			password: String
-		}
-
-		union CreateUserResult = AuthToken | CreateUserAlreadyExistsError | CreateUserInputValidationError
-
-		type CreateUserAlreadyExistsError implements Error {
-			message: String!
-			isActive: Boolean!
-		}
-
-		type CreateUserInputValidationError implements Error {
-			message: String!
-			emailErrors: [String!]!
-			passwordErrors: [String!]!
+		type Foo {
+			bar: String!
 		}
 	`)
 	require.NoError(t, err)
 
+	const (
+		location0 = "url0"
+		location1 = "url1"
+	)
 	locations := FieldURLMap{}
+	// location0 registers type Foo
+	locations.RegisterURL("Foo", "bar", location0)
 
-	// location0 registers shared types (AuthToken, User, Node, Error) and login
-	locations.RegisterURL(typeNameMutation, "login", location0)
-	locations.RegisterURL("AuthToken", "id", location0)
-	locations.RegisterURL("AuthToken", "token", location0)
-	locations.RegisterURL("AuthToken", "deviceId", location0)
-	locations.RegisterURL("AuthToken", "issued", location0)
-	locations.RegisterURL("AuthToken", "user", location0)
-	locations.RegisterURL("AuthToken", "__typename", location0)
-	locations.RegisterURL("User", "id", location0)
-	locations.RegisterURL("User", "__typename", location0)
-	locations.RegisterURL("Node", "id", location0)
-	locations.RegisterURL("Node", "__typename", location0)
-	locations.RegisterURL("Error", "message", location0)
-	locations.RegisterURL("Error", "__typename", location0)
-	locations.RegisterURL(typeNameQuery, "node", location0)
-
-	// location1 registers createUser and all types including the union
-	locations.RegisterURL(typeNameMutation, "createUser", location1)
-	locations.RegisterURL(typeNameMutation, "login", location1)
-	locations.RegisterURL("AuthToken", "id", location1)
-	locations.RegisterURL("AuthToken", "token", location1)
-	locations.RegisterURL("AuthToken", "deviceId", location1)
-	locations.RegisterURL("AuthToken", "issued", location1)
-	locations.RegisterURL("AuthToken", "user", location1)
-	locations.RegisterURL("AuthToken", "__typename", location1)
-	locations.RegisterURL("User", "id", location1)
-	locations.RegisterURL("User", "__typename", location1)
-	locations.RegisterURL("Node", "id", location1)
-	locations.RegisterURL("Node", "__typename", location1)
-	locations.RegisterURL("Error", "message", location1)
-	locations.RegisterURL("Error", "__typename", location1)
-	locations.RegisterURL("CreateUserResult", "__typename", location1)
-	locations.RegisterURL("CreateUserAlreadyExistsError", "message", location1)
-	locations.RegisterURL("CreateUserAlreadyExistsError", "isActive", location1)
-	locations.RegisterURL("CreateUserAlreadyExistsError", "__typename", location1)
-	locations.RegisterURL("CreateUserInputValidationError", "message", location1)
-	locations.RegisterURL("CreateUserInputValidationError", "emailErrors", location1)
-	locations.RegisterURL("CreateUserInputValidationError", "passwordErrors", location1)
-	locations.RegisterURL("CreateUserInputValidationError", "__typename", location1)
-	locations.RegisterURL(typeNameQuery, "node", location1)
+	// location1 registers foo Query field and type Foo
+	locations.RegisterURL(typeNameQuery, "foo", location1)
+	locations.RegisterURL("Foo", "bar", location1)
 
 	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
 		Query: `
-			mutation CreateUser($data: CreateUserInput!) {
-				createUser(data: $data) {
-					... on AuthToken {
-						id
-						token
-						deviceId
-						issued
-						user {
-							id
-						}
-					}
-					... on CreateUserAlreadyExistsError {
-						message
-						isActive
-					}
-					... on CreateUserInputValidationError {
-						message
-						emailErrors
-						passwordErrors
+			query {
+				foo {
+					... on Foo {
+						bar
 					}
 				}
 			}
@@ -1930,6 +1837,6 @@ func TestPlanQuery_inlineFragmentFieldsRespectParentLocation(t *testing.T) {
 
 	step := rootSteps[0]
 	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
-	assert.Equal(t, location1, queryer.URL(), "createUser mutation should be routed to location1")
+	assert.Equal(t, location1, queryer.URL(), "field bar on inline fragment should be routed to location1")
 	assert.Empty(t, step.Then, "should have no dependent sub-steps — all fields should stay on location1")
 }
