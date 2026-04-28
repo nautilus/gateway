@@ -751,7 +751,7 @@ func (p *MinQueriesPlanner) groupSelectionSet(ctx *PlanningContext, config *extr
 					}
 
 					// add the field to the location, respecting parent location priority
-					fieldLocation := p.selectLocation(fieldLocations, config)
+					fieldLocation := p.selectLocation(ctx, fragmentSelection.Name, fieldLocations, config)
 					fragmentLocations[fieldLocation] = append(fragmentLocations[fieldLocation], fragmentSelection)
 
 				case *ast.FragmentSpread, *ast.InlineFragment:
