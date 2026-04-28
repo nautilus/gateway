@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"fmt"
+	"iter"
+	"strings"
 	"testing"
 
 	"github.com/nautilus/graphql"
@@ -1839,4 +1841,107 @@ func TestPlanQuery_inlineFragmentFieldsRespectParentLocation(t *testing.T) {
 	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
 	assert.Equal(t, location1, queryer.URL(), "field bar on inline fragment should be routed to location1")
 	assert.Empty(t, step.Then, "should have no dependent sub-steps — all fields should stay on location1")
+}
+
+func TestPlanQuery_unionShouldNotBeQueriedOnOtherServices(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema(`
+		type Query {
+			foo: Foo!  # Only in location1
+			node(id: ID!): Node
+		}
+		union Foo = Bar | Baz  # Only in location1
+		interface Node {
+			id: ID!
+		}
+		type Bar implements Node {
+			id: ID!
+			bar: String!  # Only in location0
+		}
+		type Baz implements Node {
+			id: ID!
+		}
+	`)
+	require.NoError(t, err)
+
+	const (
+		location0 = "url0"
+		location1 = "url1"
+	)
+	locations := FieldURLMap{}
+	// location0 registers all shared types (Bar, Baz) but no unions
+	locations.RegisterURL(typeNameQuery, "node", location0)
+	locations.RegisterURL("Node", "id", location0)
+	locations.RegisterURL("Bar", "id", location0)
+	locations.RegisterURL("Bar", "bar", location0) // unique to location0
+	locations.RegisterURL("Baz", "id", location0)
+
+	// location1 registers foo union-typed 'Foo' field and all shared types (Bar, Baz)
+	locations.RegisterURL(typeNameQuery, "node", location1)
+	locations.RegisterURL(typeNameQuery, "foo", location1) // unique to location1
+	locations.RegisterURL("Node", "id", location1)
+	locations.RegisterURL("Bar", "id", location1)
+	locations.RegisterURL("Baz", "id", location1)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query {
+				foo {
+					... on Bar {
+						bar
+					}
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
+	})
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+
+	rootSteps := plans[0].RootStep.Then
+	require.Len(t, rootSteps, 1, "should have exactly one root step")
+
+	for step := range allSteps(plans[0].RootStep) {
+		url := step.Queryer.(*graphql.SingleRequestQueryer).URL()
+		t.Logf("Found step on %q: %s", url, step.QueryString)
+		switch url {
+		case location0:
+			assert.NotContains(t, step.QueryString, "Foo", "Location 0 must not be called with 'Foo' union type")
+			assert.Equal(t, strings.TrimSpace(`
+query($id: ID!) {
+	node(id: $id) {
+		... on Bar {
+			bar
+		}
+	}
+}`), strings.TrimSpace(step.QueryString))
+		case location1:
+			assert.Equal(t, strings.TrimSpace(`
+query {
+	foo {
+		id
+	}
+}`), strings.TrimSpace(step.QueryString))
+		}
+	}
+}
+
+func allSteps(rootStep *QueryPlanStep) iter.Seq[*QueryPlanStep] {
+	return func(yield func(*QueryPlanStep) bool) {
+		allStepsRecursive(rootStep, yield)
+	}
+}
+
+func allStepsRecursive(step *QueryPlanStep, yield func(*QueryPlanStep) bool) bool {
+	if !yield(step) {
+		return false
+	}
+	for _, thenStep := range step.Then {
+		if !allStepsRecursive(thenStep, yield) {
+			return false
+		}
+	}
+	return true
 }
