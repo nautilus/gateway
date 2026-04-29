@@ -71,6 +71,9 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 				result.Types[name] = definition
 
 				result.AddPossibleType(name, definition)
+				for _, interfaceName := range definition.Interfaces {
+					result.AddPossibleType(interfaceName, definition)
+				}
 
 				// we're done with this definition
 				continue
