@@ -732,6 +732,52 @@ func TestMergeSchema_interfaces(t *testing.T) {
 		assert.True(t, visited["User"], "did not have User in possible type")
 		assert.True(t, visited["NotUser"], "did not have NotUser in possible type")
 	})
+	t.Run("Implements interface", func(t *testing.T) {
+		t.Parallel()
+		originalSchema, err := graphql.LoadSchema(`
+			interface Node {
+				id: ID!
+			}
+			interface Foo implements Node {
+				id: ID!
+				name: String!
+			}
+
+			type User implements Foo & Node {
+				id: ID!
+				name: String!
+			}
+		`)
+		require.NoError(t, err, "original schema didn't parse")
+
+		schema, err := testMergeSchemas(t, originalSchema, `
+			interface Node {
+				id: ID!
+			}
+
+			interface Foo implements Node {
+				id: ID!
+				name: String!
+			}
+
+			type NotUser implements Foo & Node {
+				id: ID!
+				name: String!
+			}
+		`)
+		require.NoError(t, err)
+
+		possibleTypes := func(typeName string) []string {
+			var types []string
+			for _, def := range schema.GetPossibleTypes(schema.Types[typeName]) {
+				types = append(types, def.Name)
+			}
+			return types
+		}
+
+		assert.ElementsMatch(t, []string{"Foo", "User", "NotUser"}, possibleTypes("Foo"))
+		assert.ElementsMatch(t, []string{"Node", "Foo", "User", "NotUser"}, possibleTypes("Node"))
+	})
 
 	// the table we are testing
 	testMergeRunNegativeTable(t, []testMergeTableRow{
