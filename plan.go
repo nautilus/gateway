@@ -419,28 +419,58 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				}
 
 				ctx.Gateway.logger.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
-				// add any possible selections provided by this fields selections
-				subSelection, err := p.extractSelection(ctx, &extractSelectionConfig{
-					stepCh:         config.stepCh,
-					stepWg:         config.stepWg,
-					step:           config.step,
-					locations:      config.locations,
-					parentLocation: config.parentLocation,
-					plan:           config.plan,
+				typeName := coreFieldType(selection).Name()
+				subSelectionTypes := make(map[string]ast.SelectionSet)
+				if ctx.Schema.Types[typeName].Kind == ast.Union {
+					// Union types MUST be object types, and can't have fields of their own:
+					// > GraphQL Unions represent an object that could be one of a list of GraphQL Object types, but provides for no guaranteed fields between those types.
+					// > - https://spec.graphql.org/October2021/#sec-Unions
+					//
+					// So union selections must collapse into selected fragments on the union's named types.
+					// Importantly, unions can include shared types across schemas (union Foo = Bar | Baz; type Bar {...}; type Baz {...})
+					// but not all schemas need to contain the union (just: type Bar {...}).
+					//
+					// Therefore, union type names must not be queried as a "parent type". We can use their type conditions instead.
+					for _, subSelection := range selection.SelectionSet {
+						switch subSelection := subSelection.(type) {
+						case *ast.InlineFragment:
+							subSelectionTypes[subSelection.TypeCondition] = append(subSelectionTypes[subSelection.TypeCondition], subSelection.SelectionSet...)
+						case *ast.FragmentSpread:
+							fragment := config.step.FragmentDefinitions.ForName(selection.Name)
+							subSelectionTypes[fragment.TypeCondition] = append(subSelectionTypes[fragment.TypeCondition], fragment.SelectionSet...)
+						default:
+							return nil, fmt.Errorf("unsupported selection type inside union: %T", subSelection)
+						}
+					}
+				} else {
+					subSelectionTypes[typeName] = selection.SelectionSet
+				}
+				var subSelections ast.SelectionSet
+				for typeName, selectionSet := range subSelectionTypes {
+					// add any possible selections provided by this fields selections
+					subSelection, err := p.extractSelection(ctx, &extractSelectionConfig{
+						stepCh:         config.stepCh,
+						stepWg:         config.stepWg,
+						step:           config.step,
+						locations:      config.locations,
+						parentLocation: config.parentLocation,
+						plan:           config.plan,
 
-					parentType:     coreFieldType(selection).Name(),
-					selection:      selection.SelectionSet,
-					insertionPoint: insertionPoint,
-					wrapper:        wrapper,
-				})
-				if err != nil {
-					return nil, err
+						parentType:     typeName,
+						selection:      selectionSet,
+						insertionPoint: insertionPoint,
+						wrapper:        wrapper,
+					})
+					if err != nil {
+						return nil, err
+					}
+					subSelections = append(subSelections, subSelection...)
 				}
 
-				ctx.Gateway.logger.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, selection.Name, subSelection))
+				ctx.Gateway.logger.Debug(fmt.Sprintf("final selection for %s.%s: %v\n", config.parentType, selection.Name, subSelections))
 
 				// overwrite the selection set for this selection
-				selection.SelectionSet = subSelection
+				selection.SelectionSet = subSelections
 			} else {
 				ctx.Gateway.logger.Debug("found a scalar")
 			}

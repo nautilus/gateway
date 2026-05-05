@@ -1910,7 +1910,7 @@ func TestPlanQuery_unionShouldNotBeQueriedOnOtherServices(t *testing.T) {
 		case location0:
 			assert.NotContains(t, step.QueryString, "Foo", "Location 0 must not be called with 'Foo' union type")
 			assert.Equal(t, strings.TrimSpace(`
-query($id: ID!) {
+query ($id: ID!) {
 	node(id: $id) {
 		... on Bar {
 			bar
