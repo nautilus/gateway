@@ -426,11 +426,8 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					// > GraphQL Unions represent an object that could be one of a list of GraphQL Object types, but provides for no guaranteed fields between those types.
 					// > - https://spec.graphql.org/October2021/#sec-Unions
 					//
-					// So union selections must collapse into selected fragments on the union's named types.
-					// Importantly, unions can include shared types across schemas (union Foo = Bar | Baz; type Bar {...}; type Baz {...})
-					// but not all schemas need to contain the union (just: type Bar {...}).
-					//
-					// Therefore, union type names must not be queried as a "parent type". We can use their type conditions instead.
+					// Service schemas may not define a union type containing one of their shared types, and querying it on that service would result in an error.
+					// For these cases, union selections MUST collapse into selected fragments on the union's named types.
 					for _, subSelection := range selection.SelectionSet {
 						switch subSelection := subSelection.(type) {
 						case *ast.InlineFragment:
