@@ -27,7 +27,8 @@ type Gateway struct {
 	queryerFactory     *QueryerFactory
 	queryPlanCache     QueryPlanCache
 	locationPriorities []string
-
+	preExecutionHook   StepHook
+	postExecutionHook  StepHook
 	// group up the list of middlewares at startup to avoid it during execution
 	requestMiddlewares  []graphql.NetworkMiddleware
 	responseMiddlewares []ResponseMiddleware
@@ -86,6 +87,8 @@ func (g *Gateway) Execute(ctx *RequestContext, plans QueryPlanList) (map[string]
 		RequestMiddlewares: g.requestMiddlewares,
 		Plan:               plan,
 		Variables:          ctx.Variables,
+		PreExecutionHook:   g.preExecutionHook,
+		PostExecutionHook:  g.postExecutionHook,
 	}
 
 	// TODO: handle plans of more than one query
@@ -289,6 +292,20 @@ func WithQueryerFactory(factory *QueryerFactory) Option {
 func WithLocationPriorities(priorities []string) Option {
 	return func(g *Gateway) {
 		g.locationPriorities = priorities
+	}
+}
+
+// WithPreExecutionHook returns an Option that sets a pre-execution hook for all steps
+func WithPreExecutionHook(hook StepHook) Option {
+	return func(g *Gateway) {
+		g.preExecutionHook = hook
+	}
+}
+
+// WithPostExecutionHook returns an Option that sets a post-execution hook for all steps
+func WithPostExecutionHook(hook StepHook) Option {
+	return func(g *Gateway) {
+		g.postExecutionHook = hook
 	}
 }
 
