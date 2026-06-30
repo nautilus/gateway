@@ -507,7 +507,7 @@ func mergeDirectiveLists(list1, list2 ast.DirectiveList) (ast.DirectiveList, err
 
 	if len(list1) != len(list2) {
 		// they will never be the same
-		return nil, fmt.Errorf("there were an inconsistent number of directives: %d != %d", len(list1), len(list2))
+		return nil, fmt.Errorf("there were an inconsistent number of directives: %s != %s", formatDirectives(list1), formatDirectives(list2))
 	}
 
 	for index := range list1 {
@@ -801,4 +801,37 @@ func diffSets[Value comparable](left, right map[Value]struct{}) (onlyLeft, onlyR
 		}
 	}
 	return onlyLeft, onlyRight, len(onlyLeft) == 0 && len(onlyRight) == 0
+}
+
+func formatDirectives(directives ast.DirectiveList) string {
+	var directiveStrings []string
+	for _, d := range directives {
+		directiveStrings = append(directiveStrings, formatDirective(d))
+	}
+	return strings.Join(directiveStrings, " ")
+}
+
+func formatDirective(d *ast.Directive) string {
+	if d == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("@%s%s", d.Name, formatArgs(d.Arguments))
+}
+
+func formatArgs(args ast.ArgumentList) string {
+	if len(args) == 0 {
+		return ""
+	}
+	var argStrings []string
+	for _, arg := range args {
+		argStrings = append(argStrings, formatArg(arg))
+	}
+	return fmt.Sprintf("(%s)", strings.Join(argStrings, ", "))
+}
+
+func formatArg(arg *ast.Argument) string {
+	if arg == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("%s: %s", arg.Name, arg.Value.String())
 }

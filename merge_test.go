@@ -1755,7 +1755,7 @@ type Biff @foo @baz {
 	biff: String
 }
 `,
-			expectErr: `there were an inconsistent number of directives: 1 != 2`,
+			expectErr: `there were an inconsistent number of directives: @foo != @foo @baz`,
 		},
 		{
 			description: "different directive lists of equal length on both schemas type",
