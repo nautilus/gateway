@@ -3,6 +3,9 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"iter"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -704,45 +707,45 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 //	  INPUT_OBJECT
 //	  INPUT_FIELD_DEFINITION
 func mergeDirectiveLocations(list1, list2 []ast.DirectiveLocation) ([]ast.DirectiveLocation, error) {
-	resultSet := make(map[ast.DirectiveLocation]struct{})
 	executableSet1 := make(map[ast.DirectiveLocation]struct{})
-	// Check "not in the permissive set" (type system locations) rather than the restrictive set (executable locations).
-	// The kinds of locations can expand in future versions of the spec, so we should err on the side
-	// of denying new type system fields instead of allowing new executable fields.
-	for _, l := range list1 {
-		resultSet[l] = struct{}{}
-		if !isTypeSystemDirectiveLocation(l) {
-			executableSet1[l] = struct{}{}
-		}
+	for l := range potentialExecutableDirectiveLocations(list1) {
+		executableSet1[l] = struct{}{}
 	}
 	executableSet2 := make(map[ast.DirectiveLocation]struct{})
+	for l := range potentialExecutableDirectiveLocations(list2) {
+		executableSet2[l] = struct{}{}
+	}
+
+	if onlyLeft, onlyRight, areEqualSets := diffSets(executableSet1, executableSet2); !areEqualSets {
+		return nil, fmt.Errorf("do not have the same executable locations: exclusive to first = %v, exclusive to second = %v", onlyLeft, onlyRight)
+	}
+
+	resultSet := make(map[ast.DirectiveLocation]struct{})
+	for _, l := range list1 {
+		resultSet[l] = struct{}{}
+	}
 	for _, l := range list2 {
 		resultSet[l] = struct{}{}
-		if !isTypeSystemDirectiveLocation(l) {
-			executableSet2[l] = struct{}{}
-		}
 	}
+	return slices.Sorted(maps.Keys(resultSet)), nil
+}
 
-	mismatchErr := fmt.Errorf("do not have the same executable locations: %s", executableDirectiveLocationDiff(executableSet1, executableSet2))
-	for l := range executableSet1 {
-		if _, ok := executableSet2[l]; !ok {
-			return nil, mismatchErr
+// potentialExecutableDirectiveLocations returns likely executable directive locations.
+// Only "likely" because new and unexpected location names should fall back to classifying as a more restrictive executable location.
+//
+// Check "not in the permissive set" (type system locations) rather than the restrictive set (executable locations).
+// The kinds of locations can expand in future versions of the spec, so we should err on the side
+// of denying new type system fields instead of allowing new executable fields.
+func potentialExecutableDirectiveLocations(locations []ast.DirectiveLocation) iter.Seq[ast.DirectiveLocation] {
+	return func(yield func(ast.DirectiveLocation) bool) {
+		for _, l := range locations {
+			if !isTypeSystemDirectiveLocation(l) {
+				if !yield(l) {
+					return
+				}
+			}
 		}
 	}
-	for l := range executableSet2 {
-		if _, ok := executableSet1[l]; !ok {
-			return nil, mismatchErr
-		}
-	}
-
-	var result []ast.DirectiveLocation
-	for l := range resultSet {
-		result = append(result, l)
-	}
-	sort.Slice(result, func(a, b int) bool {
-		return result[a] < result[b]
-	})
-	return result, nil
 }
 
 func isTypeSystemDirectiveLocation(d ast.DirectiveLocation) bool {
@@ -783,4 +786,18 @@ func executableDirectiveLocationDiff(set1, set2 map[ast.DirectiveLocation]struct
 		}
 	}
 	return fmt.Sprintf("these locations are not shared: %s", strings.Join(diff, ", "))
+}
+
+func diffSets[Value comparable](left, right map[Value]struct{}) (onlyLeft, onlyRight []Value, areEqualSets bool) {
+	for value := range left {
+		if _, alsoInRight := right[value]; !alsoInRight {
+			onlyLeft = append(onlyLeft, value)
+		}
+	}
+	for value := range right {
+		if _, alsoInLeft := left[value]; !alsoInLeft {
+			onlyRight = append(onlyRight, value)
+		}
+	}
+	return onlyLeft, onlyRight, len(onlyLeft) == 0 && len(onlyRight) == 0
 }
