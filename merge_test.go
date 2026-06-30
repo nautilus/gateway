@@ -151,14 +151,16 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 		{
 			"Conflicting directives",
 			`
-				input Foo {
+				directive @foo on INPUT_OBJECT
+
+				input Foo @foo {
 					lastName: String!
 				}
 			`,
 			`
-				directive @foo on INPUT_OBJECT
+				directive @bar on INPUT_OBJECT
 
-				input Foo @foo {
+				input Foo @bar {
 					lastName: String!
 				}
 			`,
@@ -166,15 +168,17 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 		{
 			"Conflicting field directives",
 			`
+				directive @foo on INPUT_FIELD_DEFINITION
+
 				input Foo {
-					lastName: String!
+					lastName: String! @foo
 				}
 			`,
 			`
-				directive @foo on INPUT_FIELD_DEFINITION
+				directive @bar on INPUT_FIELD_DEFINITION
 
 				input Foo  {
-					lastName: String! @foo
+					lastName: String! @bar
 				}
 			`,
 		},
@@ -277,14 +281,16 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 		{
 			"Conflicting declaration directives",
 			`
-				directive @foo(url: String!) on OBJECT
+				directive @foo on OBJECT
 
-				type User @foo(url: "bar") {
+				type User @foo {
 					firstName: String
 				}
 			`,
 			`
-				type User {
+				directive @bar on OBJECT
+
+				type User @bar {
 					firstName: String
 				}
 			`,
@@ -425,7 +431,7 @@ func TestMergeSchema_enums(t *testing.T) {
 	})
 }
 
-func TestMergeSchema_directives(t *testing.T) {
+func TestMergeSchema_directiveDefinitions(t *testing.T) {
 	t.Parallel()
 	t.Run("Matching", func(t *testing.T) {
 		t.Parallel()
@@ -784,15 +790,17 @@ func TestMergeSchema_interfaces(t *testing.T) {
 		{
 			"Different Field Directives",
 			`
-				interface Foo {
-					name: String!
-				}
-			`,
-			`
 				directive @foo on FIELD_DEFINITION
 
 				interface Foo {
 					name: String! @foo
+				}
+			`,
+			`
+				directive @bar on FIELD_DEFINITION
+
+				interface Foo {
+					name: String! @bar
 				}
 			`,
 		},
@@ -1527,6 +1535,265 @@ type Query {
 	node(id: ID!): Node
 }
 `,
+		},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+			currentSchema, err := graphql.LoadSchema(tc.schema1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			currentSchema, err = testMergeSchemas(t, currentSchema, tc.schema2)
+			if tc.expectErr != "" {
+				assert.EqualError(t, err, tc.expectErr)
+				return
+			}
+			require.NoError(t, err)
+
+			var currentSchemaBuf bytes.Buffer
+			formatter.NewFormatter(&currentSchemaBuf).FormatSchema(currentSchema)
+			currentSchemaStr := strings.TrimSpace(currentSchemaBuf.String())
+			assert.Equal(t, strings.TrimSpace(tc.expectMergedSchema), currentSchemaStr)
+		})
+	}
+}
+
+func TestMergeSchema_directives(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		description        string
+		schema1, schema2   string
+		expectMergedSchema string
+		expectErr          string
+	}{
+		{
+			description: "identical directives on type",
+			schema1: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo on OBJECT
+type Bar @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "directives only on first schema type",
+			schema1: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			schema2: `
+type Bar {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo on OBJECT
+type Bar @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "directives only on second schema type",
+			schema1: `
+type Bar {
+	baz: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo on OBJECT
+type Bar @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "directives on both schemas type",
+			schema1: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo on OBJECT
+type Bar @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "repeated directives on first schemas type",
+			schema1: `
+directive @foo repeatable on OBJECT
+
+type Bar @foo @foo {
+	baz: String
+}
+`,
+			schema2: `
+type Bar {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo repeatable on OBJECT
+type Bar @foo @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "many repeated and different directives on both schemas type",
+			schema1: `
+directive @foo(bar: Int!) repeatable on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo(bar: 1) @baz @foo(bar: 2) {
+	biff: String
+}
+`,
+			schema2: `
+directive @foo(bar: Int!) repeatable on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo(bar: 1) @baz @foo(bar: 2) {
+	biff: String
+}
+`,
+			expectMergedSchema: `
+directive @baz on OBJECT
+directive @foo(bar: Int!) repeatable on OBJECT
+type Biff @foo(bar: 1) @baz @foo(bar: 2) {
+	biff: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "directive lists of different length on both schemas type",
+			schema1: `
+directive @foo on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo {
+	biff: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo @baz {
+	biff: String
+}
+`,
+			expectErr: `there were an inconsistent number of directives: 1 != 2`,
+		},
+		{
+			description: "different directive lists of equal length on both schemas type",
+			schema1: `
+directive @foo(bar: Int!) repeatable on OBJECT
+
+type Biff @foo(bar: 1) @foo(bar: 2) {
+	biff: String
+}
+`,
+			schema2: `
+directive @foo(bar: Int!) repeatable on OBJECT
+
+type Biff @foo(bar: 2) @foo(bar: 1) {
+	biff: String
+}
+`,
+			expectErr: `directives at index #0 are not equal (note: order is significant): argument "bar" values are not equal: encountered different raw values: 1 != 2`,
+		},
+		{
+			description: "differently ordered directive lists of equal length on both schemas type",
+			schema1: `
+directive @foo on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo @baz {
+	biff: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+directive @baz on OBJECT
+
+type Biff @baz @foo {
+	biff: String
+}
+`,
+			expectErr: `directives at index #0 are not equal (note: order is significant): directives do not have the same name`,
 		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {

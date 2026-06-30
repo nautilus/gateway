@@ -254,7 +254,9 @@ func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Def
 	}
 
 	// make sure that the 2 directive lists are the same
-	if err := mergeDirectiveListsEqual(previousDefinition.Directives, newDefinition.Directives); err != nil {
+	var err error
+	prevCopy.Directives, err = mergeDirectiveLists(previousDefinition.Directives, newDefinition.Directives)
+	if err != nil {
 		return nil, err
 	}
 
@@ -297,7 +299,8 @@ func mergeInputObjects(object1, object2 *ast.Definition) (*ast.Definition, error
 	}
 
 	// check directives
-	if err := mergeDirectiveListsEqual(object1.Directives, object2.Directives); err != nil {
+	object1Copy.Directives, err = mergeDirectiveLists(object1.Directives, object2.Directives)
+	if err != nil {
 		return nil, err
 	}
 
@@ -407,7 +410,9 @@ func mergeEnumValues(value1, value2 *ast.EnumValueDefinition) (*ast.EnumValueDef
 	}
 
 	// if the 2 directives dont match
-	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
+	var err error
+	value1Copy.Directives, err = mergeDirectiveLists(value1.Directives, value2.Directives)
+	if err != nil {
 		return nil, fmt.Errorf("conflict in enum value directives: %w", err)
 	}
 
@@ -421,7 +426,9 @@ func mergeScalars(value1, value2 *ast.Definition) (*ast.Definition, error) {
 	}
 
 	// if the 2 directives dont match
-	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
+	var err error
+	value1Copy.Directives, err = mergeDirectiveLists(value1.Directives, value2.Directives)
+	if err != nil {
 		return nil, fmt.Errorf("conflict in enum value directives: %w", err)
 	}
 
@@ -476,7 +483,8 @@ func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, err
 	}
 
 	// directives
-	if err := mergeDirectiveListsEqual(field1.Directives, field2.Directives); err != nil {
+	field1Copy.Directives, err = mergeDirectiveLists(field1.Directives, field2.Directives)
+	if err != nil {
 		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
@@ -484,27 +492,30 @@ func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, err
 	return &field1Copy, nil
 }
 
-func mergeDirectiveListsEqual(list1, list2 ast.DirectiveList) error {
-	// if the 2 lists are not the same length
+// mergeDirectiveLists merges list1 with list2 or returns an error for an incompatible merge.
+// A direct list merge is compatible if both lists are identical OR one of the lists is empty.
+func mergeDirectiveLists(list1, list2 ast.DirectiveList) (ast.DirectiveList, error) {
+	// If either list is empty, use the other as the merged list.
+	if len(list1) == 0 {
+		return list2, nil
+	}
+	if len(list2) == 0 {
+		return list1, nil
+	}
+	// Otherwise, validate they're exactly equal before returning one of them.
+	// Reminder that the GraphQL spec says directive order is significant: https://spec.graphql.org/October2021/#sec-Language.Directives.Directive-order-is-significant
+
 	if len(list1) != len(list2) {
 		// they will never be the same
-		return errors.New("there were an inconsistent number of directives")
+		return nil, fmt.Errorf("there were an inconsistent number of directives: %d != %d", len(list1), len(list2))
 	}
 
-	// compare each argument to its counterpart in the other list
-	for _, arg1 := range list1 {
-		arg2 := list2.ForName(arg1.Name)
-		if arg2 == nil {
-			return fmt.Errorf("could not find the directive with name %s", arg1.Name)
-		}
-
-		// if the 2 arguments are not the same
-		if err := mergeDirectiveEqual(arg1, arg2); err != nil {
-			return err
+	for index := range list1 {
+		if err := mergeDirectiveEqual(list1[index], list2[index]); err != nil {
+			return nil, fmt.Errorf("directives at index #%d are not equal (note: order is significant): %w", index, err)
 		}
 	}
-
-	return nil
+	return list1, nil
 }
 
 func mergeDirectiveEqual(directive1, directive2 *ast.Directive) error {
@@ -553,7 +564,7 @@ func mergeArgumentsEqual(arg1, arg2 *ast.Argument) error {
 
 	// if the values are different
 	if err := mergeValuesEqual(arg1.Value, arg2.Value); err != nil {
-		return err
+		return fmt.Errorf("argument %q values are not equal: %w", arg1.Name, err)
 	}
 
 	// they're the same
@@ -621,11 +632,11 @@ func mergeValuesEqual(value1, value2 *ast.Value) error {
 
 	// if the kinds are not the same
 	if value1.Kind != value2.Kind {
-		return errors.New("encountered inconsistent kinds")
+		return fmt.Errorf("encountered inconsistent kinds: %d != %d", value1.Kind, value2.Kind)
 	}
 	// if the raw values are not the same
 	if value1.Raw != value2.Raw {
-		return errors.New("encountered different raw values")
+		return fmt.Errorf("encountered different raw values: %s != %s", value1.Raw, value2.Raw)
 	}
 
 	return nil
