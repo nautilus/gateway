@@ -789,16 +789,6 @@ func isTypeSystemDirectiveLocation(d ast.DirectiveLocation) bool {
 	}
 }
 
-func executableDirectiveLocationDiff(set1, set2 map[ast.DirectiveLocation]struct{}) string {
-	var diff []string
-	for l := range set1 {
-		if _, ok := set2[l]; !ok {
-			diff = append(diff, string(l))
-		}
-	}
-	return fmt.Sprintf("these locations are not shared: %s", strings.Join(diff, ", "))
-}
-
 func diffSets[Value comparable](left, right map[Value]struct{}) (onlyLeft, onlyRight []Value, areEqualSets bool) {
 	for value := range left {
 		if _, alsoInRight := right[value]; !alsoInRight {
