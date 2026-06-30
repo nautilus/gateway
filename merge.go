@@ -659,7 +659,19 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 }
 
 // Directives can be used on execution locations (a query) or on type system locations (a deprecated field).
-// Gateway should not merge and share execution locations since these may not be supported by the respective service.
+//
+// Gateway should not merge and share *different sets* of execution locations since these may not be supported by the respective service. For example:
+//
+//	A:   on EXECUTABLE1 | EXECUTABLE2 | TYPESYSTEM1
+//	B:   on EXECUTABLE1 | TYPESYSTEM1
+//	A+B: Fails. Executable location sets are not equal.
+//
+// Equal sets of executable locations are permitted, for example:
+//
+//	A:   on EXECUTABLE1
+//	B:   on EXECUTABLE1 | TYPESYSTEM2
+//	A+B: on EXECUTABLE1 | TYPESYSTEM2
+//
 // Gateway should merge and share type system locations since these are only defined and used in each respective service's schema. In other words, the services own their usage of those directives.
 //
 // Some implementations merge all locations irrespective of their kind. This could result in a
@@ -694,7 +706,7 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 func mergeDirectiveLocations(list1, list2 []ast.DirectiveLocation) ([]ast.DirectiveLocation, error) {
 	resultSet := make(map[ast.DirectiveLocation]struct{})
 	executableSet1 := make(map[ast.DirectiveLocation]struct{})
-	// Check the permissive set (type system locations) rather than the restrictive set (executable locations).
+	// Check "not in the permissive set" (type system locations) rather than the restrictive set (executable locations).
 	// The kinds of locations can expand in future versions of the spec, so we should err on the side
 	// of denying new type system fields instead of allowing new executable fields.
 	for _, l := range list1 {
