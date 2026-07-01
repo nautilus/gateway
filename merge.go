@@ -493,29 +493,103 @@ func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, err
 }
 
 // mergeDirectiveLists merges list1 with list2 or returns an error for an incompatible merge.
-// A direct list merge is compatible if both lists are identical OR one of the lists is empty.
+//
+// A directive list merge is compatible if any of the following conditions are met:
+//  1. One list is empty
+//  2. One list uses only built-in directives
+//  3. Both lists are identical
 func mergeDirectiveLists(list1, list2 ast.DirectiveList) (ast.DirectiveList, error) {
-	// If either list is empty, use the other as the merged list.
-	if len(list1) == 0 {
-		return list2, nil
-	}
-	if len(list2) == 0 {
-		return list1, nil
-	}
-	// Otherwise, validate they're exactly equal before returning one of them.
-	// Reminder that the GraphQL spec says directive order is significant: https://spec.graphql.org/October2021/#sec-Language.Directives.Directive-order-is-significant
+	ordered1, unordered1 := splitSignificantlyOrderedDirectives(list1)
+	ordered2, unordered2 := splitSignificantlyOrderedDirectives(list2)
 
-	if len(list1) != len(list2) {
-		// they will never be the same
-		return nil, fmt.Errorf("there were an inconsistent number of directives: %s != %s", formatDirectives(list1), formatDirectives(list2))
+	ordered, err := mergeOrderedDirectiveLists(ordered1, ordered2)
+	if err != nil {
+		return nil, err
 	}
+	unordered, err := mergeUnorderedDirectiveLists(unordered1, unordered2)
+	if err != nil {
+		return nil, err
+	}
+	return append(unordered, ordered...), nil
+}
 
-	for index := range list1 {
-		if err := mergeDirectiveEqual(list1[index], list2[index]); err != nil {
-			return nil, fmt.Errorf("directives at index #%d are not equal (note: order is significant): %w", index, err)
+// splitSignificantlyOrderedDirectives splits directives into potentially significant ordering and definitely unordered.
+// The split uses stable ordering, so resulting values retain their original relative order.
+// As a reminder, the GraphQL spec says directive order is significant: https://spec.graphql.org/October2021/#sec-Language.Directives.Directive-order-is-significant
+//
+// Only evaluates built-in directives with full confidence as definitely unordered. All others are potentially ordered.
+// At time of writing, all built-in directives do not have significant ordering.
+func splitSignificantlyOrderedDirectives(directives ast.DirectiveList) (potentiallyOrdered, definitelyUnordered ast.DirectiveList) {
+	for _, d := range directives {
+		if isBuiltInDirective(d.Name) {
+			definitelyUnordered = append(definitelyUnordered, d)
+		} else {
+			potentiallyOrdered = append(potentiallyOrdered, d)
 		}
 	}
-	return list1, nil
+	return
+}
+
+func isBuiltInDirective(name string) bool {
+	switch strings.ToLower(name) {
+	case
+		"deprecated",
+		"include",
+		"skip",
+		"specifiedby":
+		return true
+	default:
+		return false
+	}
+}
+
+// mergeOrderedDirectiveLists validates A is identical to B OR one of them is empty, then returns the merged list.
+// Otherwise returns a merge error.
+func mergeOrderedDirectiveLists(a, b ast.DirectiveList) (ast.DirectiveList, error) {
+	// If either list is empty, use the other as the merged list.
+	if len(a) == 0 {
+		return b, nil
+	}
+	if len(b) == 0 {
+		return a, nil
+	}
+	if len(a) != len(b) {
+		// they will never be the same
+		return nil, fmt.Errorf("directives with potentially significant ordering were not of the same length: %s != %s", formatDirectives(a), formatDirectives(b))
+	}
+	for index := range a {
+		if err := mergeDirectiveEqual(a[index], b[index]); err != nil {
+			return nil, fmt.Errorf("directives with potentially significant ordering at index #%d are not equal: %s != %s: %w", index, formatDirectives(a), formatDirectives(b), err)
+		}
+	}
+	return a, nil
+}
+
+// mergeUnorderedDirectiveLists merges unordered directive lists A and B by throwing away duplicates from B and appending the rest to A.
+//
+// Returns an error if a unique directive is detected that repeats a non-repeatable directive definition.
+func mergeUnorderedDirectiveLists(a, b ast.DirectiveList) (ast.DirectiveList, error) {
+	var uniqueBDirectives ast.DirectiveList
+	for _, bDirective := range b {
+		isUnique := true
+		isRepeatedName := false
+		for _, aDirective := range a {
+			if bDirective.Name == aDirective.Name {
+				isRepeatedName = true
+			}
+			if err := mergeDirectiveEqual(bDirective, aDirective); err == nil {
+				isUnique = false
+				break
+			}
+		}
+		if isUnique {
+			if isRepeatedName && !bDirective.Definition.IsRepeatable {
+				return nil, fmt.Errorf("cannot merge unordered directives in '%s' and '%s': found unique, non-repeatable directive: %s", formatDirectives(a), formatDirectives(b), formatDirective(bDirective))
+			}
+			uniqueBDirectives = append(uniqueBDirectives, bDirective)
+		}
+	}
+	return append(a, uniqueBDirectives...), nil
 }
 
 func mergeDirectiveEqual(directive1, directive2 *ast.Directive) error {

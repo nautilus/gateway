@@ -1567,7 +1567,7 @@ func TestMergeSchema_directives(t *testing.T) {
 		expectErr          string
 	}{
 		{
-			description: "identical directives on type",
+			description: "identical custom directives on type",
 			schema1: `
 directive @foo on OBJECT
 
@@ -1596,7 +1596,7 @@ type Query {
 `,
 		},
 		{
-			description: "directives only on first schema type",
+			description: "custom directives only on first schema type",
 			schema1: `
 directive @foo on OBJECT
 
@@ -1623,7 +1623,7 @@ type Query {
 `,
 		},
 		{
-			description: "directives only on second schema type",
+			description: "custom directives only on second schema type",
 			schema1: `
 type Bar {
 	baz: String
@@ -1650,7 +1650,7 @@ type Query {
 `,
 		},
 		{
-			description: "directives on both schemas type",
+			description: "identical custom directives on both schemas type",
 			schema1: `
 directive @foo on OBJECT
 
@@ -1679,7 +1679,7 @@ type Query {
 `,
 		},
 		{
-			description: "repeated directives on first schemas type",
+			description: "repeated custom directives on first schemas type",
 			schema1: `
 directive @foo repeatable on OBJECT
 
@@ -1706,7 +1706,33 @@ type Query {
 `,
 		},
 		{
-			description: "many repeated and different directives on both schemas type",
+			description: "different built-in and custom directives on both schemas field definition",
+			schema1: `
+type Biff {
+	biff: String @deprecated
+}
+`,
+			schema2: `
+directive @foo on FIELD_DEFINITION
+type Biff {
+	biff: String @foo
+}
+`,
+			expectMergedSchema: `
+directive @foo on FIELD_DEFINITION
+type Biff {
+	biff: String @deprecated @foo
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "many repeated and unique custom directives on both schemas type",
 			schema1: `
 directive @foo(bar: Int!) repeatable on OBJECT
 directive @baz on OBJECT
@@ -1738,7 +1764,7 @@ type Query {
 `,
 		},
 		{
-			description: "directive lists of different length on both schemas type",
+			description: "custom directive lists of different length on both schemas type",
 			schema1: `
 directive @foo on OBJECT
 directive @baz on OBJECT
@@ -1755,10 +1781,69 @@ type Biff @foo @baz {
 	biff: String
 }
 `,
-			expectErr: `there were an inconsistent number of directives: @foo != @foo @baz`,
+			expectErr: `directives with potentially significant ordering were not of the same length: @foo != @foo @baz`,
 		},
 		{
-			description: "different directive lists of equal length on both schemas type",
+			description: "differently ordered built-in and custom directive lists on different schemas",
+			schema1: `
+directive @foo on FIELD_DEFINITION
+directive @bar on FIELD_DEFINITION
+
+type Biff {
+	biff: String @foo @bar @deprecated
+}
+`,
+			schema2: `
+directive @foo on FIELD_DEFINITION
+directive @bar on FIELD_DEFINITION
+
+type Biff {
+	biff: String @foo @deprecated @bar
+}
+`,
+			expectMergedSchema: `
+directive @bar on FIELD_DEFINITION
+directive @foo on FIELD_DEFINITION
+type Biff {
+	biff: String @deprecated @foo @bar
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "different built-in and custom directive lists on different schemas",
+			schema1: `
+directive @foo on FIELD_DEFINITION
+
+type Biff {
+	biff: String @foo
+}
+`,
+			schema2: `
+type Biff {
+	biff: String @deprecated
+}
+`,
+			expectMergedSchema: `
+directive @foo on FIELD_DEFINITION
+type Biff {
+	biff: String @deprecated @foo
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "different custom directive lists of equal length on both schemas type",
 			schema1: `
 directive @foo(bar: Int!) repeatable on OBJECT
 
@@ -1773,10 +1858,10 @@ type Biff @foo(bar: 2) @foo(bar: 1) {
 	biff: String
 }
 `,
-			expectErr: `directives at index #0 are not equal (note: order is significant): argument "bar" values are not equal: encountered different raw values: 1 != 2`,
+			expectErr: `directives with potentially significant ordering at index #0 are not equal: @foo(bar: 1) @foo(bar: 2) != @foo(bar: 2) @foo(bar: 1): argument "bar" values are not equal: encountered different raw values: 1 != 2`,
 		},
 		{
-			description: "differently ordered directive lists of equal length on both schemas type",
+			description: "differently ordered custom directive lists of equal length on both schemas type",
 			schema1: `
 directive @foo on OBJECT
 directive @baz on OBJECT
@@ -1793,7 +1878,7 @@ type Biff @baz @foo {
 	biff: String
 }
 `,
-			expectErr: `directives at index #0 are not equal (note: order is significant): directives do not have the same name`,
+			expectErr: `directives with potentially significant ordering at index #0 are not equal: @foo @baz != @baz @foo: directives do not have the same name`,
 		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
