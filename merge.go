@@ -429,7 +429,7 @@ func mergeScalars(value1, value2 *ast.Definition) (*ast.Definition, error) {
 	var err error
 	value1Copy.Directives, err = mergeDirectiveLists(value1.Directives, value2.Directives)
 	if err != nil {
-		return nil, fmt.Errorf("conflict in enum value directives: %w", err)
+		return nil, fmt.Errorf("conflict in scalar value directives: %w", err)
 	}
 
 	return &value1Copy, nil
