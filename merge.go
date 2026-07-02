@@ -304,7 +304,7 @@ func mergeInputObjects(object1, object2 *ast.Definition) (*ast.Definition, error
 		return nil, err
 	}
 
-	return object1, nil
+	return &object1Copy, nil // TODO add tests!!
 }
 
 func mergeStringSliceEquivalent(slice1, slice2 []string) error {
