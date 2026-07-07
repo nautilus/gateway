@@ -84,19 +84,17 @@ func TestMergeSchema_assignMutationType(t *testing.T) {
 	}
 }
 
-func TestMergeSchema_inputTypes(t *testing.T) {
+func TestMergeSchema_inputObjects(t *testing.T) {
 	t.Parallel()
-	// create the first schema
-	originalSchema, err := graphql.LoadSchema(`
-		input Foo {
-			firstName: String!
-		}
-	`)
-	assert.Nil(t, err)
-
-	t.Run("Matching", func(t *testing.T) {
+	t.Run("Matching fields", func(t *testing.T) {
 		t.Parallel()
 		// merge the schema with one that should work
+		originalSchema, err := graphql.LoadSchema(`
+			input Foo {
+				firstName: String!
+			}
+		`)
+		assert.Nil(t, err)
 		schema, err := testMergeSchemas(t, originalSchema, `
 			input Foo {
 				firstName: String!
@@ -117,6 +115,31 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 			t.Errorf("Encountered incorrect number of fields. Expected 1 found %v", len(inputType.Fields))
 			return
 		}
+	})
+
+	t.Run("Mismatched directive lists", func(t *testing.T) {
+		t.Parallel()
+		originalSchema, err := graphql.LoadSchema(`
+			input Foo {
+				firstName: String!
+			}
+		`)
+		require.NoError(t, err)
+		schema, err := testMergeSchemas(t, originalSchema, `
+			directive @bar on INPUT_OBJECT
+			input Foo @bar {
+				firstName: String!
+			}
+		`)
+		require.NoError(t, err)
+		var schemaBuffer bytes.Buffer
+		formatter.NewFormatter(&schemaBuffer).FormatSchema(schema)
+		assert.Contains(t, schemaBuffer.String(), strings.TrimSpace(`
+directive @bar on INPUT_OBJECT
+input Foo @bar {
+	firstName: String!
+}
+		`))
 	})
 
 	// the table we are testing
