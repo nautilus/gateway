@@ -494,12 +494,12 @@ func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, err
 
 // mergeDirectiveLists merges list1 with list2 or returns an error for an incompatible merge.
 //
-// A directive list merge is compatible if any of the following conditions are met:
-//  1. One list is empty
-//  2. One list uses only built-in directives
-//  3. Both lists' ordered directives are identical
-//
+// A directive list merge is compatible if ALL of the following conditions are met.
+// Note: ordered1 and ordered2 are list1 and list2 filtered to their ordered directives. Similar for unordered1, unordered2.
 // See [splitSignificantlyOrderedDirectives] for details on "ordered" directives.
+//
+//  1. Both ordered1 and ordered2 are identical OR one is empty. Identical includes their args and relative ordering to one another.
+//  2. unordered1 and unordered2 do not both include the same non-repeatable directive with different arguments. For example, merging '@specifiedBy(url: "foo")' with '@specifiedBy(url: "bar")' will fail because @specifiedBy is not repeatable.
 func mergeDirectiveLists(list1, list2 ast.DirectiveList) (ast.DirectiveList, error) {
 	ordered1, unordered1 := splitSignificantlyOrderedDirectives(list1)
 	ordered2, unordered2 := splitSignificantlyOrderedDirectives(list2)
