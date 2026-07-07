@@ -1903,6 +1903,16 @@ type Biff @baz @foo {
 `,
 			expectErr: `Biff (OBJECT): directives with potentially significant ordering at index #0 are not equal: @foo @baz != @baz @foo: directives do not have the same name`,
 		},
+		{
+			description: "non-repeatable directive used twice with different arguments",
+			schema1: `
+scalar Biff @specifiedBy(url: "foo")
+`,
+			schema2: `
+scalar Biff @specifiedBy(url: "bar")
+`,
+			expectErr: `Biff (SCALAR): conflict in scalar value directives: cannot merge unordered directives in '@specifiedBy(url: "foo")' and '@specifiedBy(url: "bar")': found unique, non-repeatable directive: @specifiedBy(url: "bar")`,
+		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
