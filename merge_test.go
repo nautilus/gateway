@@ -1520,7 +1520,7 @@ type Query {
 			description: "do not merge executable locations",
 			schema1:     `directive @foo on FIELD | QUERY`,
 			schema2:     `directive @foo on FRAGMENT_DEFINITION | QUERY`,
-			expectErr:   `conflict in locations for directive foo: do not have the same executable locations: exclusive to first = [FIELD], exclusive to second = [FRAGMENT_DEFINITION]`,
+			expectErr:   `@foo (directive): conflict in locations: do not have the same executable locations: exclusive to first = [FIELD], exclusive to second = [FRAGMENT_DEFINITION]`,
 		},
 		{
 			description: "merge shared executable locations and mixed type system locations",
@@ -1781,7 +1781,7 @@ type Biff @foo @baz {
 	biff: String
 }
 `,
-			expectErr: `directives with potentially significant ordering were not of the same length: @foo != @foo @baz`,
+			expectErr: `Biff (OBJECT): directives with potentially significant ordering were not of the same length: @foo != @foo @baz`,
 		},
 		{
 			description: "differently ordered built-in and custom directive lists on different schemas",
@@ -1858,7 +1858,7 @@ type Biff @foo(bar: 2) @foo(bar: 1) {
 	biff: String
 }
 `,
-			expectErr: `directives with potentially significant ordering at index #0 are not equal: @foo(bar: 1) @foo(bar: 2) != @foo(bar: 2) @foo(bar: 1): argument "bar" values are not equal: encountered different raw values: 1 != 2`,
+			expectErr: `Biff (OBJECT): directives with potentially significant ordering at index #0 are not equal: @foo(bar: 1) @foo(bar: 2) != @foo(bar: 2) @foo(bar: 1): argument "bar" values are not equal: encountered different raw values: 1 != 2`,
 		},
 		{
 			description: "differently ordered custom directive lists of equal length on both schemas type",
@@ -1878,7 +1878,7 @@ type Biff @baz @foo {
 	biff: String
 }
 `,
-			expectErr: `directives with potentially significant ordering at index #0 are not equal: @foo @baz != @baz @foo: directives do not have the same name`,
+			expectErr: `Biff (OBJECT): directives with potentially significant ordering at index #0 are not equal: @foo @baz != @baz @foo: directives do not have the same name`,
 		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {

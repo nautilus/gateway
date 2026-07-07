@@ -154,7 +154,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			}
 
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%s (%s): %w", definition.Name, definition.Kind, err)
 			}
 			result.Types[name] = previousDefinition
 		}
@@ -178,7 +178,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			// we have to merge the 2 directives
 			previousDefinition, err := mergeDirectives(previousDefinition, definition)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("@%s (directive): %w", definition.Name, err)
 			}
 			result.Directives[name] = previousDefinition
 		}
@@ -216,7 +216,7 @@ func mergeInterfaces(previousDefinition *ast.Definition, newDefinition *ast.Defi
 		var err error
 		prevCopy.Fields[ix], err = mergeFields(field, otherField)
 		if err != nil {
-			return nil, fmt.Errorf("encountered error merging interface %v: %w", previousDefinition.Name, err)
+			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		}
 	}
 
@@ -245,7 +245,7 @@ func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Def
 			prevCopy.Fields[prevIndex], err = mergeFields(prevField, newField)
 			if err != nil {
 				//  we don't allow 2 fields that have different types
-				return nil, fmt.Errorf("encountered error merging object %v: %w", previousDefinition.Name, err)
+				return nil, fmt.Errorf("field %s: %w", prevField.Name, err)
 			}
 		} else {
 			// its safe to copy over the definition
@@ -390,13 +390,13 @@ func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition 
 	var err error
 	result.Locations, err = mergeDirectiveLocations(result.Locations, newDefinition.Locations)
 	if err != nil {
-		return nil, fmt.Errorf("conflict in locations for directive %s: %w", previousDefinition.Name, err)
+		return nil, fmt.Errorf("conflict in locations: %w", err)
 	}
 
 	// make sure the 2 definitions take the same arguments
 	result.Arguments, err = mergeArgumentDefinitionList(result.Arguments, newDefinition.Arguments, result.Position.Src.BuiltIn)
 	if err != nil {
-		return nil, fmt.Errorf("conflict in argument definitions for directive %s: %w", previousDefinition.Name, err)
+		return nil, fmt.Errorf("conflict in arguments: %w", err)
 	}
 
 	// the 2 directives can coexist
@@ -450,7 +450,7 @@ func mergeFieldList(list1, list2 ast.FieldList) (ast.FieldList, error) {
 
 		newField, err := mergeFields(field, otherField)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		}
 		list1Copy = append(list1Copy, newField)
 	}
