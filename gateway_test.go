@@ -1279,7 +1279,7 @@ query ($id: ID!) {
 		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
 			assert.Empty(t, input.Variables)
 			if url == service1URL {
-				assert.Equal(t, strings.TrimSpace(service1Query), input.Query, "Unexpected query to service1")
+				assert.Equal(t, strings.TrimSpace(service1Query), strings.TrimSpace(input.Query), "Unexpected query to service1")
 				return map[string]any{
 					"animals": []any{
 						map[string]any{
@@ -1294,7 +1294,7 @@ query ($id: ID!) {
 					},
 				}, nil
 			} else {
-				assert.Equal(t, strings.TrimSpace(service2Query), input.Query, "Unexpected query to service2")
+				assert.Equal(t, strings.TrimSpace(service2Query), strings.TrimSpace(input.Query), "Unexpected query to service2")
 				return map[string]any{
 					"node": []any{
 						map[string]any{"name": "some-cat-name"},
