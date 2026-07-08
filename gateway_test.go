@@ -1263,7 +1263,7 @@ query {
 }
 		`
 		service2Query = `
-query($id: ID!) {
+query ($id: ID!) {
 	node(id: $id) {
 		... on Cat {
 			name
@@ -1281,12 +1281,12 @@ query($id: ID!) {
 			if url == service1URL {
 				assert.Equal(t, strings.TrimSpace(service1Query), input.Query, "Unexpected query to service1")
 				return map[string]any{
-					"animals": []map[string]any{
-						{
+					"animals": []any{
+						map[string]any{
 							"__typename": "Cat",
 							"id":         "some-cat-id",
 						},
-						{
+						map[string]any{
 							"__typename": "Dog",
 							"id":         "some-dog-id",
 							"name":       "some-dog-name",
@@ -1296,8 +1296,8 @@ query($id: ID!) {
 			} else {
 				assert.Equal(t, strings.TrimSpace(service2Query), input.Query, "Unexpected query to service2")
 				return map[string]any{
-					"node": []map[string]any{
-						{"name": "some-cat-name"},
+					"node": []any{
+						map[string]any{"name": "some-cat-name"},
 					},
 				}, nil
 			}
@@ -1319,12 +1319,12 @@ query($id: ID!) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 	assert.Equal(t, map[string]any{
 		"data": map[string]any{
-			"animals": []map[string]any{
-				{
+			"animals": []any{
+				map[string]any{
 					"id":   "some-cat-id",
 					"name": "some-cat-name",
 				},
-				{
+				map[string]any{
 					"id":   "some-dog-id",
 					"name": "some-dog-name",
 				},
