@@ -17,6 +17,17 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
+func must[Value any](value Value, err error) Value {
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
+func toPointer[Value any](value Value) *Value {
+	return &value
+}
+
 type schemaTableRow struct {
 	location string
 	query    string
@@ -1183,4 +1194,141 @@ func TestSingleObjectOnlyRequestingNonIDFieldScrubsIDs(t *testing.T) {
 			},
 		},
 	}, response, "Response must not contain ID fields and not fail while scrubbing them.")
+}
+
+// TestIssue128 verifies the fix for https://github.com/nautilus/gateway/issues/128
+func TestIssue128(t *testing.T) {
+	t.Parallel()
+	const (
+		service1URL = "service-url-1"
+		schemaStr1  = `
+			interface Node {
+				id: ID!
+			}
+			type Cat implements Node {
+				id: ID!
+			}
+			type Dog {
+				id: ID!
+				name: String!
+			}
+
+			union Animal = Cat | Dog
+
+			type Query {
+				animals: [Animal!]!
+				node(id: ID!): Node
+			}
+		`
+		service2URL = "service-url-2"
+		schemaStr2  = `
+			interface Node {
+				id: ID!
+			}
+			type Cat implements Node {
+				id: ID!
+				name: String!
+			}
+			type Query {
+				node(id: ID!): Node
+			}
+		`
+
+		query = `
+			query {
+				animals {
+					... on Cat {
+						id
+						name
+					}
+					... on Dog {
+						id
+						name
+					}
+				}
+			}
+		`
+		service1Query = `
+query {
+	animals {
+		__typename
+		... on Cat {
+			id
+		}
+		... on Dog {
+			id
+			name
+		}
+	}
+}
+		`
+		service2Query = `
+query ($id: ID!) {
+	node(id: $id) {
+		... on Cat {
+			name
+		}
+	}
+}
+        `
+	)
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: must(graphql.LoadSchema(schemaStr1)), URL: service1URL},
+		{Schema: must(graphql.LoadSchema(schemaStr2)), URL: service2URL},
+	}, WithQueryerFactory(toPointer(QueryerFactory(func(_ *PlanningContext, url string) graphql.Queryer {
+		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
+			assert.Empty(t, input.Variables)
+			if url == service1URL {
+				assert.Equal(t, strings.TrimSpace(service1Query), strings.TrimSpace(input.Query), "Unexpected query to service1")
+				return map[string]any{
+					"animals": []any{
+						map[string]any{
+							"__typename": "Cat",
+							"id":         "some-cat-id",
+						},
+						map[string]any{
+							"__typename": "Dog",
+							"id":         "some-dog-id",
+							"name":       "some-dog-name",
+						},
+					},
+				}, nil
+			} else {
+				assert.Equal(t, strings.TrimSpace(service2Query), strings.TrimSpace(input.Query), "Unexpected query to service2")
+				return map[string]any{
+					"node": []any{
+						map[string]any{"name": "some-cat-name"},
+					},
+				}, nil
+			}
+		})
+	}))))
+	require.NoError(t, err)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`
+		{
+			"query": %q
+		}
+	`, query)))
+	resp := httptest.NewRecorder()
+	gateway.GraphQLHandler(resp, req)
+	t.Log("Response:", resp.Body.String())
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, map[string]any{
+		"data": map[string]any{
+			"animals": []any{
+				map[string]any{
+					"id":   "some-cat-id",
+					"name": "some-cat-name",
+				},
+				map[string]any{
+					"id":   "some-dog-id",
+					"name": "some-dog-name",
+				},
+			},
+		},
+	}, response)
 }
