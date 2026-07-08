@@ -14,11 +14,10 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/graph-gophers/dataloader v5.0.0+incompatible // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.16 // indirect
-	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 )
