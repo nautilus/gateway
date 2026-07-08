@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"bytes"
+	"iter"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1931,6 +1933,55 @@ scalar Biff @specifiedBy(url: "bar")
 			formatter.NewFormatter(&currentSchemaBuf).FormatSchema(currentSchema)
 			currentSchemaStr := strings.TrimSpace(currentSchemaBuf.String())
 			assert.Equal(t, strings.TrimSpace(tc.expectMergedSchema), currentSchemaStr)
+		})
+	}
+}
+
+func TestDiffSets(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		description                     string
+		left, right                     iter.Seq[int]
+		expectOnlyLeft, expectOnlyRight []int
+		expectAreEqualSets              bool
+	}{
+		{
+			description:        "equal sets",
+			left:               slices.Values([]int{1, 2, 3}),
+			right:              slices.Values([]int{1, 2, 3}),
+			expectAreEqualSets: true,
+		},
+		{
+			description:    "unique in left",
+			left:           slices.Values([]int{1, 2, 3, 4}),
+			right:          slices.Values([]int{1, 2, 3}),
+			expectOnlyLeft: []int{4},
+		},
+		{
+			description:     "unique in right",
+			left:            slices.Values([]int{1, 2, 3}),
+			right:           slices.Values([]int{1, 2, 3, 4}),
+			expectOnlyRight: []int{4},
+		},
+		{
+			description:    "unique in left stable ordering",
+			left:           slices.Values([]int{1, 2, 3, 4}),
+			right:          slices.Values([]int{1, 3}),
+			expectOnlyLeft: []int{2, 4},
+		},
+		{
+			description:     "unique in right stable ordering",
+			left:            slices.Values([]int{1, 3}),
+			right:           slices.Values([]int{1, 2, 3, 4}),
+			expectOnlyRight: []int{2, 4},
+		},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+			onlyLeft, onlyRight, areEqualSets := diffSets(tc.left, tc.right)
+			assert.Equal(t, tc.expectOnlyLeft, onlyLeft)
+			assert.Equal(t, tc.expectOnlyRight, onlyRight)
+			assert.Equal(t, tc.expectAreEqualSets, areEqualSets)
 		})
 	}
 }

@@ -794,16 +794,9 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 //	  INPUT_OBJECT
 //	  INPUT_FIELD_DEFINITION
 func mergeDirectiveLocations(list1, list2 []ast.DirectiveLocation) ([]ast.DirectiveLocation, error) {
-	executableSet1 := make(map[ast.DirectiveLocation]struct{})
-	for l := range potentialExecutableDirectiveLocations(list1) {
-		executableSet1[l] = struct{}{}
-	}
-	executableSet2 := make(map[ast.DirectiveLocation]struct{})
-	for l := range potentialExecutableDirectiveLocations(list2) {
-		executableSet2[l] = struct{}{}
-	}
-
-	if onlyLeft, onlyRight, areEqualSets := diffSets(executableSet1, executableSet2); !areEqualSets {
+	if onlyLeft, onlyRight, areEqualSets := diffSets(
+		potentialExecutableDirectiveLocations(list1),
+		potentialExecutableDirectiveLocations(list2)); !areEqualSets {
 		return nil, fmt.Errorf("do not have the same executable locations: exclusive to first = %v, exclusive to second = %v", onlyLeft, onlyRight)
 	}
 
@@ -865,14 +858,22 @@ func isTypeSystemDirectiveLocation(d ast.DirectiveLocation) bool {
 	}
 }
 
-func diffSets[Value comparable](left, right map[Value]struct{}) (onlyLeft, onlyRight []Value, areEqualSets bool) {
+func diffSets[Value comparable](left, right iter.Seq[Value]) (onlyLeft, onlyRight []Value, areEqualSets bool) {
+	leftSet := make(map[Value]struct{})
+	for l := range left {
+		leftSet[l] = struct{}{}
+	}
+	rightSet := make(map[Value]struct{})
+	for l := range right {
+		rightSet[l] = struct{}{}
+	}
 	for value := range left {
-		if _, alsoInRight := right[value]; !alsoInRight {
+		if _, alsoInRight := rightSet[value]; !alsoInRight {
 			onlyLeft = append(onlyLeft, value)
 		}
 	}
 	for value := range right {
-		if _, alsoInLeft := left[value]; !alsoInLeft {
+		if _, alsoInLeft := leftSet[value]; !alsoInLeft {
 			onlyRight = append(onlyRight, value)
 		}
 	}
