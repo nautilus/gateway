@@ -3,6 +3,9 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"iter"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -151,7 +154,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			}
 
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%s (%s): %w", definition.Name, definition.Kind, err)
 			}
 			result.Types[name] = previousDefinition
 		}
@@ -175,7 +178,7 @@ func mergeSchemas(sources []*ast.Schema) (*ast.Schema, error) {
 			// we have to merge the 2 directives
 			previousDefinition, err := mergeDirectives(previousDefinition, definition)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("@%s (directive): %w", definition.Name, err)
 			}
 			result.Directives[name] = previousDefinition
 		}
@@ -213,7 +216,7 @@ func mergeInterfaces(previousDefinition *ast.Definition, newDefinition *ast.Defi
 		var err error
 		prevCopy.Fields[ix], err = mergeFields(field, otherField)
 		if err != nil {
-			return nil, fmt.Errorf("encountered error merging interface %v: %w", previousDefinition.Name, err)
+			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		}
 	}
 
@@ -242,7 +245,7 @@ func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Def
 			prevCopy.Fields[prevIndex], err = mergeFields(prevField, newField)
 			if err != nil {
 				//  we don't allow 2 fields that have different types
-				return nil, fmt.Errorf("encountered error merging object %v: %w", previousDefinition.Name, err)
+				return nil, fmt.Errorf("field %s: %w", prevField.Name, err)
 			}
 		} else {
 			// its safe to copy over the definition
@@ -251,7 +254,9 @@ func mergeObjectTypes(previousDefinition *ast.Definition, newDefinition *ast.Def
 	}
 
 	// make sure that the 2 directive lists are the same
-	if err := mergeDirectiveListsEqual(previousDefinition.Directives, newDefinition.Directives); err != nil {
+	var err error
+	prevCopy.Directives, err = mergeDirectiveLists(previousDefinition.Directives, newDefinition.Directives)
+	if err != nil {
 		return nil, err
 	}
 
@@ -294,11 +299,12 @@ func mergeInputObjects(object1, object2 *ast.Definition) (*ast.Definition, error
 	}
 
 	// check directives
-	if err := mergeDirectiveListsEqual(object1.Directives, object2.Directives); err != nil {
+	object1Copy.Directives, err = mergeDirectiveLists(object1.Directives, object2.Directives)
+	if err != nil {
 		return nil, err
 	}
 
-	return object1, nil
+	return &object1Copy, nil
 }
 
 func mergeStringSliceEquivalent(slice1, slice2 []string) error {
@@ -384,13 +390,13 @@ func mergeDirectives(previousDefinition *ast.DirectiveDefinition, newDefinition 
 	var err error
 	result.Locations, err = mergeDirectiveLocations(result.Locations, newDefinition.Locations)
 	if err != nil {
-		return nil, fmt.Errorf("conflict in locations for directive %s: %w", previousDefinition.Name, err)
+		return nil, fmt.Errorf("conflict in locations: %w", err)
 	}
 
 	// make sure the 2 definitions take the same arguments
 	result.Arguments, err = mergeArgumentDefinitionList(result.Arguments, newDefinition.Arguments, result.Position.Src.BuiltIn)
 	if err != nil {
-		return nil, fmt.Errorf("conflict in argument definitions for directive %s: %w", previousDefinition.Name, err)
+		return nil, fmt.Errorf("conflict in arguments: %w", err)
 	}
 
 	// the 2 directives can coexist
@@ -404,7 +410,9 @@ func mergeEnumValues(value1, value2 *ast.EnumValueDefinition) (*ast.EnumValueDef
 	}
 
 	// if the 2 directives dont match
-	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
+	var err error
+	value1Copy.Directives, err = mergeDirectiveLists(value1.Directives, value2.Directives)
+	if err != nil {
 		return nil, fmt.Errorf("conflict in enum value directives: %w", err)
 	}
 
@@ -418,8 +426,10 @@ func mergeScalars(value1, value2 *ast.Definition) (*ast.Definition, error) {
 	}
 
 	// if the 2 directives dont match
-	if err := mergeDirectiveListsEqual(value1.Directives, value2.Directives); err != nil {
-		return nil, fmt.Errorf("conflict in enum value directives: %w", err)
+	var err error
+	value1Copy.Directives, err = mergeDirectiveLists(value1.Directives, value2.Directives)
+	if err != nil {
+		return nil, fmt.Errorf("conflict in scalar value directives: %w", err)
 	}
 
 	return &value1Copy, nil
@@ -440,7 +450,7 @@ func mergeFieldList(list1, list2 ast.FieldList) (ast.FieldList, error) {
 
 		newField, err := mergeFields(field, otherField)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		}
 		list1Copy = append(list1Copy, newField)
 	}
@@ -473,7 +483,8 @@ func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, err
 	}
 
 	// directives
-	if err := mergeDirectiveListsEqual(field1.Directives, field2.Directives); err != nil {
+	field1Copy.Directives, err = mergeDirectiveLists(field1.Directives, field2.Directives)
+	if err != nil {
 		return nil, fmt.Errorf("fields are not equal: %w", err)
 	}
 
@@ -481,27 +492,106 @@ func mergeFields(field1, field2 *ast.FieldDefinition) (*ast.FieldDefinition, err
 	return &field1Copy, nil
 }
 
-func mergeDirectiveListsEqual(list1, list2 ast.DirectiveList) error {
-	// if the 2 lists are not the same length
-	if len(list1) != len(list2) {
+// mergeDirectiveLists merges list1 with list2 or returns an error for an incompatible merge.
+//
+// A directive list merge is compatible if ALL of the following conditions are met.
+// Note: ordered1 and ordered2 are list1 and list2 filtered to their ordered directives. Similar for unordered1, unordered2.
+// See [splitSignificantlyOrderedDirectives] for details on "ordered" directives.
+//
+//  1. Both ordered1 and ordered2 are identical OR one is empty. Identical includes their args and relative ordering to one another.
+//  2. unordered1 and unordered2 do not both include the same non-repeatable directive with different arguments. For example, merging '@specifiedBy(url: "foo")' with '@specifiedBy(url: "bar")' will fail because @specifiedBy is not repeatable.
+func mergeDirectiveLists(list1, list2 ast.DirectiveList) (ast.DirectiveList, error) {
+	ordered1, unordered1 := splitSignificantlyOrderedDirectives(list1)
+	ordered2, unordered2 := splitSignificantlyOrderedDirectives(list2)
+
+	ordered, err := mergeOrderedDirectiveLists(ordered1, ordered2)
+	if err != nil {
+		return nil, err
+	}
+	unordered, err := mergeUnorderedDirectiveLists(unordered1, unordered2)
+	if err != nil {
+		return nil, err
+	}
+	return append(unordered, ordered...), nil
+}
+
+// splitSignificantlyOrderedDirectives splits directives into potentially significant ordering and definitely unordered.
+// The split uses stable ordering, so resulting values retain their original relative order.
+// As a reminder, the GraphQL spec says directive order is significant: https://spec.graphql.org/October2021/#sec-Language.Directives.Directive-order-is-significant
+//
+// Only evaluates built-in directives with full confidence as definitely unordered. All others are potentially ordered.
+// At time of writing, all built-in directives do not have significant ordering.
+func splitSignificantlyOrderedDirectives(directives ast.DirectiveList) (potentiallyOrdered, definitelyUnordered ast.DirectiveList) {
+	for _, d := range directives {
+		if isBuiltInDirective(d.Name) {
+			definitelyUnordered = append(definitelyUnordered, d)
+		} else {
+			potentiallyOrdered = append(potentiallyOrdered, d)
+		}
+	}
+	return
+}
+
+func isBuiltInDirective(name string) bool {
+	switch strings.ToLower(name) {
+	case
+		"deprecated",
+		"include",
+		"skip",
+		"specifiedby":
+		return true
+	default:
+		return false
+	}
+}
+
+// mergeOrderedDirectiveLists validates A is identical to B OR one of them is empty, then returns the merged list.
+// Otherwise returns a merge error.
+func mergeOrderedDirectiveLists(a, b ast.DirectiveList) (ast.DirectiveList, error) {
+	// If either list is empty, use the other as the merged list.
+	if len(a) == 0 {
+		return b, nil
+	}
+	if len(b) == 0 {
+		return a, nil
+	}
+	if len(a) != len(b) {
 		// they will never be the same
-		return errors.New("there were an inconsistent number of directives")
+		return nil, fmt.Errorf("directives with potentially significant ordering were not of the same length: %s != %s", formatDirectives(a), formatDirectives(b))
 	}
-
-	// compare each argument to its counterpart in the other list
-	for _, arg1 := range list1 {
-		arg2 := list2.ForName(arg1.Name)
-		if arg2 == nil {
-			return fmt.Errorf("could not find the directive with name %s", arg1.Name)
-		}
-
-		// if the 2 arguments are not the same
-		if err := mergeDirectiveEqual(arg1, arg2); err != nil {
-			return err
+	for index := range a {
+		if err := mergeDirectiveEqual(a[index], b[index]); err != nil {
+			return nil, fmt.Errorf("directives with potentially significant ordering at index #%d are not equal: %s != %s: %w", index, formatDirectives(a), formatDirectives(b), err)
 		}
 	}
+	return a, nil
+}
 
-	return nil
+// mergeUnorderedDirectiveLists merges unordered directive lists A and B by throwing away duplicates from B and appending the rest to A.
+//
+// Returns an error if a unique directive is detected that repeats a non-repeatable directive definition.
+func mergeUnorderedDirectiveLists(a, b ast.DirectiveList) (ast.DirectiveList, error) {
+	var uniqueBDirectives ast.DirectiveList
+	for _, bDirective := range b {
+		isUnique := true
+		isRepeatedName := false
+		for _, aDirective := range a {
+			if bDirective.Name == aDirective.Name {
+				isRepeatedName = true
+			}
+			if err := mergeDirectiveEqual(bDirective, aDirective); err == nil {
+				isUnique = false
+				break
+			}
+		}
+		if isUnique {
+			if isRepeatedName && !bDirective.Definition.IsRepeatable {
+				return nil, fmt.Errorf("cannot merge unordered directives in '%s' and '%s': found unique, non-repeatable directive: %s", formatDirectives(a), formatDirectives(b), formatDirective(bDirective))
+			}
+			uniqueBDirectives = append(uniqueBDirectives, bDirective)
+		}
+	}
+	return append(a, uniqueBDirectives...), nil
 }
 
 func mergeDirectiveEqual(directive1, directive2 *ast.Directive) error {
@@ -550,7 +640,7 @@ func mergeArgumentsEqual(arg1, arg2 *ast.Argument) error {
 
 	// if the values are different
 	if err := mergeValuesEqual(arg1.Value, arg2.Value); err != nil {
-		return err
+		return fmt.Errorf("argument %q values are not equal: %w", arg1.Name, err)
 	}
 
 	// they're the same
@@ -618,11 +708,11 @@ func mergeValuesEqual(value1, value2 *ast.Value) error {
 
 	// if the kinds are not the same
 	if value1.Kind != value2.Kind {
-		return errors.New("encountered inconsistent kinds")
+		return fmt.Errorf("encountered inconsistent kinds: %d != %d", value1.Kind, value2.Kind)
 	}
 	// if the raw values are not the same
 	if value1.Raw != value2.Raw {
-		return errors.New("encountered different raw values")
+		return fmt.Errorf("encountered different raw values: %s != %s", value1.Raw, value2.Raw)
 	}
 
 	return nil
@@ -659,7 +749,19 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 }
 
 // Directives can be used on execution locations (a query) or on type system locations (a deprecated field).
-// Gateway should not merge and share execution locations since these may not be supported by the respective service.
+//
+// Gateway should not merge and share *different sets* of execution locations since these may not be supported by the respective service. For example:
+//
+//	A:   on EXECUTABLE1 | EXECUTABLE2 | TYPESYSTEM1
+//	B:   on EXECUTABLE1 | TYPESYSTEM1
+//	A+B: Fails. Executable location sets are not equal.
+//
+// Equal sets of executable locations are permitted, for example:
+//
+//	A:   on EXECUTABLE1
+//	B:   on EXECUTABLE1 | TYPESYSTEM2
+//	A+B: on EXECUTABLE1 | TYPESYSTEM2
+//
 // Gateway should merge and share type system locations since these are only defined and used in each respective service's schema. In other words, the services own their usage of those directives.
 //
 // Some implementations merge all locations irrespective of their kind. This could result in a
@@ -692,45 +794,38 @@ func mergeTypesEqual(type1, type2 *ast.Type) error {
 //	  INPUT_OBJECT
 //	  INPUT_FIELD_DEFINITION
 func mergeDirectiveLocations(list1, list2 []ast.DirectiveLocation) ([]ast.DirectiveLocation, error) {
+	if onlyLeft, onlyRight, areEqualSets := diffSets(
+		potentialExecutableDirectiveLocations(list1),
+		potentialExecutableDirectiveLocations(list2)); !areEqualSets {
+		return nil, fmt.Errorf("do not have the same executable locations: exclusive to first = %v, exclusive to second = %v", onlyLeft, onlyRight)
+	}
+
 	resultSet := make(map[ast.DirectiveLocation]struct{})
-	executableSet1 := make(map[ast.DirectiveLocation]struct{})
-	// Check the permissive set (type system locations) rather than the restrictive set (executable locations).
-	// The kinds of locations can expand in future versions of the spec, so we should err on the side
-	// of denying new type system fields instead of allowing new executable fields.
 	for _, l := range list1 {
 		resultSet[l] = struct{}{}
-		if !isTypeSystemDirectiveLocation(l) {
-			executableSet1[l] = struct{}{}
-		}
 	}
-	executableSet2 := make(map[ast.DirectiveLocation]struct{})
 	for _, l := range list2 {
 		resultSet[l] = struct{}{}
-		if !isTypeSystemDirectiveLocation(l) {
-			executableSet2[l] = struct{}{}
-		}
 	}
+	return slices.Sorted(maps.Keys(resultSet)), nil
+}
 
-	mismatchErr := fmt.Errorf("do not have the same executable locations: %s", executableDirectiveLocationDiff(executableSet1, executableSet2))
-	for l := range executableSet1 {
-		if _, ok := executableSet2[l]; !ok {
-			return nil, mismatchErr
+// potentialExecutableDirectiveLocations returns likely executable directive locations.
+// Only "likely" because new and unexpected location names should fall back to classifying as a more restrictive executable location.
+//
+// Check "not in the permissive set" (type system locations) rather than the restrictive set (executable locations).
+// The kinds of locations can expand in future versions of the spec, so we should err on the side
+// of denying new type system fields instead of allowing new executable fields.
+func potentialExecutableDirectiveLocations(locations []ast.DirectiveLocation) iter.Seq[ast.DirectiveLocation] {
+	return func(yield func(ast.DirectiveLocation) bool) {
+		for _, l := range locations {
+			if !isTypeSystemDirectiveLocation(l) {
+				if !yield(l) {
+					return
+				}
+			}
 		}
 	}
-	for l := range executableSet2 {
-		if _, ok := executableSet1[l]; !ok {
-			return nil, mismatchErr
-		}
-	}
-
-	var result []ast.DirectiveLocation
-	for l := range resultSet {
-		result = append(result, l)
-	}
-	sort.Slice(result, func(a, b int) bool {
-		return result[a] < result[b]
-	})
-	return result, nil
 }
 
 func isTypeSystemDirectiveLocation(d ast.DirectiveLocation) bool {
@@ -763,12 +858,57 @@ func isTypeSystemDirectiveLocation(d ast.DirectiveLocation) bool {
 	}
 }
 
-func executableDirectiveLocationDiff(set1, set2 map[ast.DirectiveLocation]struct{}) string {
-	var diff []string
-	for l := range set1 {
-		if _, ok := set2[l]; !ok {
-			diff = append(diff, string(l))
+func diffSets[Value comparable](left, right iter.Seq[Value]) (onlyLeft, onlyRight []Value, areEqualSets bool) {
+	leftSet := make(map[Value]struct{})
+	for l := range left {
+		leftSet[l] = struct{}{}
+	}
+	rightSet := make(map[Value]struct{})
+	for l := range right {
+		rightSet[l] = struct{}{}
+	}
+	for value := range left {
+		if _, alsoInRight := rightSet[value]; !alsoInRight {
+			onlyLeft = append(onlyLeft, value)
 		}
 	}
-	return fmt.Sprintf("these locations are not shared: %s", strings.Join(diff, ", "))
+	for value := range right {
+		if _, alsoInLeft := leftSet[value]; !alsoInLeft {
+			onlyRight = append(onlyRight, value)
+		}
+	}
+	return onlyLeft, onlyRight, len(onlyLeft) == 0 && len(onlyRight) == 0
+}
+
+func formatDirectives(directives ast.DirectiveList) string {
+	var directiveStrings []string
+	for _, d := range directives {
+		directiveStrings = append(directiveStrings, formatDirective(d))
+	}
+	return strings.Join(directiveStrings, " ")
+}
+
+func formatDirective(d *ast.Directive) string {
+	if d == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("@%s%s", d.Name, formatArgs(d.Arguments))
+}
+
+func formatArgs(args ast.ArgumentList) string {
+	if len(args) == 0 {
+		return ""
+	}
+	var argStrings []string
+	for _, arg := range args {
+		argStrings = append(argStrings, formatArg(arg))
+	}
+	return fmt.Sprintf("(%s)", strings.Join(argStrings, ", "))
+}
+
+func formatArg(arg *ast.Argument) string {
+	if arg == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("%s: %s", arg.Name, arg.Value.String())
 }

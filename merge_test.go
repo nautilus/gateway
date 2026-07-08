@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"bytes"
+	"iter"
+	"slices"
 	"strings"
 	"testing"
 
@@ -84,19 +86,17 @@ func TestMergeSchema_assignMutationType(t *testing.T) {
 	}
 }
 
-func TestMergeSchema_inputTypes(t *testing.T) {
+func TestMergeSchema_inputObjects(t *testing.T) {
 	t.Parallel()
-	// create the first schema
-	originalSchema, err := graphql.LoadSchema(`
-		input Foo {
-			firstName: String!
-		}
-	`)
-	assert.Nil(t, err)
-
-	t.Run("Matching", func(t *testing.T) {
+	t.Run("Matching fields", func(t *testing.T) {
 		t.Parallel()
 		// merge the schema with one that should work
+		originalSchema, err := graphql.LoadSchema(`
+			input Foo {
+				firstName: String!
+			}
+		`)
+		assert.Nil(t, err)
 		schema, err := testMergeSchemas(t, originalSchema, `
 			input Foo {
 				firstName: String!
@@ -117,6 +117,31 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 			t.Errorf("Encountered incorrect number of fields. Expected 1 found %v", len(inputType.Fields))
 			return
 		}
+	})
+
+	t.Run("Mismatched directive lists", func(t *testing.T) {
+		t.Parallel()
+		originalSchema, err := graphql.LoadSchema(`
+			input Foo {
+				firstName: String!
+			}
+		`)
+		require.NoError(t, err)
+		schema, err := testMergeSchemas(t, originalSchema, `
+			directive @bar on INPUT_OBJECT
+			input Foo @bar {
+				firstName: String!
+			}
+		`)
+		require.NoError(t, err)
+		var schemaBuffer bytes.Buffer
+		formatter.NewFormatter(&schemaBuffer).FormatSchema(schema)
+		assert.Contains(t, schemaBuffer.String(), strings.TrimSpace(`
+directive @bar on INPUT_OBJECT
+input Foo @bar {
+	firstName: String!
+}
+		`))
 	})
 
 	// the table we are testing
@@ -151,14 +176,16 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 		{
 			"Conflicting directives",
 			`
-				input Foo {
+				directive @foo on INPUT_OBJECT
+
+				input Foo @foo {
 					lastName: String!
 				}
 			`,
 			`
-				directive @foo on INPUT_OBJECT
+				directive @bar on INPUT_OBJECT
 
-				input Foo @foo {
+				input Foo @bar {
 					lastName: String!
 				}
 			`,
@@ -166,15 +193,17 @@ func TestMergeSchema_inputTypes(t *testing.T) {
 		{
 			"Conflicting field directives",
 			`
+				directive @foo on INPUT_FIELD_DEFINITION
+
 				input Foo {
-					lastName: String!
+					lastName: String! @foo
 				}
 			`,
 			`
-				directive @foo on INPUT_FIELD_DEFINITION
+				directive @bar on INPUT_FIELD_DEFINITION
 
 				input Foo  {
-					lastName: String! @foo
+					lastName: String! @bar
 				}
 			`,
 		},
@@ -277,14 +306,16 @@ func TestMergeSchema_objectTypes(t *testing.T) {
 		{
 			"Conflicting declaration directives",
 			`
-				directive @foo(url: String!) on OBJECT
+				directive @foo on OBJECT
 
-				type User @foo(url: "bar") {
+				type User @foo {
 					firstName: String
 				}
 			`,
 			`
-				type User {
+				directive @bar on OBJECT
+
+				type User @bar {
 					firstName: String
 				}
 			`,
@@ -425,7 +456,7 @@ func TestMergeSchema_enums(t *testing.T) {
 	})
 }
 
-func TestMergeSchema_directives(t *testing.T) {
+func TestMergeSchema_directiveDefinitions(t *testing.T) {
 	t.Parallel()
 	t.Run("Matching", func(t *testing.T) {
 		t.Parallel()
@@ -784,15 +815,17 @@ func TestMergeSchema_interfaces(t *testing.T) {
 		{
 			"Different Field Directives",
 			`
-				interface Foo {
-					name: String!
-				}
-			`,
-			`
 				directive @foo on FIELD_DEFINITION
 
 				interface Foo {
 					name: String! @foo
+				}
+			`,
+			`
+				directive @bar on FIELD_DEFINITION
+
+				interface Foo {
+					name: String! @bar
 				}
 			`,
 		},
@@ -1512,7 +1545,7 @@ type Query {
 			description: "do not merge executable locations",
 			schema1:     `directive @foo on FIELD | QUERY`,
 			schema2:     `directive @foo on FRAGMENT_DEFINITION | QUERY`,
-			expectErr:   `conflict in locations for directive foo: do not have the same executable locations: these locations are not shared: FIELD`,
+			expectErr:   `@foo (directive): conflict in locations: do not have the same executable locations: exclusive to first = [FIELD], exclusive to second = [FRAGMENT_DEFINITION]`,
 		},
 		{
 			description: "merge shared executable locations and mixed type system locations",
@@ -1546,6 +1579,409 @@ type Query {
 			formatter.NewFormatter(&currentSchemaBuf).FormatSchema(currentSchema)
 			currentSchemaStr := strings.TrimSpace(currentSchemaBuf.String())
 			assert.Equal(t, strings.TrimSpace(tc.expectMergedSchema), currentSchemaStr)
+		})
+	}
+}
+
+func TestMergeSchema_directives(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		description        string
+		schema1, schema2   string
+		expectMergedSchema string
+		expectErr          string
+	}{
+		{
+			description: "identical custom directives on type",
+			schema1: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo on OBJECT
+type Bar @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "custom directives only on first schema type",
+			schema1: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			schema2: `
+type Bar {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo on OBJECT
+type Bar @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "custom directives only on second schema type",
+			schema1: `
+type Bar {
+	baz: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo on OBJECT
+type Bar @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "identical custom directives on both schemas type",
+			schema1: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+
+type Bar @foo {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo on OBJECT
+type Bar @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "repeated custom directives on first schemas type",
+			schema1: `
+directive @foo repeatable on OBJECT
+
+type Bar @foo @foo {
+	baz: String
+}
+`,
+			schema2: `
+type Bar {
+	baz: String
+}
+`,
+			expectMergedSchema: `
+directive @foo repeatable on OBJECT
+type Bar @foo @foo {
+	baz: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "different built-in and custom directives on both schemas field definition",
+			schema1: `
+type Biff {
+	biff: String @deprecated
+}
+`,
+			schema2: `
+directive @foo on FIELD_DEFINITION
+type Biff {
+	biff: String @foo
+}
+`,
+			expectMergedSchema: `
+directive @foo on FIELD_DEFINITION
+type Biff {
+	biff: String @deprecated @foo
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "many repeated and unique custom directives on both schemas type",
+			schema1: `
+directive @foo(bar: Int!) repeatable on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo(bar: 1) @baz @foo(bar: 2) {
+	biff: String
+}
+`,
+			schema2: `
+directive @foo(bar: Int!) repeatable on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo(bar: 1) @baz @foo(bar: 2) {
+	biff: String
+}
+`,
+			expectMergedSchema: `
+directive @baz on OBJECT
+directive @foo(bar: Int!) repeatable on OBJECT
+type Biff @foo(bar: 1) @baz @foo(bar: 2) {
+	biff: String
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "custom directive lists of different length on both schemas type",
+			schema1: `
+directive @foo on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo {
+	biff: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo @baz {
+	biff: String
+}
+`,
+			expectErr: `Biff (OBJECT): directives with potentially significant ordering were not of the same length: @foo != @foo @baz`,
+		},
+		{
+			description: "differently ordered built-in and custom directive lists on different schemas",
+			schema1: `
+directive @foo on FIELD_DEFINITION
+directive @bar on FIELD_DEFINITION
+
+type Biff {
+	biff: String @foo @bar @deprecated
+}
+`,
+			schema2: `
+directive @foo on FIELD_DEFINITION
+directive @bar on FIELD_DEFINITION
+
+type Biff {
+	biff: String @foo @deprecated @bar
+}
+`,
+			expectMergedSchema: `
+directive @bar on FIELD_DEFINITION
+directive @foo on FIELD_DEFINITION
+type Biff {
+	biff: String @deprecated @foo @bar
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "different built-in and custom directive lists on different schemas",
+			schema1: `
+directive @foo on FIELD_DEFINITION
+
+type Biff {
+	biff: String @foo
+}
+`,
+			schema2: `
+type Biff {
+	biff: String @deprecated
+}
+`,
+			expectMergedSchema: `
+directive @foo on FIELD_DEFINITION
+type Biff {
+	biff: String @deprecated @foo
+}
+interface Node {
+	id: ID!
+}
+type Query {
+	node(id: ID!): Node
+}
+`,
+		},
+		{
+			description: "different custom directive lists of equal length on both schemas type",
+			schema1: `
+directive @foo(bar: Int!) repeatable on OBJECT
+
+type Biff @foo(bar: 1) @foo(bar: 2) {
+	biff: String
+}
+`,
+			schema2: `
+directive @foo(bar: Int!) repeatable on OBJECT
+
+type Biff @foo(bar: 2) @foo(bar: 1) {
+	biff: String
+}
+`,
+			expectErr: `Biff (OBJECT): directives with potentially significant ordering at index #0 are not equal: @foo(bar: 1) @foo(bar: 2) != @foo(bar: 2) @foo(bar: 1): argument "bar" values are not equal: encountered different raw values: 1 != 2`,
+		},
+		{
+			description: "differently ordered custom directive lists of equal length on both schemas type",
+			schema1: `
+directive @foo on OBJECT
+directive @baz on OBJECT
+
+type Biff @foo @baz {
+	biff: String
+}
+`,
+			schema2: `
+directive @foo on OBJECT
+directive @baz on OBJECT
+
+type Biff @baz @foo {
+	biff: String
+}
+`,
+			expectErr: `Biff (OBJECT): directives with potentially significant ordering at index #0 are not equal: @foo @baz != @baz @foo: directives do not have the same name`,
+		},
+		{
+			description: "non-repeatable directive used twice with different arguments",
+			schema1: `
+scalar Biff @specifiedBy(url: "foo")
+`,
+			schema2: `
+scalar Biff @specifiedBy(url: "bar")
+`,
+			expectErr: `Biff (SCALAR): conflict in scalar value directives: cannot merge unordered directives in '@specifiedBy(url: "foo")' and '@specifiedBy(url: "bar")': found unique, non-repeatable directive: @specifiedBy(url: "bar")`,
+		},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+			currentSchema, err := graphql.LoadSchema(tc.schema1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			currentSchema, err = testMergeSchemas(t, currentSchema, tc.schema2)
+			if tc.expectErr != "" {
+				assert.EqualError(t, err, tc.expectErr)
+				return
+			}
+			require.NoError(t, err)
+
+			var currentSchemaBuf bytes.Buffer
+			formatter.NewFormatter(&currentSchemaBuf).FormatSchema(currentSchema)
+			currentSchemaStr := strings.TrimSpace(currentSchemaBuf.String())
+			assert.Equal(t, strings.TrimSpace(tc.expectMergedSchema), currentSchemaStr)
+		})
+	}
+}
+
+func TestDiffSets(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		description                     string
+		left, right                     iter.Seq[int]
+		expectOnlyLeft, expectOnlyRight []int
+		expectAreEqualSets              bool
+	}{
+		{
+			description:        "equal sets",
+			left:               slices.Values([]int{1, 2, 3}),
+			right:              slices.Values([]int{1, 2, 3}),
+			expectAreEqualSets: true,
+		},
+		{
+			description:    "unique in left",
+			left:           slices.Values([]int{1, 2, 3, 4}),
+			right:          slices.Values([]int{1, 2, 3}),
+			expectOnlyLeft: []int{4},
+		},
+		{
+			description:     "unique in right",
+			left:            slices.Values([]int{1, 2, 3}),
+			right:           slices.Values([]int{1, 2, 3, 4}),
+			expectOnlyRight: []int{4},
+		},
+		{
+			description:    "unique in left stable ordering",
+			left:           slices.Values([]int{1, 2, 3, 4}),
+			right:          slices.Values([]int{1, 3}),
+			expectOnlyLeft: []int{2, 4},
+		},
+		{
+			description:     "unique in right stable ordering",
+			left:            slices.Values([]int{1, 3}),
+			right:           slices.Values([]int{1, 2, 3, 4}),
+			expectOnlyRight: []int{2, 4},
+		},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+			onlyLeft, onlyRight, areEqualSets := diffSets(tc.left, tc.right)
+			assert.Equal(t, tc.expectOnlyLeft, onlyLeft)
+			assert.Equal(t, tc.expectOnlyRight, onlyRight)
+			assert.Equal(t, tc.expectAreEqualSets, areEqualSets)
 		})
 	}
 }
