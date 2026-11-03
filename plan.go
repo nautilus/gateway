@@ -39,14 +39,15 @@ type QueryPlan struct {
 }
 
 type newQueryPlanStepPayload struct {
-	Plan           *QueryPlan
-	Location       string
-	SelectionSet   ast.SelectionSet
-	ParentType     string
-	Parent         *QueryPlanStep
-	InsertionPoint []string
-	Fragments      ast.FragmentDefinitionList
-	Wrapper        ast.SelectionSet
+	Plan              *QueryPlan
+	Location          string
+	SelectionSet      ast.SelectionSet
+	ParentType        string
+	Parent            *QueryPlanStep
+	InsertionPoint    []string
+	Fragments         ast.FragmentDefinitionList
+	Wrapper           ast.SelectionSet
+	NodeIDAndTypeName ast.SelectionSet
 }
 
 // QueryPlanner is responsible for taking a string with a graphql query and returns
@@ -240,6 +241,24 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 					// we have a selection set from one of the root operation fields in the same location
 					// so add it to the query we are sending to the service
 					step.SelectionSet = newSelection
+
+				}
+				// Add `Query.node` id and __typename to the remote step query, so they will appear under base node field
+				if payload.NodeIDAndTypeName != nil {
+					step.SelectionSet = append(step.SelectionSet, payload.NodeIDAndTypeName...)
+					// Add any variables used in the `Query.node` id and __typename fields
+					for _, selection := range payload.NodeIDAndTypeName {
+						field, ok := selection.(*ast.Field)
+						if !ok {
+							continue
+						}
+
+						for _, directive := range field.Directives {
+							for _, name := range graphql.ExtractVariables(directive.Arguments) {
+								step.Variables.Add(name)
+							}
+						}
+					}
 				}
 
 				// now that we're done processing the step we need to preconstruct the query that we
@@ -307,14 +326,15 @@ type extractSelectionConfig struct {
 	stepCh chan *newQueryPlanStepPayload
 	stepWg *sync.WaitGroup
 
-	locations      FieldURLMap
-	parentLocation string
-	parentType     string
-	step           *QueryPlanStep
-	plan           *QueryPlan
-	selection      ast.SelectionSet
-	insertionPoint []string
-	wrapper        ast.SelectionSet
+	locations         FieldURLMap
+	parentLocation    string
+	parentType        string
+	step              *QueryPlanStep
+	plan              *QueryPlan
+	selection         ast.SelectionSet
+	insertionPoint    []string
+	wrapper           ast.SelectionSet
+	nodeIDAndTypeName ast.SelectionSet
 }
 
 func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extractSelectionConfig) (ast.SelectionSet, error) {
@@ -373,9 +393,10 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 			Wrapper:        config.wrapper,
 			ParentType:     config.parentType,
 
-			Location:     location,
-			SelectionSet: selectionSet,
-			Fragments:    locationFragments[location],
+			Location:          location,
+			SelectionSet:      selectionSet,
+			Fragments:         locationFragments[location],
+			NodeIDAndTypeName: config.nodeIDAndTypeName,
 		}
 	}
 
@@ -420,6 +441,16 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 
 				ctx.Gateway.logger.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
 				typeName := coreFieldType(selection).Name()
+				var nodeIdentity ast.SelectionSet
+				// Only the gateway's own `Query.node` resolver needs its identity fields (id and
+				// __typename) preserved
+				if config.parentType == typeNameQuery && selection.Name == "node" && config.parentLocation == internalSchemaLocation {
+					// save node identity fields before recursively removed
+					nodeIdentity, err = p.findNodeFields(ctx, config, selection.SelectionSet)
+					if err != nil {
+						return nil, err
+					}
+				}
 				subSelectionTypes := make(map[string]ast.SelectionSet)
 				if ctx.Schema.Types[typeName].Kind == ast.Union {
 					// Union types MUST be object types, and can't have fields of their own:
@@ -453,10 +484,11 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 						parentLocation: config.parentLocation,
 						plan:           config.plan,
 
-						parentType:     typeName,
-						selection:      selectionSet,
-						insertionPoint: insertionPoint,
-						wrapper:        wrapper,
+						parentType:        typeName,
+						selection:         selectionSet,
+						insertionPoint:    insertionPoint,
+						wrapper:           wrapper,
+						nodeIDAndTypeName: nodeIdentity,
 					})
 					if err != nil {
 						return nil, err
@@ -511,8 +543,9 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				insertionPoint: config.insertionPoint,
 				plan:           config.plan,
 
-				parentType: defn.TypeCondition,
-				selection:  defn.SelectionSet,
+				parentType:        defn.TypeCondition,
+				selection:         defn.SelectionSet,
+				nodeIDAndTypeName: config.nodeIDAndTypeName,
 				// Children should now be wrapped by this fragment and nothing else
 				wrapper: ast.SelectionSet{selection},
 			})
@@ -552,9 +585,10 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				plan:           config.plan,
 				insertionPoint: config.insertionPoint,
 
-				parentType: selection.TypeCondition,
-				selection:  selection.SelectionSet,
-				wrapper:    newWrapper,
+				parentType:        selection.TypeCondition,
+				selection:         selection.SelectionSet,
+				wrapper:           newWrapper,
+				nodeIDAndTypeName: config.nodeIDAndTypeName,
 			})
 			if err != nil {
 				return nil, err
@@ -888,6 +922,43 @@ func (p *MinQueriesPlanner) generateScrubFieldsWalk(step *QueryPlanStep, selecti
 	}
 
 	return acc, nil
+}
+
+func (p *MinQueriesPlanner) findNodeFields(ctx *PlanningContext, config *extractSelectionConfig, selection ast.SelectionSet) (ast.SelectionSet, error) {
+	var result ast.SelectionSet
+	for _, selected := range selection {
+		switch selected := selected.(type) {
+		case *ast.Field:
+			if selected.Name == "id" || selected.Name == "__typename" {
+				field := *selected
+				result = append(result, &field)
+			}
+
+		case *ast.InlineFragment:
+			// only applys to `... on Node` inline fragment not the others
+			if selected.TypeCondition == "Node" {
+				fields, err := p.findNodeFields(ctx, config, selected.SelectionSet)
+				if err != nil {
+					return nil, err
+				}
+				if len(fields) > 0 {
+					result = append(result, fields...)
+				}
+			}
+		// check fragment throughly to avoid nested defines on id and __typename
+		case *ast.FragmentSpread:
+			if def := config.plan.FragmentDefinitions.ForName(selected.Name); def != nil {
+				fields, err := p.findNodeFields(ctx, config, def.SelectionSet)
+				if err != nil {
+					return nil, err
+				}
+				if len(fields) > 0 {
+					result = append(result, fields...)
+				}
+			}
+		}
+	}
+	return result, nil
 }
 
 func coreFieldType(source *ast.Field) *ast.Type {

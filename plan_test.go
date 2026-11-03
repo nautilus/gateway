@@ -1077,6 +1077,54 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	locations.RegisterURL("User", "firstName", "url1")
 	locations.RegisterURL("User", "lastName", "url2")
 	locations.RegisterURL(typeNameQuery, "node", "url1", "url2", internalSchemaLocation)
+	// id and __typename can be resolved by both services, and id by the gateway itself
+	for _, url := range []string{"url1", "url2"} {
+		locations.RegisterURL("Node", "__typename", url)
+		locations.RegisterURL("Node", "id", url)
+		locations.RegisterURL("User", "__typename", url)
+		locations.RegisterURL("User", "id", url)
+	}
+	locations.RegisterURL("Node", "id", internalSchemaLocation)
+
+	// helper function to get the query strings of the steps sent to each url
+	remoteQueries := func(plan *QueryPlan) map[string][]string {
+		queries := map[string][]string{}
+		for step := range allSteps(plan.RootStep) {
+			// the root step has no url
+			if queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer); ok && queryer.URL() != "" {
+				queries[queryer.URL()] = append(queries[queryer.URL()], strings.TrimSpace(step.QueryString))
+			}
+		}
+		return queries
+	}
+
+	// expected query strings
+	const expectedQueryStringURL1 = `
+query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			__typename
+			... on User {
+				firstName
+			}
+			__typename
+			id
+		}
+	}
+}`
+
+	const expectedQueryStringURL2 = `
+query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on User {
+				lastName
+			}
+			__typename
+			id
+		}
+	}
+}`
 
 	// load the query we're going to query
 	schema, err := graphql.LoadSchema(`
@@ -1194,6 +1242,36 @@ func TestPlanQuery_nodeField(t *testing.T) {
 			return
 		}
 		assert.Equal(t, "lastName", graphql.SelectedFields(inlineFragment.SelectionSet)[0].Name)
+	})
+
+	//check for query strings match
+	t.Run("node id and __typename", func(t *testing.T) {
+		t.Parallel()
+		plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+			Query: `
+				query($id: ID!) {
+					node(id: $id) {
+						__typename
+						id
+						... on User {
+							firstName
+							lastName
+						}
+					}
+				}
+			`,
+			Schema:    schema,
+			Locations: locations,
+			Gateway:   &Gateway{logger: &DefaultLogger{}},
+		})
+		require.NoError(t, err)
+		require.Len(t, plans, 1)
+
+		// every remote step must ask for the identity fields
+		queries := remoteQueries(plans[0])
+		require.Len(t, queries, 2)
+		assert.ElementsMatch(t, []string{strings.TrimSpace(expectedQueryStringURL1)}, queries["url1"])
+		assert.ElementsMatch(t, []string{strings.TrimSpace(expectedQueryStringURL2)}, queries["url2"])
 	})
 }
 
