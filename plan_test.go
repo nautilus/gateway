@@ -1077,54 +1077,6 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	locations.RegisterURL("User", "firstName", "url1")
 	locations.RegisterURL("User", "lastName", "url2")
 	locations.RegisterURL(typeNameQuery, "node", "url1", "url2", internalSchemaLocation)
-	// id and __typename can be resolved by both services, and id by the gateway itself
-	for _, url := range []string{"url1", "url2"} {
-		locations.RegisterURL("Node", "__typename", url)
-		locations.RegisterURL("Node", "id", url)
-		locations.RegisterURL("User", "__typename", url)
-		locations.RegisterURL("User", "id", url)
-	}
-	locations.RegisterURL("Node", "id", internalSchemaLocation)
-
-	// helper function to get the query strings of the steps sent to each url
-	remoteQueries := func(plan *QueryPlan) map[string][]string {
-		queries := map[string][]string{}
-		for step := range allSteps(plan.RootStep) {
-			// the root step has no url
-			if queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer); ok && queryer.URL() != "" {
-				queries[queryer.URL()] = append(queries[queryer.URL()], strings.TrimSpace(step.QueryString))
-			}
-		}
-		return queries
-	}
-
-	// expected query strings
-	const expectedQueryStringURL1 = `
-query ($id: ID!) {
-	node(id: $id) {
-		... on Node {
-			__typename
-			... on User {
-				firstName
-			}
-			__typename
-			id
-		}
-	}
-}`
-
-	const expectedQueryStringURL2 = `
-query ($id: ID!) {
-	node(id: $id) {
-		... on Node {
-			... on User {
-				lastName
-			}
-			__typename
-			id
-		}
-	}
-}`
 
 	// load the query we're going to query
 	schema, err := graphql.LoadSchema(`
@@ -1242,36 +1194,6 @@ query ($id: ID!) {
 			return
 		}
 		assert.Equal(t, "lastName", graphql.SelectedFields(inlineFragment.SelectionSet)[0].Name)
-	})
-
-	//check for query strings match
-	t.Run("node id and __typename", func(t *testing.T) {
-		t.Parallel()
-		plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
-			Query: `
-				query($id: ID!) {
-					node(id: $id) {
-						__typename
-						id
-						... on User {
-							firstName
-							lastName
-						}
-					}
-				}
-			`,
-			Schema:    schema,
-			Locations: locations,
-			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
-		require.NoError(t, err)
-		require.Len(t, plans, 1)
-
-		// every remote step must ask for the identity fields
-		queries := remoteQueries(plans[0])
-		require.Len(t, queries, 2)
-		assert.ElementsMatch(t, []string{strings.TrimSpace(expectedQueryStringURL1)}, queries["url1"])
-		assert.ElementsMatch(t, []string{strings.TrimSpace(expectedQueryStringURL2)}, queries["url2"])
 	})
 }
 
@@ -2022,4 +1944,171 @@ func allStepsRecursive(step *QueryPlanStep, yield func(*QueryPlanStep) bool) boo
 		}
 	}
 	return true
+}
+
+func TestPlanQuery_completeNodeFields(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name             string
+		variables        string
+		selection        string
+		fragments        string
+		expectedIdentity string
+	}{
+		{
+			name:             "id and typename",
+			selection:        "id __typename",
+			expectedIdentity: "id __typename",
+		},
+		{
+			name:             "id only",
+			selection:        "id",
+			expectedIdentity: "id",
+		},
+		{
+			name:             "typename only",
+			selection:        "__typename",
+			expectedIdentity: "__typename",
+		},
+		{
+			name:             "typename with variable",
+			variables:        ", $showType: Boolean!",
+			selection:        "__typename @include(if: $showType)",
+			expectedIdentity: "__typename @include(if: $showType)",
+		},
+		{
+			name:             "aliases",
+			selection:        "key: id kind: __typename",
+			expectedIdentity: "key: id kind: __typename",
+		},
+		{
+			name:             "inline Node fragment",
+			selection:        "... on Node { id __typename }",
+			expectedIdentity: "id __typename",
+		},
+		{
+			name:             "named Node fragment",
+			selection:        "...Identity",
+			fragments:        "fragment Identity on Node { id __typename }",
+			expectedIdentity: "id __typename",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			query := fmt.Sprintf(`
+				query($id: ID!%s) {
+					node(id: $id) {
+						%s
+						... on Foo {
+							bar {
+								name
+							}
+							baz {
+								name
+							}
+						}
+					}
+				}
+				%s`, tc.variables, tc.selection, tc.fragments)
+			schema, err := graphql.LoadSchema(`
+				type Query {
+					node(id: ID!): Node
+				}
+
+				interface Node {
+					id: ID!
+				}
+
+				type Foo implements Node {
+					id: ID!
+					bar: Bar
+					baz: Baz
+				}
+
+				type Bar implements Node {
+					id: ID!
+					name: String!
+				}
+
+				type Baz implements Node {
+					id: ID!
+					name: String!
+				}
+			`)
+			require.NoError(t, err)
+
+			const (
+				location0 = "url0"
+				location1 = "url1"
+			)
+			// the location map for fields for this query
+			locations := FieldURLMap{}
+			// local resolver
+			locations.RegisterURL(typeNameQuery, "node", internalSchemaLocation)
+			locations.RegisterURL("Node", "id", internalSchemaLocation)
+			locations.RegisterURL("Node", "__typename", internalSchemaLocation)
+			// location0 Bar resolver
+			locations.RegisterURL("Foo", "bar", location0)
+			locations.RegisterURL("Bar", "id", location0)
+			locations.RegisterURL("Bar", "__typename", location0)
+			locations.RegisterURL("Bar", "name", location0)
+			// location1 Baz resolver
+			locations.RegisterURL("Baz", "id", location1)
+			locations.RegisterURL("Baz", "__typename", location1)
+			locations.RegisterURL("Foo", "baz", location1)
+			locations.RegisterURL("Baz", "name", location1)
+			// Both foo resolver
+			for _, url := range []string{location0, location1} {
+				locations.RegisterURL("Foo", "id", url)
+				locations.RegisterURL("Foo", "__typename", url)
+			}
+
+			// plan the query
+			planningContext := &PlanningContext{
+				Query:     query,
+				Schema:    schema,
+				Locations: locations,
+				Gateway:   &Gateway{logger: &DefaultLogger{}},
+			}
+			plans, err := (&MinQueriesPlanner{}).Plan(planningContext)
+			require.NoError(t, err)
+			require.Len(t, plans, 1)
+
+			rootSteps := plans[0].RootStep.Then
+			require.Len(t, rootSteps, 1, "should have exactly one root step")
+			rootStep := rootSteps[0]
+			require.Same(t, planningContext.Gateway, rootStep.Queryer)
+			assert.Equal(t, "Query", rootStep.ParentType)
+			
+			// Foo has sub-fields on two different locations
+			require.Len(t, rootStep.Then, 2)
+
+			// loop through all the remote steps and check for query match
+			expectedFields := map[string]string{location0: "bar { name }", location1: "baz { name }"}
+			for _, step := range rootStep.Then {
+				url := step.Queryer.(*graphql.SingleRequestQueryer).URL()
+				t.Logf("Found step on %q: %s", url, step.QueryString)
+				require.Contains(t, expectedFields, url)
+				assert.Equal(t, "Node", step.ParentType)
+				assert.Empty(t, step.Then)
+
+				expectedVariables := "$id: ID!"
+				if tc.variables != "" {
+					expectedVariables = "$showType: Boolean!, $id: ID!"
+					assert.Contains(t, step.Variables, "showType")
+				}
+				expectedQuery := fmt.Sprintf(`
+     query (%s) {
+      node(id: $id) {
+       ... on Node {
+        ... on Foo { %s }
+        %s
+       }
+      }
+     }`, expectedVariables, expectedFields[url], tc.expectedIdentity)
+				assert.Equal(t, strings.Fields(expectedQuery), strings.Fields(step.QueryString), step.QueryString)
+			}
+		})
+	}
 }

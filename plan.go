@@ -608,7 +608,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 func (p *MinQueriesPlanner) wrapSelectionSet(ctx *PlanningContext, config *extractSelectionConfig, locationFragments map[string]ast.FragmentDefinitionList, location string, selectionSet ast.SelectionSet) (ast.SelectionSet, error) {
 	ctx.Gateway.logger.Debug("wrapping selection", config.wrapper)
 
-	// pointers required to nest the
+	// pointers required to nest the fragment wrappers
 	var selection ast.Selection
 	var innerSelection ast.Selection
 
