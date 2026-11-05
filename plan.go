@@ -243,10 +243,10 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 					step.SelectionSet = newSelection
 
 				}
-				// Add `Query.node` id and __typename to the remote step query, so they will appear under base node field
+				// if the id or __typename fields are requested under query.node, we need to make sure they are included in the query sent to the remote service
 				if payload.NodeIDAndTypeName != nil {
 					step.SelectionSet = append(step.SelectionSet, payload.NodeIDAndTypeName...)
-					// Add any variables used in the `Query.node` id and __typename fields
+					// also copy variables that are used in the `Query.node` id and __typename fields
 					for _, selection := range payload.NodeIDAndTypeName {
 						field, ok := selection.(*ast.Field)
 						if !ok {
@@ -442,14 +442,11 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				ctx.Gateway.logger.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
 				typeName := coreFieldType(selection).Name()
 				var nodeIdentity ast.SelectionSet
-				// Only the gateway's own `Query.node` resolver needs its identity fields (id and
+				// Only the gateway's own `Query.node` needs its identity fields (id and
 				// __typename) preserved
 				if config.parentType == typeNameQuery && selection.Name == "node" && config.parentLocation == internalSchemaLocation {
-					// save node identity fields before recursively removed
-					nodeIdentity, err = p.findNodeFields(ctx, config, selection.SelectionSet)
-					if err != nil {
-						return nil, err
-					}
+					// save node identity fields before getting recursively removed
+					nodeIdentity = p.findNodeFields(ctx, config, selection.SelectionSet)
 				}
 				subSelectionTypes := make(map[string]ast.SelectionSet)
 				if ctx.Schema.Types[typeName].Kind == ast.Union {
@@ -924,41 +921,36 @@ func (p *MinQueriesPlanner) generateScrubFieldsWalk(step *QueryPlanStep, selecti
 	return acc, nil
 }
 
-func (p *MinQueriesPlanner) findNodeFields(ctx *PlanningContext, config *extractSelectionConfig, selection ast.SelectionSet) (ast.SelectionSet, error) {
+func (p *MinQueriesPlanner) findNodeFields(ctx *PlanningContext, config *extractSelectionConfig, selection ast.SelectionSet) ast.SelectionSet {
+	// a selectionSet to store the found id and __typename fields
 	var result ast.SelectionSet
 	for _, selected := range selection {
 		switch selected := selected.(type) {
+		// Add each matching field to the result
 		case *ast.Field:
 			if selected.Name == "id" || selected.Name == "__typename" {
 				field := *selected
 				result = append(result, &field)
 			}
-
+		// find id and __typename fields that are nested under `... on Node` inline fragment
 		case *ast.InlineFragment:
-			// only applys to `... on Node` inline fragment not the others
 			if selected.TypeCondition == "Node" {
-				fields, err := p.findNodeFields(ctx, config, selected.SelectionSet)
-				if err != nil {
-					return nil, err
-				}
+				fields := p.findNodeFields(ctx, config, selected.SelectionSet)
 				if len(fields) > 0 {
 					result = append(result, fields...)
 				}
 			}
-		// check fragment throughly to avoid nested defines on id and __typename
+		// check fragment defines recursively to avoid nested id and __typename fields
 		case *ast.FragmentSpread:
 			if def := config.plan.FragmentDefinitions.ForName(selected.Name); def != nil {
-				fields, err := p.findNodeFields(ctx, config, def.SelectionSet)
-				if err != nil {
-					return nil, err
-				}
+				fields := p.findNodeFields(ctx, config, def.SelectionSet)
 				if len(fields) > 0 {
 					result = append(result, fields...)
 				}
 			}
 		}
 	}
-	return result, nil
+	return result
 }
 
 func coreFieldType(source *ast.Field) *ast.Type {
