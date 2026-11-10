@@ -254,7 +254,8 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 			Schema:    schema,
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
+		},
+	)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -342,7 +343,8 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 			Schema:    schema,
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
+		},
+	)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -437,7 +439,8 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 			Schema:    schema,
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
+		},
+	)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -1408,7 +1411,8 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	assert.Len(t, secondStep.Then, 0)
 
 	// there should be one selection on the step
-	if !assert.Len(t, secondStep.SelectionSet, 1,
+	if !assert.Len(
+		t, secondStep.SelectionSet, 1,
 		"Second step had the wrong number of selections %v", graphql.FormatSelectionSet(secondStep.SelectionSet),
 	) {
 		return

@@ -640,7 +640,8 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 			// if the step does not have a definition for this fragment
 			if addDefn {
 				// we're going to leave a different fragment definition behind for this step
-				config.step.FragmentDefinitions = append(config.step.FragmentDefinitions,
+				config.step.FragmentDefinitions = append(
+					config.step.FragmentDefinitions,
 					&ast.FragmentDefinition{
 						Name:          selection.Name,
 						TypeCondition: defn.TypeCondition,
