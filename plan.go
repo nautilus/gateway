@@ -319,9 +319,9 @@ type extractSelectionConfig struct {
 	wrapper        ast.SelectionSet
 }
 
-// extractUnionSelections extracts selection sets from inside a Union such that only member types or __typename are selected.
+// flattenSameUnionSelections flattens selection sets from inside a Union such that only member types or __typename are selected.
 // This removes same-Union-type selections by flattening the same-Union typed fragments so the planner can split requests for services that may not contain the Union type.
-// It isn't quite recursive, just enough depth to flatten the same-Union selection sets.
+// It isn't quite recursive, just enough depth to merge the same-Union selection sets.
 //
 // For example querying this schema:
 //
@@ -395,7 +395,7 @@ type extractSelectionConfig struct {
 //
 // __typename is the one field the spec allows directly on a union selection set (and clients like Apollo add
 // it automatically). It is keyed by the union itself, since every service that defines the union can answer it.
-func (p *MinQueriesPlanner) extractUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet) (typedSelectionSets map[string]ast.SelectionSet) {
+func (p *MinQueriesPlanner) flattenSameUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet) (typedSelectionSets map[string]ast.SelectionSet) {
 	typedSelectionSets = make(map[string]ast.SelectionSet)
 	for _, selection := range selectionSet {
 		switch selection := selection.(type) {
@@ -406,7 +406,7 @@ func (p *MinQueriesPlanner) extractUnionSelections(config *extractSelectionConfi
 				selection.TypeCondition: selection.SelectionSet,
 			}
 			if selection.TypeCondition == "" || selection.TypeCondition == unionName {
-				sameUnionSelections = p.extractUnionSelections(config, unionName, selection.SelectionSet)
+				sameUnionSelections = p.flattenSameUnionSelections(config, unionName, selection.SelectionSet)
 			}
 			mergeTypedSelectionSets(typedSelectionSets, sameUnionSelections)
 		case *ast.FragmentSpread:
@@ -418,7 +418,7 @@ func (p *MinQueriesPlanner) extractUnionSelections(config *extractSelectionConfi
 				fragment.TypeCondition: fragment.SelectionSet,
 			}
 			if fragment.TypeCondition == unionName {
-				sameUnionSelections = p.extractUnionSelections(config, unionName, fragment.SelectionSet)
+				sameUnionSelections = p.flattenSameUnionSelections(config, unionName, fragment.SelectionSet)
 			}
 			mergeTypedSelectionSets(typedSelectionSets, sameUnionSelections)
 		default:
@@ -549,7 +549,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					// For these cases, union selections MUST collapse into selected fragments on the union's named types,
 					// so that each member type's fields are planned against the member type (not the union).
 					// The planned fields are wrapped back into an inline fragment on the member type below.
-					subSelectionTypes = p.extractUnionSelections(config, fieldTypeName, selection.SelectionSet)
+					subSelectionTypes = p.flattenSameUnionSelections(config, fieldTypeName, selection.SelectionSet)
 				} else {
 					subSelectionTypes = map[string]ast.SelectionSet{fieldTypeName: selection.SelectionSet}
 				}
