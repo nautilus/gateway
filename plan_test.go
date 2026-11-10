@@ -1270,18 +1270,101 @@ func TestPlanQuery_stepVariables(t *testing.T) {
 		t.Error("Could not find query document")
 		return
 	}
-	// we need to have a query with id and category since id is passed to node
-	if len(nextStep.QueryDocument.Operations[0].VariableDefinitions) != 2 {
-		t.Errorf("Did not find the right number of variable definitions in the next step. Expected 2 found %v", len(nextStep.QueryDocument.Operations[0].VariableDefinitions))
-		return
-	}
-
+	// we need to have a query with id, category, and the gateway's own node id
+	// variable. The client's $id must keep its own definition rather than
+	// being reused for node(id:), or the executor would clobber its value
+	declared := Set{}
 	for _, definition := range nextStep.QueryDocument.Operations[0].VariableDefinitions {
-		if definition.Variable != "id" && definition.Variable != "category" {
-			t.Errorf("Encountered a variable with an unknown name: %v", definition.Variable)
-			return
-		}
+		declared[definition.Variable] = true
 	}
+	assert.Equal(t, Set{"id": true, "category": true, nodeIDVariable: true}, declared)
+}
+
+// TestPlanQuery_clientIDVariableSurvivesNodeStep pins the fix for the
+// collision between the client's variables and the one the gateway uses to
+// carry a dependent step's node id (see [nodeIDVariable])
+func TestPlanQuery_clientIDVariableSurvivesNodeStep(t *testing.T) {
+	t.Parallel()
+
+	locations := FieldURLMap{}
+	locations.RegisterURL(typeNameQuery, "user", "url1")
+	locations.RegisterURL("User", "favoriteCatPhoto", "url2")
+	locations.RegisterURL("CatPhoto", "URL", "url2")
+
+	schema, err := graphql.LoadSchema(`
+		type User {
+			favoriteCatPhoto(category: String!, owner: ID!): CatPhoto!
+		}
+
+		type CatPhoto {
+			URL: String!
+		}
+
+		type Query {
+			user(id: ID!): User
+		}
+	`)
+	require.NoError(t, err)
+
+	plans, err := (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query($id: ID!, $category: String!) {
+				user(id: $id) {
+					favoriteCatPhoto(category: $category, owner: $id) {
+						URL
+					}
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
+	})
+	require.NoError(t, err)
+
+	nextStep := plans[0].RootStep.Then[0].Then[0]
+
+	assert.Contains(t, nextStep.QueryString, "node(id: $"+nodeIDVariable+")")
+	assert.Contains(t, nextStep.QueryString, "owner: $id")
+
+	declared := Set{}
+	for _, definition := range nextStep.QueryDocument.Operations[0].VariableDefinitions {
+		declared[definition.Variable] = true
+	}
+	assert.Equal(t, Set{"id": true, "category": true, nodeIDVariable: true}, declared)
+}
+
+func TestPlanQuery_rejectsReservedNodeIDVariable(t *testing.T) {
+	t.Parallel()
+
+	locations := FieldURLMap{}
+	locations.RegisterURL(typeNameQuery, "user", "url1")
+
+	schema, err := graphql.LoadSchema(`
+		type User {
+			firstName: String!
+		}
+
+		type Query {
+			user(id: ID!): User
+		}
+	`)
+	require.NoError(t, err)
+
+	_, err = (&MinQueriesPlanner{}).Plan(&PlanningContext{
+		Query: `
+			query($` + nodeIDVariable + `: ID!) {
+				user(id: $` + nodeIDVariable + `) {
+					firstName
+				}
+			}
+		`,
+		Schema:    schema,
+		Locations: locations,
+		Gateway:   &Gateway{logger: &DefaultLogger{}},
+	})
+	require.Error(t, err, "expected planning to reject the reserved variable name")
+	assert.Contains(t, err.Error(), "reserved")
 }
 
 func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
@@ -1579,7 +1662,7 @@ func TestPlannerBuildQuery_node(t *testing.T) {
 		t.Error("Did not pass id to the node field")
 		return
 	}
-	if argument.Value.Raw != "id" {
+	if argument.Value.Raw != nodeIDVariable {
 		t.Error("Did not pass the right id value to the node field")
 		return
 	}
@@ -1914,8 +1997,8 @@ func TestPlanQuery_unionShouldNotBeQueriedOnOtherServices(t *testing.T) {
 		case location0:
 			assert.NotContains(t, step.QueryString, "Foo", "Location 0 must not be called with 'Foo' union type")
 			assert.Equal(t, strings.TrimSpace(`
-query ($id: ID!) {
-	node(id: $id) {
+query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
 		... on Bar {
 			bar
 		}

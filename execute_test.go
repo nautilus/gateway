@@ -324,7 +324,7 @@ func TestExecutor_insertIntoFragmentSpread(t *testing.T) {
 								},
 								Queryer: graphql.QueryerFunc(
 									func(input *graphql.QueryInput) (interface{}, error) {
-										assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+										assert.Equal(t, map[string]interface{}{nodeIDVariable: "1"}, input.Variables)
 										// make sure that we got the right variable inputs
 										return map[string]interface{}{
 											"node": map[string]interface{}{
@@ -459,10 +459,10 @@ func TestExecutor_insertIntoListFragmentSpreads(t *testing.T) {
 								},
 								Queryer: graphql.QueryerFunc(
 									func(input *graphql.QueryInput) (interface{}, error) {
-										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables[nodeIDVariable])
 										return map[string]interface{}{
 											"node": map[string]interface{}{
-												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+												"address": fmt.Sprintf("address-%s", input.Variables[nodeIDVariable]),
 											},
 										}, nil
 									},
@@ -603,10 +603,10 @@ func TestExecutor_insertIntoAliasedListFragmentSpreads(t *testing.T) {
 								},
 								Queryer: graphql.QueryerFunc(
 									func(input *graphql.QueryInput) (interface{}, error) {
-										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables[nodeIDVariable])
 										return map[string]interface{}{
 											"node": map[string]interface{}{
-												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+												"address": fmt.Sprintf("address-%s", input.Variables[nodeIDVariable]),
 											},
 										}, nil
 									},
@@ -744,10 +744,10 @@ func TestExecutor_insertIntoFragmentSpreadLists(t *testing.T) {
 								},
 								Queryer: graphql.QueryerFunc(
 									func(input *graphql.QueryInput) (interface{}, error) {
-										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables[nodeIDVariable])
 										return map[string]interface{}{
 											"node": map[string]interface{}{
-												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+												"address": fmt.Sprintf("address-%s", input.Variables[nodeIDVariable]),
 											},
 										}, nil
 									},
@@ -876,7 +876,7 @@ func TestExecutor_insertIntoInlineFragment(t *testing.T) {
 								},
 								Queryer: graphql.QueryerFunc(
 									func(input *graphql.QueryInput) (interface{}, error) {
-										assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+										assert.Equal(t, map[string]interface{}{nodeIDVariable: "1"}, input.Variables)
 										// make sure that we got the right variable inputs
 										return map[string]interface{}{
 											"node": map[string]interface{}{
@@ -991,10 +991,10 @@ func TestExecutor_insertIntoListInlineFragments(t *testing.T) {
 								},
 								Queryer: graphql.QueryerFunc(
 									func(input *graphql.QueryInput) (interface{}, error) {
-										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables[nodeIDVariable])
 										return map[string]interface{}{
 											"node": map[string]interface{}{
-												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+												"address": fmt.Sprintf("address-%s", input.Variables[nodeIDVariable]),
 											},
 										}, nil
 									},
@@ -1112,10 +1112,10 @@ func TestExecutor_insertIntoInlineFragmentsList(t *testing.T) {
 								},
 								Queryer: graphql.QueryerFunc(
 									func(input *graphql.QueryInput) (interface{}, error) {
-										assert.Contains(t, []interface{}{"1", "2"}, input.Variables["id"])
+										assert.Contains(t, []interface{}{"1", "2"}, input.Variables[nodeIDVariable])
 										return map[string]interface{}{
 											"node": map[string]interface{}{
-												"address": fmt.Sprintf("address-%s", input.Variables["id"]),
+												"address": fmt.Sprintf("address-%s", input.Variables[nodeIDVariable]),
 											},
 										}, nil
 									},
@@ -1306,7 +1306,7 @@ func TestExecutor_insertIntoLists(t *testing.T) {
 										Queryer: graphql.QueryerFunc(
 											func(input *graphql.QueryInput) (interface{}, error) {
 												// make sure that we got the right variable inputs
-												assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+												assert.Equal(t, map[string]interface{}{nodeIDVariable: "1"}, input.Variables)
 
 												// return the payload
 												return map[string]interface{}{
@@ -1568,7 +1568,7 @@ func TestExecutor_insertIntoAliasedLists(t *testing.T) {
 										Queryer: graphql.QueryerFunc(
 											func(input *graphql.QueryInput) (interface{}, error) {
 												// make sure that we got the right variable inputs
-												assert.Equal(t, map[string]interface{}{"id": "1"}, input.Variables)
+												assert.Equal(t, map[string]interface{}{nodeIDVariable: "1"}, input.Variables)
 
 												// return the payload
 												return map[string]interface{}{

@@ -1012,8 +1012,8 @@ type Foo implements Node {
 				switch url {
 				case fooURL:
 					assert.Equal(t, strings.TrimSpace(`
-query ($id: ID!) {
-	node(id: $id) {
+query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
 		... on Node {
 			... on Foo {
 				id
@@ -1025,8 +1025,8 @@ query ($id: ID!) {
 					return map[string]any{"node": nil}, nil
 				case barURL:
 					assert.Equal(t, strings.TrimSpace(`
-query ($id: ID!) {
-	node(id: $id) {
+query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
 		... on Node {
 			... on Foo {
 				bar
@@ -1138,7 +1138,7 @@ func TestSingleObjectOnlyRequestingNonIDFieldScrubsIDs(t *testing.T) {
 	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
 		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
 			assert.Equal(t, map[string]any{
-				"id": "foo",
+				nodeIDVariable: "foo",
 			}, input.Variables)
 			return map[string]any{
 				"node": map[string]any{

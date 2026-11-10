@@ -134,6 +134,10 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 	plans := QueryPlanList{}
 
 	for _, operation := range query.Operations {
+		if operation.VariableDefinitions.ForName(nodeIDVariable) != nil {
+			return nil, fmt.Errorf("variable name %q is reserved for internal use by the gateway", nodeIDVariable)
+		}
+
 		// each operation results in a new query
 		plan := &QueryPlan{
 			Operation:           operation,
@@ -1050,6 +1054,62 @@ func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 	return graphql.NewSingleRequestQueryer(url)
 }
 
+// nodeIDVariable is necessary to avoid accidentally overwriting the wrong 'id'
+// variable in query planning and execution.
+// Lets take the query below as an example, where favoriteCatPhoto is owned by
+// a second service:
+//
+//	query ($id: ID!, $category: String!) {
+//	  allUsers {
+//	    favoriteCatPhoto(category: $category, owner: $id) { URL }
+//	  }
+//	}
+//
+// The first service needs to run first, so we know the IDs of the users. These
+// are then passed along to the second service. In the query planner, this is
+// known as a dependent step.
+// Before this constant existed, that second query came out like this:
+//
+//	query ($category: String!, $id: ID!) {
+//	    node(id: $id) {
+//	        ... on User {
+//	            favoriteCatPhoto(category: $category, owner: $id) { URL }
+//	        }
+//	    }
+//	}
+//
+// The second query declares the variables its own fields reference, reusing
+// the client's declarations, so $category and $id, both needed by
+// favoriteCatPhoto.
+//
+// That second query gets executed N times, where N=number of users from first
+// query. And each query needs the ID of that user, again coming from the first
+// query:
+//   - 2nd query run #1: $id=u1
+//   - 2nd query run #2: $id=u2
+//   - 2nd query run #3: $id=u3
+//
+// And herein lies the problem: the client's $id was a single fixed value, the
+// one owner they wanted photos from. But each run of the second query
+// overwrites it with the ID of the user currently being resolved, so owner
+// silently becomes u1, then u2, then u3. Instead of one owner's photos, the
+// client gets each user's own.
+//
+// The fix is therefore simple: use a name no client would reasonably pick, and
+// reject the queries that do anyway. The second query now comes out as:
+//
+//	query ($category: String!, $id: ID!, $_gateway_node_id: ID!) {
+//	    node(id: $_gateway_node_id) {
+//	        ... on User {
+//	            favoriteCatPhoto(category: $category, owner: $id) { URL }
+//	        }
+//	    }
+//	}
+//
+// See plannerBuildQuery (declaration), generatePlans (rejection) and
+// executeOneStep (value injection) for the three coupled sites.
+const nodeIDVariable = "_gateway_node_id"
+
 func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList) *ast.QueryDocument {
 	ctx.Gateway.logger.Debug("Building Query: \n"+"\tParentType: ", parentType, " ")
 	// build up an operation for the query
@@ -1077,7 +1137,7 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 
 		// we want the operation to have the equivalent of
 		// {
-		//	 	node(id: $id) {
+		//	 	node(id: $_gateway_node_id) {
 		//	 		... on parentType {
 		//	 			selection
 		//	 		}
@@ -1091,7 +1151,7 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 						Name: "id",
 						Value: &ast.Value{
 							Kind: ast.Variable,
-							Raw:  "id",
+							Raw:  nodeIDVariable,
 						},
 					},
 				},
@@ -1104,13 +1164,10 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 			},
 		}
 
-		// if the original query didn't have an id arg we need to add one
-		if variables.ForName("id") == nil {
-			operation.VariableDefinitions = append(operation.VariableDefinitions, &ast.VariableDefinition{
-				Variable: "id",
-				Type:     ast.NonNullNamedType("ID", &ast.Position{}),
-			})
-		}
+		operation.VariableDefinitions = append(operation.VariableDefinitions, &ast.VariableDefinition{
+			Variable: nodeIDVariable,
+			Type:     ast.NonNullNamedType("ID", &ast.Position{}),
+		})
 	}
 
 	// add the operation to a QueryDocument
