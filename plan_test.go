@@ -3,7 +3,6 @@ package gateway
 import (
 	"fmt"
 	"iter"
-	"sort"
 	"strings"
 	"testing"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
-	"github.com/vektah/gqlparser/v2/parser"
 )
 
 func TestPlanQuery_singleRootField(t *testing.T) {
@@ -255,7 +253,8 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 			Schema:    schema,
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
+		},
+	)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -343,7 +342,8 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 			Schema:    schema,
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
+		},
+	)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -438,7 +438,8 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 			Schema:    schema,
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
+		},
+	)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -1409,7 +1410,8 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	assert.Len(t, secondStep.Then, 0)
 
 	// there should be one selection on the step
-	if !assert.Len(t, secondStep.SelectionSet, 1,
+	if !assert.Len(
+		t, secondStep.SelectionSet, 1,
 		"Second step had the wrong number of selections %v", graphql.FormatSelectionSet(secondStep.SelectionSet),
 	) {
 		return
@@ -1986,20 +1988,19 @@ func TestPlanQuery_unionSingleLocationKeepsTypeConditions(t *testing.T) {
 	require.NoError(t, err)
 
 	assertPlannedQueries(t, map[string][]string{
-		location: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						__typename
-						bar
-					}
-					... on Baz {
-						baz
-					}
-				}
-			}
-		`},
+		location: {`query {
+	foo {
+		... on Bar {
+			__typename
+			bar
+		}
+		... on Baz {
+			baz
+		}
+		__typename
+	}
+}
+`},
 	}, plans)
 }
 
@@ -2084,31 +2085,29 @@ func TestPlanQuery_unionAllowsTypenameField(t *testing.T) {
 
 	assertPlannedQueries(t, map[string][]string{
 		// the union itself, its __typename, and the ids for the node lookup come from the service owning foo
-		location1: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						__typename
-						id
-					}
-					... on Baz {
-						__typename
-						id
-					}
-				}
-			}
-		`},
+		location1: {`query {
+	foo {
+		... on Bar {
+			__typename
+			id
+		}
+		... on Baz {
+			__typename
+			id
+		}
+		__typename
+	}
+}
+`},
 		// Bar.bar is only available on location0, which does not know the union Foo
-		location0: {`
-			query ($id: ID!) {
-				node(id: $id) {
-					... on Bar {
-						bar
-					}
-				}
-			}
-		`},
+		location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Bar {
+			bar
+		}
+	}
+}
+`},
 	}, plans)
 }
 
@@ -2138,25 +2137,23 @@ func TestPlanQuery_unionAllowsFragmentSpread(t *testing.T) {
 	require.NoError(t, err)
 
 	assertPlannedQueries(t, map[string][]string{
-		location1: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						id
-					}
-				}
-			}
-		`},
-		location0: {`
-			query ($id: ID!) {
-				node(id: $id) {
-					... on Bar {
-						bar
-					}
-				}
-			}
-		`},
+		location1: {`query {
+	foo {
+		... on Bar {
+			id
+		}
+		__typename
+	}
+}
+`},
+		location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Bar {
+			bar
+		}
+	}
+}
+`},
 	}, plans)
 }
 
@@ -2190,25 +2187,23 @@ func TestPlanQuery_unionAllowsFragmentSpreadOnUnionType(t *testing.T) {
 	require.NoError(t, err)
 
 	assertPlannedQueries(t, map[string][]string{
-		location1: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						id
-					}
-				}
-			}
-		`},
-		location0: {`
-			query ($id: ID!) {
-				node(id: $id) {
-					... on Bar {
-						bar
-					}
-				}
-			}
-		`},
+		location1: {`query {
+	foo {
+		... on Bar {
+			id
+		}
+		__typename
+	}
+}
+`},
+		location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Bar {
+			bar
+		}
+	}
+}
+`},
 	}, plans)
 }
 
@@ -2240,25 +2235,23 @@ func TestPlanQuery_unionAllowsInlineFragmentWithoutTypeCondition(t *testing.T) {
 	require.NoError(t, err)
 
 	assertPlannedQueries(t, map[string][]string{
-		location1: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						id
-					}
-				}
-			}
-		`},
-		location0: {`
-			query ($id: ID!) {
-				node(id: $id) {
-					... on Bar {
-						bar
-					}
-				}
-			}
-		`},
+		location1: {`query {
+	foo {
+		... on Bar {
+			id
+		}
+		__typename
+	}
+}
+`},
+		location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Bar {
+			bar
+		}
+	}
+}
+`},
 	}, plans)
 }
 
@@ -2277,59 +2270,7 @@ func assertPlannedQueries(t *testing.T, expected map[string][]string, plans Quer
 			}
 		}
 	}
-	assert.Equal(t, normalizeQueries(t, expected), normalizeQueries(t, actual))
-}
-
-func normalizeQueries(t *testing.T, queries map[string][]string) map[string][]string {
-	t.Helper()
-	normalized := map[string][]string{}
-	for url, urlQueries := range queries {
-		for _, query := range urlQueries {
-			normalized[url] = append(normalized[url], normalizeQuery(t, query))
-		}
-		sort.Strings(normalized[url])
-	}
-	return normalized
-}
-
-// normalizeQuery parses a GraphQL document, recursively sorts every selection set, and prints it back
-func normalizeQuery(t *testing.T, query string) string {
-	t.Helper()
-	doc, err := parser.ParseQuery(&ast.Source{Input: query})
-	require.NoError(t, err, "query must be valid GraphQL: %s", query)
-	for _, operation := range doc.Operations {
-		sortSelectionSet(operation.SelectionSet)
-	}
-	for _, fragment := range doc.Fragments {
-		sortSelectionSet(fragment.SelectionSet)
-	}
-	printed, err := graphql.PrintQuery(doc)
-	require.NoError(t, err)
-	return strings.TrimSpace(printed)
-}
-
-func sortSelectionSet(selectionSet ast.SelectionSet) {
-	for _, selection := range selectionSet {
-		switch selection := selection.(type) {
-		case *ast.Field:
-			sortSelectionSet(selection.SelectionSet)
-		case *ast.InlineFragment:
-			sortSelectionSet(selection.SelectionSet)
-		}
-	}
-	sort.SliceStable(selectionSet, func(i, j int) bool {
-		return printSelection(selectionSet[i]) < printSelection(selectionSet[j])
-	})
-}
-
-func printSelection(selection ast.Selection) string {
-	printed, err := graphql.PrintQuery(&ast.QueryDocument{
-		Operations: ast.OperationList{{Operation: ast.Query, SelectionSet: ast.SelectionSet{selection}}},
-	})
-	if err != nil {
-		panic(err)
-	}
-	return printed
+	assert.Equal(t, expected, actual)
 }
 
 func allSteps(rootStep *QueryPlanStep) iter.Seq[*QueryPlanStep] {
