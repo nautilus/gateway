@@ -545,7 +545,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					// > - https://spec.graphql.org/October2021/#sec-Unions
 					//
 					// Service schemas may not define a union type containing one of their shared types, and querying it on that service would result in an error.
-					// For these cases, union selections MUST collapse into selected fragments on the union's named types,
+					// For these cases, union selections MUST flatten into selected fragments on the union's named types,
 					// so that each member type's fields are planned against the member type (not the union).
 					// The planned fields are wrapped back into an inline fragment on the member type below.
 					subSelectionTypes = p.flattenSameUnionSelections(config, fieldTypeName, selection.SelectionSet)
