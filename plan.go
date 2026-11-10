@@ -3,6 +3,8 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/vektah/gqlparser/v2"
@@ -337,6 +339,121 @@ type extractSelectionConfig struct {
 	nodeIDAndTypeName ast.SelectionSet
 }
 
+// flattenSameUnionSelections flattens selection sets from inside a Union such that only member types or __typename are selected.
+// This removes same-Union-type selections by flattening them so the planner can split requests for services that may not contain the Union type.
+// It isn't quite recursive, just enough depth to merge the same-Union selection sets.
+//
+// For example querying this schema:
+//
+//	type Query {
+//		foo: Foo
+//	}
+//
+//	interface Node {
+//		id: ID!
+//	}
+//
+//	union Foo = Bar | Baz
+//
+//	type Bar implements Node {
+//		id: ID!
+//		bar: String
+//		biff: String
+//	}
+//
+//	type Baz implements Node {
+//		id: ID!
+//		baz: String
+//		boo: String
+//	}
+//
+// With this request:
+//
+//	query {
+//		foo {
+//			__typename
+//			... {
+//				... on Foo {
+//					... on Bar {
+//						bar
+//					}
+//				}
+//			}
+//			...fooFragment
+//	        ... on Baz {
+//	            boo
+//	        }
+//		}
+//	}
+//
+//	fragment fooFragment on Foo {
+//		... on Bar {
+//			biff
+//		}
+//		... on Baz {
+//			baz
+//		}
+//	}
+//
+// Results in this flattened plan (before splitting by service in [extractSelection]):
+//
+//	query {
+//		foo {
+//			__typename
+//			... on Bar {
+//				biff
+//				bar
+//			}
+//			... on Baz {
+//				baz
+//				boo
+//			}
+//		}
+//	}
+//
+// Notice how every selection set directly under field 'foo' with type 'Foo' has been collapsed, so the fragments are not nested with the same union type.
+//
+// __typename is the one field the spec allows directly on a union selection set (and clients like Apollo add
+// it automatically). It is keyed by the union itself, since every service that defines the union can answer it.
+func (p *MinQueriesPlanner) flattenSameUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet) map[string]ast.SelectionSet {
+	typedSelectionSets := make(map[string]ast.SelectionSet)
+	for _, selection := range selectionSet {
+		switch selection := selection.(type) {
+		case *ast.Field:
+			typedSelectionSets[unionName] = append(typedSelectionSets[unionName], selection)
+		case *ast.InlineFragment:
+			sameUnionSelections := map[string]ast.SelectionSet{
+				selection.TypeCondition: selection.SelectionSet,
+			}
+			if selection.TypeCondition == "" || selection.TypeCondition == unionName {
+				sameUnionSelections = p.flattenSameUnionSelections(config, unionName, selection.SelectionSet)
+			}
+			mergeTypedSelectionSets(typedSelectionSets, sameUnionSelections)
+		case *ast.FragmentSpread:
+			fragment := config.step.FragmentDefinitions.ForName(selection.Name)
+			if fragment == nil {
+				fragment = config.plan.FragmentDefinitions.ForName(selection.Name)
+			}
+			sameUnionSelections := map[string]ast.SelectionSet{
+				fragment.TypeCondition: fragment.SelectionSet,
+			}
+			if fragment.TypeCondition == unionName {
+				sameUnionSelections = p.flattenSameUnionSelections(config, unionName, fragment.SelectionSet)
+			}
+			mergeTypedSelectionSets(typedSelectionSets, sameUnionSelections)
+		default:
+			panic(fmt.Sprintf("unsupported selection type inside union: %T", selection)) // should be impossible to reach with an exhaustive switch
+		}
+	}
+	return typedSelectionSets
+}
+
+func mergeTypedSelectionSets(destination, source map[string]ast.SelectionSet) {
+	for typeName, selectionSet := range source {
+		destination[typeName] = append(destination[typeName], selectionSet...)
+	}
+}
+
 func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extractSelectionConfig) (ast.SelectionSet, error) {
 	ctx.Gateway.logger.Debug("--- Extracting Selection ---")
 	ctx.Gateway.logger.Debug("Parent location: ", config.parentLocation)
@@ -366,7 +483,8 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				"\n\tParent Type: %s"+
 				"\n\tLocation: %v"+
 				"\n\tInsertion point: %v",
-			config.parentType, location, config.insertionPoint))
+			config.parentType, location, config.insertionPoint,
+		))
 
 		// if there are selections in this bundle that are not from the parent location we need to add
 		// id to the selection set
@@ -440,7 +558,6 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				}
 
 				ctx.Gateway.logger.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
-				typeName := coreFieldType(selection).Name()
 				var nodeIdentity ast.SelectionSet
 				// Only the gateway's own `Query.node` needs its identity fields (id and
 				// __typename) preserved
@@ -448,30 +565,24 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					// save node identity fields before getting recursively removed
 					nodeIdentity = p.findNodeFields(ctx, config, selection.SelectionSet)
 				}
-				subSelectionTypes := make(map[string]ast.SelectionSet)
-				if ctx.Schema.Types[typeName].Kind == ast.Union {
+				fieldTypeName := coreFieldType(selection).Name()
+				var subSelectionTypes map[string]ast.SelectionSet
+				if ctx.Schema.Types[fieldTypeName].Kind == ast.Union {
 					// Union types MUST be object types, and can't have fields of their own:
 					// > GraphQL Unions represent an object that could be one of a list of GraphQL Object types, but provides for no guaranteed fields between those types.
 					// > - https://spec.graphql.org/October2021/#sec-Unions
 					//
 					// Service schemas may not define a union type containing one of their shared types, and querying it on that service would result in an error.
-					// For these cases, union selections MUST collapse into selected fragments on the union's named types.
-					for _, subSelection := range selection.SelectionSet {
-						switch subSelection := subSelection.(type) {
-						case *ast.InlineFragment:
-							subSelectionTypes[subSelection.TypeCondition] = append(subSelectionTypes[subSelection.TypeCondition], subSelection.SelectionSet...)
-						case *ast.FragmentSpread:
-							fragment := config.step.FragmentDefinitions.ForName(selection.Name)
-							subSelectionTypes[fragment.TypeCondition] = append(subSelectionTypes[fragment.TypeCondition], fragment.SelectionSet...)
-						default:
-							return nil, fmt.Errorf("unsupported selection type inside union: %T", subSelection)
-						}
-					}
+					// For these cases, union selections MUST flatten into selected fragments on the union's named types,
+					// so that each member type's fields are planned against the member type (not the union).
+					// The planned fields are wrapped back into an inline fragment on the member type below.
+					subSelectionTypes = p.flattenSameUnionSelections(config, fieldTypeName, selection.SelectionSet)
 				} else {
-					subSelectionTypes[typeName] = selection.SelectionSet
+					subSelectionTypes = map[string]ast.SelectionSet{fieldTypeName: selection.SelectionSet}
 				}
 				var subSelections ast.SelectionSet
-				for typeName, selectionSet := range subSelectionTypes {
+				for _, typeName := range slices.Sorted(maps.Keys(subSelectionTypes)) {
+					selectionSet := subSelectionTypes[typeName]
 					// add any possible selections provided by this fields selections
 					subSelection, err := p.extractSelection(ctx, &extractSelectionConfig{
 						stepCh:         config.stepCh,
@@ -489,6 +600,12 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					})
 					if err != nil {
 						return nil, err
+					}
+					if typeName != fieldTypeName {
+						subSelection = ast.SelectionSet{&ast.InlineFragment{
+							TypeCondition: typeName,
+							SelectionSet:  subSelection,
+						}}
 					}
 					subSelections = append(subSelections, subSelection...)
 				}
@@ -553,7 +670,8 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 			// if the step does not have a definition for this fragment
 			if addDefn {
 				// we're going to leave a different fragment definition behind for this step
-				config.step.FragmentDefinitions = append(config.step.FragmentDefinitions,
+				config.step.FragmentDefinitions = append(
+					config.step.FragmentDefinitions,
 					&ast.FragmentDefinition{
 						Name:          selection.Name,
 						TypeCondition: defn.TypeCondition,
