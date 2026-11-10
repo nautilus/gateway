@@ -539,8 +539,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				ctx.Gateway.logger.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
 				fieldTypeName := coreFieldType(selection).Name()
 				var subSelectionTypes map[string]ast.SelectionSet
-				isUnion := ctx.Schema.Types[fieldTypeName].Kind == ast.Union
-				if isUnion {
+				if ctx.Schema.Types[fieldTypeName].Kind == ast.Union {
 					// Union types MUST be object types, and can't have fields of their own:
 					// > GraphQL Unions represent an object that could be one of a list of GraphQL Object types, but provides for no guaranteed fields between those types.
 					// > - https://spec.graphql.org/October2021/#sec-Unions
@@ -573,7 +572,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					if err != nil {
 						return nil, err
 					}
-					if isUnion && typeName != fieldTypeName && len(subSelection) > 0 {
+					if typeName != fieldTypeName && len(subSelection) > 0 {
 						// Fields of a union member type are only valid inside a fragment on that member type
 						subSelection = ast.SelectionSet{&ast.InlineFragment{
 							TypeCondition: typeName,
