@@ -34,6 +34,10 @@ type Gateway struct {
 
 	// the urls we have to visit to access certain fields
 	fieldURLs FieldURLMap
+
+	// the directives each service declares and where it allows them,
+	// computed once in New by declaredDirectives
+	declaredDirectives map[string]declaredDirectiveSet
 }
 
 // RequestContext holds all of the information required to satisfy the user's query
@@ -232,6 +236,7 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 	// assign the computed values
 	gateway.schema = schema
 	gateway.fieldURLs = urls
+	gateway.declaredDirectives = declaredDirectives(sources)
 	gateway.requestMiddlewares = requestMiddlewares
 	gateway.responseMiddlewares = responseMiddlewares
 
@@ -357,6 +362,85 @@ func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap 
 
 	// return the location map
 	return locations
+}
+
+// declaredDirectiveSet maps a directive name to the set of locations its
+// declaration allows it in.
+type declaredDirectiveSet map[string]map[ast.DirectiveLocation]bool
+
+// declaredDirectives maps each service url to the directives its schema
+// declares and the locations it allows them in.
+//
+// Several sources can share a url: nothing rejects a gateway configuration
+// that splits one service's schema across two RemoteSchema entries with the
+// same URL, and fieldURLs happily registers fields from both. So when the
+// first entry declares @secret and the second declares @track, the service
+// declares both and the sets have to be unioned. Url-keyed assignment would
+// keep whichever entry came last and silently strip @secret from every query
+// to that service.
+//
+// This reads the source schemas, not the merged one, so it is not affected by
+// how the merger reconciles directive definitions across services.
+func declaredDirectives(schemas []*graphql.RemoteSchema) map[string]declaredDirectiveSet {
+	declared := map[string]declaredDirectiveSet{}
+
+	for _, remoteSchema := range schemas {
+		directives := declared[remoteSchema.URL]
+		if directives == nil {
+			directives = make(declaredDirectiveSet, len(remoteSchema.Schema.Directives))
+			declared[remoteSchema.URL] = directives
+		}
+
+		for name, definition := range remoteSchema.Schema.Directives {
+			locations := directives[name]
+			if locations == nil {
+				locations = make(map[ast.DirectiveLocation]bool, len(definition.Locations))
+				directives[name] = locations
+			}
+
+			for _, location := range definition.Locations {
+				locations[location] = true
+			}
+		}
+	}
+
+	return declared
+}
+
+// directivesFor returns the subset of directives that the service at url
+// declares for the given location. A GraphQL server rejects an entire query
+// that carries a directive it has never heard of, or one in a position its
+// declaration does not allow, so a directive may only travel to the services
+// that can make sense of it there.
+//
+// A url we have no schema for, which covers both the internal schema and the
+// placeholder root step, is sent none.
+func (g *Gateway) directivesFor(url string, location ast.DirectiveLocation, directives ast.DirectiveList) ast.DirectiveList {
+	declared := g.declaredDirectives[url]
+
+	var result ast.DirectiveList
+	for _, directive := range directives {
+		if declared[directive.Name][location] {
+			result = append(result, directive)
+		}
+	}
+
+	return result
+}
+
+// operationDirectiveLocation translates the operation type of a step's query
+// into the directive location a declaration has to allow.
+func operationDirectiveLocation(operation ast.Operation) ast.DirectiveLocation {
+	switch operation {
+	case ast.Query:
+		return ast.LocationQuery
+	case ast.Mutation:
+		return ast.LocationMutation
+	case ast.Subscription:
+		return ast.LocationSubscription
+	default:
+		return ast.LocationQuery
+	}
 }
 
 // FieldURLMap holds the intformation for retrieving the valid locations one can find the value for the field

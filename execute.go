@@ -229,7 +229,7 @@ func executeOneStep(
 		}
 
 		// save the id as a variable to the query
-		variables["id"] = pointData.ID
+		variables[nodeIDVariable] = pointData.ID
 	}
 
 	// if there is no queryer

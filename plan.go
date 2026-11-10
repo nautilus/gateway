@@ -134,6 +134,10 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 	plans := QueryPlanList{}
 
 	for _, operation := range query.Operations {
+		if operation.VariableDefinitions.ForName(nodeIDVariable) != nil {
+			return nil, fmt.Errorf("variable name %q is reserved for internal use by the gateway", nodeIDVariable)
+		}
+
 		// each operation results in a new query
 		plan := &QueryPlan{
 			Operation:           operation,
@@ -247,6 +251,32 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 				// now that we're done processing the step we need to preconstruct the query that we
 				// will be firing for this plan
 
+				// the operation's directives only travel to the services that
+				// declare them for the operation type this step executes as.
+				// That is the step's own operation type, not the client's: a
+				// dependent step of a mutation re-enters through node(id:),
+				// which is a Query field, so a MUTATION-only directive must
+				// not tag along (see plannerBuildQuery).
+				//
+				// Only the operation position is filtered here. Directives on
+				// fields, fragment spreads, and inline fragments are still
+				// copied verbatim into every step that contains them
+				// (pre-existing behavior), so those still reach services that
+				// never declared them.
+				directives := ctx.Gateway.directivesFor(
+					payload.Location,
+					operationDirectiveLocation(operationForParentType(step.ParentType)),
+					plan.Operation.Directives,
+				)
+
+				// variables referenced by a forwarded directive's arguments
+				// have to be declared and sent along like any field variable
+				for _, directive := range directives {
+					for _, variable := range graphql.ExtractVariables(directive.Arguments) {
+						step.Variables.Add(variable)
+					}
+				}
+
 				// we need to grab the list of variable definitions
 				variableDefs := ast.VariableDefinitionList{}
 				// we need to grab the variable definitions and values for each variable in the step
@@ -256,7 +286,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 				}
 
 				// build up the query document
-				step.QueryDocument = plannerBuildQuery(ctx, plan.Operation.Name, step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions)
+				step.QueryDocument = plannerBuildQuery(ctx, plan.Operation.Name, step.ParentType, variableDefs, step.SelectionSet, step.FragmentDefinitions, directives)
 
 				// we also need to turn the query into a string
 				queryString, err := graphql.PrintQuery(step.QueryDocument)
@@ -1050,22 +1080,84 @@ func (p *Planner) GetQueryer(ctx *PlanningContext, url string) graphql.Queryer {
 	return graphql.NewSingleRequestQueryer(url)
 }
 
-func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList) *ast.QueryDocument {
+// nodeIDVariable is necessary to avoid accidentally overwriting the wrong 'id'
+// variable in query planning and execution.
+// Lets take the query below as an example, where favoriteCatPhoto is owned by
+// a second service:
+//
+//	query ($id: ID!, $category: String!) {
+//	  allUsers {
+//	    favoriteCatPhoto(category: $category, owner: $id) { URL }
+//	  }
+//	}
+//
+// The first service needs to run first, so we know the IDs of the users. These
+// are then passed along to the second service. In the query planner, this is
+// known as a dependent step.
+// Before this constant existed, that second query came out like this:
+//
+//	query ($category: String!, $id: ID!) {
+//	    node(id: $id) {
+//	        ... on User {
+//	            favoriteCatPhoto(category: $category, owner: $id) { URL }
+//	        }
+//	    }
+//	}
+//
+// The second query declares the variables its own fields reference, reusing
+// the client's declarations, so $category and $id, both needed by
+// favoriteCatPhoto.
+//
+// That second query gets executed N times, where N=number of users from first
+// query. And each query needs the ID of that user, again coming from the first
+// query:
+//   - 2nd query run #1: $id=u1
+//   - 2nd query run #2: $id=u2
+//   - 2nd query run #3: $id=u3
+//
+// And herein lies the problem: the client's $id was a single fixed value, the
+// one owner they wanted photos from. But each run of the second query
+// overwrites it with the ID of the user currently being resolved, so owner
+// silently becomes u1, then u2, then u3. Instead of one owner's photos, the
+// client gets each user's own.
+//
+// The fix is therefore simple: use a name no client would reasonably pick, and
+// reject the queries that do anyway. The second query now comes out as:
+//
+//	query ($category: String!, $id: ID!, $_gateway_node_id: ID!) {
+//	    node(id: $_gateway_node_id) {
+//	        ... on User {
+//	            favoriteCatPhoto(category: $category, owner: $id) { URL }
+//	        }
+//	    }
+//	}
+//
+// See plannerBuildQuery (declaration), generatePlans (rejection) and
+// executeOneStep (value injection) for the three coupled sites.
+const nodeIDVariable = "_gateway_node_id"
+
+// operationForParentType is the operation type of the query a step executes
+// as: only a step rooted at the top-level mutation or subscription type keeps
+// that operation, every other step is a query (see plannerBuildQuery for why).
+func operationForParentType(parentType string) ast.Operation {
+	switch parentType {
+	case typeNameMutation:
+		return ast.Mutation
+	case typeNameSubscription:
+		return ast.Subscription
+	default:
+		return ast.Query
+	}
+}
+
+func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, variables ast.VariableDefinitionList, selectionSet ast.SelectionSet, fragmentDefinitions ast.FragmentDefinitionList, directives ast.DirectiveList) *ast.QueryDocument {
 	ctx.Gateway.logger.Debug("Building Query: \n"+"\tParentType: ", parentType, " ")
 	// build up an operation for the query
 	operation := &ast.OperationDefinition{
 		VariableDefinitions: variables,
 		Name:                operationName,
-	}
-
-	// assign the right operation
-	switch parentType {
-	case typeNameMutation:
-		operation.Operation = ast.Mutation
-	case typeNameSubscription:
-		operation.Operation = ast.Subscription
-	default:
-		operation.Operation = ast.Query
+		Directives:          directives,
+		Operation:           operationForParentType(parentType),
 	}
 
 	// if we are querying an operation all we need to do is add the selection set at the root
@@ -1077,7 +1169,7 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 
 		// we want the operation to have the equivalent of
 		// {
-		//	 	node(id: $id) {
+		//	 	node(id: $_gateway_node_id) {
 		//	 		... on parentType {
 		//	 			selection
 		//	 		}
@@ -1091,7 +1183,7 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 						Name: "id",
 						Value: &ast.Value{
 							Kind: ast.Variable,
-							Raw:  "id",
+							Raw:  nodeIDVariable,
 						},
 					},
 				},
@@ -1104,13 +1196,10 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 			},
 		}
 
-		// if the original query didn't have an id arg we need to add one
-		if variables.ForName("id") == nil {
-			operation.VariableDefinitions = append(operation.VariableDefinitions, &ast.VariableDefinition{
-				Variable: "id",
-				Type:     ast.NonNullNamedType("ID", &ast.Position{}),
-			})
-		}
+		operation.VariableDefinitions = append(operation.VariableDefinitions, &ast.VariableDefinition{
+			Variable: nodeIDVariable,
+			Type:     ast.NonNullNamedType("ID", &ast.Position{}),
+		})
 	}
 
 	// add the operation to a QueryDocument

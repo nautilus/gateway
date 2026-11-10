@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/nautilus/graphql"
@@ -1012,8 +1013,8 @@ type Foo implements Node {
 				switch url {
 				case fooURL:
 					assert.Equal(t, strings.TrimSpace(`
-query ($id: ID!) {
-	node(id: $id) {
+query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
 		... on Node {
 			... on Foo {
 				id
@@ -1025,8 +1026,8 @@ query ($id: ID!) {
 					return map[string]any{"node": nil}, nil
 				case barURL:
 					assert.Equal(t, strings.TrimSpace(`
-query ($id: ID!) {
-	node(id: $id) {
+query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
 		... on Node {
 			... on Foo {
 				bar
@@ -1138,7 +1139,7 @@ func TestSingleObjectOnlyRequestingNonIDFieldScrubsIDs(t *testing.T) {
 	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
 		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
 			assert.Equal(t, map[string]any{
-				"id": "foo",
+				nodeIDVariable: "foo",
 			}, input.Variables)
 			return map[string]any{
 				"node": map[string]any{
@@ -1183,4 +1184,128 @@ func TestSingleObjectOnlyRequestingNonIDFieldScrubsIDs(t *testing.T) {
 			},
 		},
 	}, response, "Response must not contain ID fields and not fail while scrubbing them.")
+}
+
+func TestDeclaredDirectives(t *testing.T) {
+	t.Parallel()
+
+	users, err := graphql.LoadSchema(`
+		directive @secret on QUERY | FIELD
+		type Query { user: String }
+	`)
+	require.NoError(t, err)
+
+	posts, err := graphql.LoadSchema(`
+		directive @secret on MUTATION
+		directive @track on QUERY
+		type Query { post: String }
+	`)
+	require.NoError(t, err)
+
+	other, err := graphql.LoadSchema(`
+		type Query { other: String }
+	`)
+	require.NoError(t, err)
+
+	// users and posts are two sources for the same service, so their
+	// declarations are unioned, including the locations of a directive both
+	// declare
+	declared := declaredDirectives([]*graphql.RemoteSchema{
+		{URL: "A", Schema: users},
+		{URL: "A", Schema: posts},
+		{URL: "B", Schema: other},
+	})
+
+	assert.Equal(t, map[ast.DirectiveLocation]bool{
+		ast.LocationQuery:    true,
+		ast.LocationField:    true,
+		ast.LocationMutation: true,
+	}, declared["A"]["secret"])
+	assert.Equal(t, map[ast.DirectiveLocation]bool{ast.LocationQuery: true}, declared["A"]["track"])
+	assert.Nil(t, declared["B"]["secret"])
+	assert.Nil(t, declared["B"]["track"])
+
+	// built-ins come with every schema, so they always travel
+	assert.True(t, declared["B"]["skip"][ast.LocationField])
+	assert.True(t, declared["B"]["include"][ast.LocationInlineFragment])
+
+	// an unknown url is not an error, it just declares nothing
+	assert.Nil(t, declared["C"]["secret"])
+}
+
+func TestOperationDirectivesReachDeclaringService(t *testing.T) {
+	t.Parallel()
+
+	// an operation directive with a variable argument, sent through the http
+	// handler: the declaring service must receive the directive and the
+	// variable, the other service must receive neither
+	const usersURL, postsURL = "users", "posts"
+
+	usersSchema, err := graphql.LoadSchema(`
+		directive @track(session: String) on QUERY
+		type Query { user: String }
+	`)
+	require.NoError(t, err)
+
+	postsSchema, err := graphql.LoadSchema(`
+		type Query { post: String }
+	`)
+	require.NoError(t, err)
+
+	type received struct {
+		Query     string
+		Variables map[string]interface{}
+	}
+	var mu sync.Mutex
+	got := map[string]received{}
+	record := func(url string, input *graphql.QueryInput) {
+		mu.Lock()
+		defer mu.Unlock()
+		got[url] = received{Query: input.Query, Variables: input.Variables}
+	}
+
+	usersService := graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
+		record(usersURL, input)
+		return map[string]interface{}{"user": "u"}, nil
+	})
+	postsService := graphql.QueryerFunc(func(input *graphql.QueryInput) (interface{}, error) {
+		record(postsURL, input)
+		return map[string]interface{}{"post": "p"}, nil
+	})
+
+	queryerFactory := QueryerFactory(func(_ *PlanningContext, url string) graphql.Queryer {
+		if url == usersURL {
+			return usersService
+		}
+		return postsService
+	})
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: usersSchema, URL: usersURL},
+		{Schema: postsSchema, URL: postsURL},
+	}, WithQueryerFactory(&queryerFactory))
+	require.NoError(t, err)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`
+		{
+			"query": %q,
+			"variables": {"s": "session-1"}
+		}
+	`, `query Name($s: String) @track(session: $s) { user post }`)))
+	resp := httptest.NewRecorder()
+	gateway.GraphQLHandler(resp, req)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	assert.JSONEq(t, `{"data": {"user": "u", "post": "p"}}`, resp.Body.String())
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, map[string]received{
+		usersURL: {
+			Query:     "query Name ($s: String) @track(session: $s) {\n\tuser\n}\n",
+			Variables: map[string]interface{}{"s": "session-1"},
+		},
+		postsURL: {
+			Query:     "query Name {\n\tpost\n}\n",
+			Variables: map[string]interface{}{},
+		},
+	}, got)
 }
