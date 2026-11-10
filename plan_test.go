@@ -3,7 +3,6 @@ package gateway
 import (
 	"fmt"
 	"iter"
-	"sort"
 	"strings"
 	"testing"
 
@@ -2272,30 +2271,6 @@ func assertPlannedQueries(t *testing.T, expected map[string][]string, plans Quer
 		}
 	}
 	assert.Equal(t, expected, actual)
-}
-
-func sortSelectionSet(selectionSet ast.SelectionSet) {
-	for _, selection := range selectionSet {
-		switch selection := selection.(type) {
-		case *ast.Field:
-			sortSelectionSet(selection.SelectionSet)
-		case *ast.InlineFragment:
-			sortSelectionSet(selection.SelectionSet)
-		}
-	}
-	sort.SliceStable(selectionSet, func(i, j int) bool {
-		return printSelection(selectionSet[i]) < printSelection(selectionSet[j])
-	})
-}
-
-func printSelection(selection ast.Selection) string {
-	printed, err := graphql.PrintQuery(&ast.QueryDocument{
-		Operations: ast.OperationList{{Operation: ast.Query, SelectionSet: ast.SelectionSet{selection}}},
-	})
-	if err != nil {
-		panic(err)
-	}
-	return printed
 }
 
 func allSteps(rootStep *QueryPlanStep) iter.Seq[*QueryPlanStep] {
