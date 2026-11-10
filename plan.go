@@ -319,18 +319,83 @@ type extractSelectionConfig struct {
 	wrapper        ast.SelectionSet
 }
 
-// collectUnionSelections groups the selections of a union field by the type they apply to, so that each
-// group can be planned against that type. Selections inside `... on Member { }` (inline or via a named fragment)
-// are keyed by the member type.
+// extractUnionSelections extracts selection sets from inside a Union such that only member types or __typename are selected.
+// This removes same-Union-type selections by flattening the same-Union typed fragments so the planner can split requests for services that may not contain the Union type.
+// It isn't quite recursive, just enough depth to flatten the same-Union selection sets.
+//
+// For example querying this schema:
+//
+//	type Query {
+//		foo: Foo
+//	}
+//
+//	interface Node {
+//		id: ID!
+//	}
+//
+//	union Foo = Bar | Baz
+//
+//	type Bar implements Node {
+//		id: ID!
+//		bar: String
+//		biff: String
+//	}
+//
+//	type Baz implements Node {
+//		id: ID!
+//		baz: String
+//		boo: String
+//	}
+//
+// With this request:
+//
+//	query {
+//		foo {
+//			__typename
+//			... {
+//				... on Foo {
+//					... on Bar {
+//						bar
+//					}
+//				}
+//			}
+//			...fooFragment
+//	        ... on Baz {
+//	            boo
+//	        }
+//		}
+//	}
+//
+//	fragment fooFragment on Foo {
+//		... on Bar {
+//			biff
+//		}
+//		... on Baz {
+//			baz
+//		}
+//	}
+//
+// Results in this flattened plan (before splitting by service in [extractSelection]):
+//
+//	query {
+//		foo {
+//			__typename
+//			... on Bar {
+//				biff
+//				bar
+//			}
+//			... on Baz {
+//				baz
+//				boo
+//			}
+//		}
+//	}
+//
+// Notice how every selection set directly under field 'foo' with type 'Foo' has been collapsed, so the fragments are not nested with the same union type.
 //
 // __typename is the one field the spec allows directly on a union selection set (and clients like Apollo add
 // it automatically). It is keyed by the union itself, since every service that defines the union can answer it.
-//
-// Inline fragments and named fragments whose type condition is the union itself (`fragment f on Union { }`),
-// or which have no type condition at all (`... @include(if: $x) { }`), also apply to the union. Their selections
-// are flattened into the same groups, so that member fields nested inside them are still planned against the
-// member type rather than the union.
-func (p *MinQueriesPlanner) collectUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet, groups map[string]ast.SelectionSet) error {
+func (p *MinQueriesPlanner) extractUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet, groups map[string]ast.SelectionSet) error {
 	for _, selection := range selectionSet {
 		switch selection := selection.(type) {
 		case *ast.Field:
@@ -340,7 +405,7 @@ func (p *MinQueriesPlanner) collectUnionSelections(config *extractSelectionConfi
 			groups[unionName] = append(groups[unionName], selection)
 		case *ast.InlineFragment:
 			if selection.TypeCondition == "" || selection.TypeCondition == unionName {
-				if err := p.collectUnionSelections(config, unionName, selection.SelectionSet, groups); err != nil {
+				if err := p.extractUnionSelections(config, unionName, selection.SelectionSet, groups); err != nil {
 					return err
 				}
 				continue
@@ -355,7 +420,7 @@ func (p *MinQueriesPlanner) collectUnionSelections(config *extractSelectionConfi
 				return fmt.Errorf("could not find definition for fragment: %s", selection.Name)
 			}
 			if fragment.TypeCondition == unionName {
-				if err := p.collectUnionSelections(config, unionName, fragment.SelectionSet, groups); err != nil {
+				if err := p.extractUnionSelections(config, unionName, fragment.SelectionSet, groups); err != nil {
 					return err
 				}
 				continue
@@ -397,7 +462,8 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				"\n\tParent Type: %s"+
 				"\n\tLocation: %v"+
 				"\n\tInsertion point: %v",
-			config.parentType, location, config.insertionPoint))
+			config.parentType, location, config.insertionPoint,
+		))
 
 		// if there are selections in this bundle that are not from the parent location we need to add
 		// id to the selection set
@@ -482,7 +548,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					// For these cases, union selections MUST collapse into selected fragments on the union's named types,
 					// so that each member type's fields are planned against the member type (not the union).
 					// The planned fields are wrapped back into an inline fragment on the member type below.
-					err := p.collectUnionSelections(config, fieldTypeName, selection.SelectionSet, subSelectionTypes)
+					err := p.extractUnionSelections(config, fieldTypeName, selection.SelectionSet, subSelectionTypes)
 					if err != nil {
 						return nil, err
 					}
