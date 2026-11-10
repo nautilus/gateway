@@ -419,9 +419,6 @@ func (p *MinQueriesPlanner) extractUnionSelections(config *extractSelectionConfi
 			if fragment == nil {
 				fragment = config.plan.FragmentDefinitions.ForName(selection.Name)
 			}
-			if fragment == nil {
-				return nil, fmt.Errorf("could not find definition for fragment: %s", selection.Name)
-			}
 			if fragment.TypeCondition == unionName {
 				sameUnionSelections, err := p.extractUnionSelections(config, unionName, fragment.SelectionSet)
 				if err != nil {
