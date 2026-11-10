@@ -320,7 +320,7 @@ type extractSelectionConfig struct {
 }
 
 // flattenSameUnionSelections flattens selection sets from inside a Union such that only member types or __typename are selected.
-// This removes same-Union-type selections by flattening the same-Union typed fragments so the planner can split requests for services that may not contain the Union type.
+// This removes same-Union-type selections by flattening them so the planner can split requests for services that may not contain the Union type.
 // It isn't quite recursive, just enough depth to merge the same-Union selection sets.
 //
 // For example querying this schema:
