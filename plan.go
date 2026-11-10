@@ -573,7 +573,6 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 						return nil, err
 					}
 					if typeName != fieldTypeName {
-						// Fields of a union member type are only valid inside a fragment on that member type
 						subSelection = ast.SelectionSet{&ast.InlineFragment{
 							TypeCondition: typeName,
 							SelectionSet:  subSelection,
