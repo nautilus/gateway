@@ -395,8 +395,8 @@ type extractSelectionConfig struct {
 //
 // __typename is the one field the spec allows directly on a union selection set (and clients like Apollo add
 // it automatically). It is keyed by the union itself, since every service that defines the union can answer it.
-func (p *MinQueriesPlanner) flattenSameUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet) (typedSelectionSets map[string]ast.SelectionSet) {
-	typedSelectionSets = make(map[string]ast.SelectionSet)
+func (p *MinQueriesPlanner) flattenSameUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet) map[string]ast.SelectionSet {
+	typedSelectionSets := make(map[string]ast.SelectionSet)
 	for _, selection := range selectionSet {
 		switch selection := selection.(type) {
 		case *ast.Field:
