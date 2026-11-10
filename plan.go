@@ -317,6 +317,55 @@ type extractSelectionConfig struct {
 	wrapper        ast.SelectionSet
 }
 
+// collectUnionSelections groups the selections of a union field by the type they apply to, so that each
+// group can be planned against that type. Selections inside `... on Member { }` (inline or via a named fragment)
+// are keyed by the member type.
+//
+// __typename is the one field the spec allows directly on a union selection set (and clients like Apollo add
+// it automatically). It is keyed by the union itself, since every service that defines the union can answer it.
+//
+// Inline fragments and named fragments whose type condition is the union itself (`fragment f on Union { }`),
+// or which have no type condition at all (`... @include(if: $x) { }`), also apply to the union. Their selections
+// are flattened into the same groups, so that member fields nested inside them are still planned against the
+// member type rather than the union.
+func (p *MinQueriesPlanner) collectUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet, groups map[string]ast.SelectionSet) error {
+	for _, selection := range selectionSet {
+		switch selection := selection.(type) {
+		case *ast.Field:
+			if selection.Name != typenameField {
+				return fmt.Errorf("unsupported field %q inside union %s: unions only support __typename and fragments", selection.Name, unionName)
+			}
+			groups[unionName] = append(groups[unionName], selection)
+		case *ast.InlineFragment:
+			if selection.TypeCondition == "" || selection.TypeCondition == unionName {
+				if err := p.collectUnionSelections(config, unionName, selection.SelectionSet, groups); err != nil {
+					return err
+				}
+				continue
+			}
+			groups[selection.TypeCondition] = append(groups[selection.TypeCondition], selection.SelectionSet...)
+		case *ast.FragmentSpread:
+			fragment := config.step.FragmentDefinitions.ForName(selection.Name)
+			if fragment == nil {
+				fragment = config.plan.FragmentDefinitions.ForName(selection.Name)
+			}
+			if fragment == nil {
+				return fmt.Errorf("could not find definition for fragment: %s", selection.Name)
+			}
+			if fragment.TypeCondition == unionName {
+				if err := p.collectUnionSelections(config, unionName, fragment.SelectionSet, groups); err != nil {
+					return err
+				}
+				continue
+			}
+			groups[fragment.TypeCondition] = append(groups[fragment.TypeCondition], fragment.SelectionSet...)
+		default:
+			return fmt.Errorf("unsupported selection type inside union: %T", selection)
+		}
+	}
+	return nil
+}
+
 func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extractSelectionConfig) (ast.SelectionSet, error) {
 	ctx.Gateway.logger.Debug("--- Extracting Selection ---")
 	ctx.Gateway.logger.Debug("Parent location: ", config.parentLocation)
@@ -419,28 +468,24 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				}
 
 				ctx.Gateway.logger.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
-				typeName := coreFieldType(selection).Name()
+				fieldTypeName := coreFieldType(selection).Name()
 				subSelectionTypes := make(map[string]ast.SelectionSet)
-				if ctx.Schema.Types[typeName].Kind == ast.Union {
+				isUnion := ctx.Schema.Types[fieldTypeName].Kind == ast.Union
+				if isUnion {
 					// Union types MUST be object types, and can't have fields of their own:
 					// > GraphQL Unions represent an object that could be one of a list of GraphQL Object types, but provides for no guaranteed fields between those types.
 					// > - https://spec.graphql.org/October2021/#sec-Unions
 					//
 					// Service schemas may not define a union type containing one of their shared types, and querying it on that service would result in an error.
-					// For these cases, union selections MUST collapse into selected fragments on the union's named types.
-					for _, subSelection := range selection.SelectionSet {
-						switch subSelection := subSelection.(type) {
-						case *ast.InlineFragment:
-							subSelectionTypes[subSelection.TypeCondition] = append(subSelectionTypes[subSelection.TypeCondition], subSelection.SelectionSet...)
-						case *ast.FragmentSpread:
-							fragment := config.step.FragmentDefinitions.ForName(selection.Name)
-							subSelectionTypes[fragment.TypeCondition] = append(subSelectionTypes[fragment.TypeCondition], fragment.SelectionSet...)
-						default:
-							return nil, fmt.Errorf("unsupported selection type inside union: %T", subSelection)
-						}
+					// For these cases, union selections MUST collapse into selected fragments on the union's named types,
+					// so that each member type's fields are planned against the member type (not the union).
+					// The planned fields are wrapped back into an inline fragment on the member type below.
+					err := p.collectUnionSelections(config, fieldTypeName, selection.SelectionSet, subSelectionTypes)
+					if err != nil {
+						return nil, err
 					}
 				} else {
-					subSelectionTypes[typeName] = selection.SelectionSet
+					subSelectionTypes[fieldTypeName] = selection.SelectionSet
 				}
 				var subSelections ast.SelectionSet
 				for typeName, selectionSet := range subSelectionTypes {
@@ -460,6 +505,13 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					})
 					if err != nil {
 						return nil, err
+					}
+					if isUnion && typeName != fieldTypeName && len(subSelection) > 0 {
+						// Fields of a union member type are only valid inside a fragment on that member type
+						subSelection = ast.SelectionSet{&ast.InlineFragment{
+							TypeCondition: typeName,
+							SelectionSet:  subSelection,
+						}}
 					}
 					subSelections = append(subSelections, subSelection...)
 				}
