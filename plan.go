@@ -395,7 +395,7 @@ type extractSelectionConfig struct {
 //
 // __typename is the one field the spec allows directly on a union selection set (and clients like Apollo add
 // it automatically). It is keyed by the union itself, since every service that defines the union can answer it.
-func (p *MinQueriesPlanner) extractUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet) (typedSelectionSets map[string]ast.SelectionSet, _ error) {
+func (p *MinQueriesPlanner) extractUnionSelections(config *extractSelectionConfig, unionName string, selectionSet ast.SelectionSet) (typedSelectionSets map[string]ast.SelectionSet, err error) {
 	typedSelectionSets = make(map[string]ast.SelectionSet)
 	for _, selection := range selectionSet {
 		switch selection := selection.(type) {
@@ -405,29 +405,31 @@ func (p *MinQueriesPlanner) extractUnionSelections(config *extractSelectionConfi
 			}
 			typedSelectionSets[unionName] = append(typedSelectionSets[unionName], selection)
 		case *ast.InlineFragment:
+			sameUnionSelections := map[string]ast.SelectionSet{
+				selection.TypeCondition: selection.SelectionSet,
+			}
 			if selection.TypeCondition == "" || selection.TypeCondition == unionName {
-				sameUnionSelections, err := p.extractUnionSelections(config, unionName, selection.SelectionSet)
+				sameUnionSelections, err = p.extractUnionSelections(config, unionName, selection.SelectionSet)
 				if err != nil {
 					return nil, err
 				}
-				mergeTypedSelectionSets(typedSelectionSets, sameUnionSelections)
-			} else {
-				typedSelectionSets[selection.TypeCondition] = append(typedSelectionSets[selection.TypeCondition], selection.SelectionSet...)
 			}
+			mergeTypedSelectionSets(typedSelectionSets, sameUnionSelections)
 		case *ast.FragmentSpread:
 			fragment := config.step.FragmentDefinitions.ForName(selection.Name)
 			if fragment == nil {
 				fragment = config.plan.FragmentDefinitions.ForName(selection.Name)
 			}
+			sameUnionSelections := map[string]ast.SelectionSet{
+				fragment.TypeCondition: fragment.SelectionSet,
+			}
 			if fragment.TypeCondition == unionName {
-				sameUnionSelections, err := p.extractUnionSelections(config, unionName, fragment.SelectionSet)
+				sameUnionSelections, err = p.extractUnionSelections(config, unionName, fragment.SelectionSet)
 				if err != nil {
 					return nil, err
 				}
-				mergeTypedSelectionSets(typedSelectionSets, sameUnionSelections)
-			} else {
-				typedSelectionSets[fragment.TypeCondition] = append(typedSelectionSets[fragment.TypeCondition], fragment.SelectionSet...)
 			}
+			mergeTypedSelectionSets(typedSelectionSets, sameUnionSelections)
 		default:
 			return nil, fmt.Errorf("unsupported selection type inside union: %T", selection)
 		}
