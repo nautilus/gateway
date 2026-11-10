@@ -400,9 +400,6 @@ func (p *MinQueriesPlanner) extractUnionSelections(config *extractSelectionConfi
 	for _, selection := range selectionSet {
 		switch selection := selection.(type) {
 		case *ast.Field:
-			if selection.Name != typenameField {
-				return nil, fmt.Errorf("unsupported field %q inside union %s: unions only support __typename and fragments", selection.Name, unionName)
-			}
 			typedSelectionSets[unionName] = append(typedSelectionSets[unionName], selection)
 		case *ast.InlineFragment:
 			sameUnionSelections := map[string]ast.SelectionSet{

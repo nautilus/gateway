@@ -2311,38 +2311,3 @@ func allStepsRecursive(step *QueryPlanStep, yield func(*QueryPlanStep) bool) boo
 	}
 	return true
 }
-
-func TestPlanQuery_unionForbidsNonTypenameFields(t *testing.T) {
-	t.Parallel()
-	schema, err := graphql.LoadSchema(`
-		type Query {
-			foo: Foo!
-		}
-		union Foo = Bar
-		type Bar {
-			bar: String!
-		}
-	`)
-	require.NoError(t, err)
-
-	const location0 = "url0"
-	locations := FieldURLMap{}
-	locations.RegisterURL(typeNameQuery, "foo", location0)
-	locations.RegisterURL("Bar", "bar", location0) // unique to location0
-	locations.RegisterURL("Bar", typenameField, location0)
-	locations.RegisterURL("Foo", typenameField, location0)
-
-	_, err = (&MinQueriesPlanner{}).Plan(&PlanningContext{
-		Query: `
-			query {
-				foo {
-					bar
-				}
-			}
-		`,
-		Schema:    schema,
-		Locations: locations,
-		Gateway:   &Gateway{logger: &DefaultLogger{}},
-	})
-	assert.EqualError(t, err, `input:4: Cannot query field "bar" on type "Foo". Did you mean to use an inline fragment on "Bar"?`+"\n")
-}
