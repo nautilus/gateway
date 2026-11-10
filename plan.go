@@ -3,6 +3,8 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/vektah/gqlparser/v2"
@@ -488,7 +490,8 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 					subSelectionTypes[fieldTypeName] = selection.SelectionSet
 				}
 				var subSelections ast.SelectionSet
-				for typeName, selectionSet := range subSelectionTypes {
+				for _, typeName := range slices.Sorted(maps.Keys(subSelectionTypes)) {
+					selectionSet := subSelectionTypes[typeName]
 					// add any possible selections provided by this fields selections
 					subSelection, err := p.extractSelection(ctx, &extractSelectionConfig{
 						stepCh:         config.stepCh,
