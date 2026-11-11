@@ -41,15 +41,14 @@ type QueryPlan struct {
 }
 
 type newQueryPlanStepPayload struct {
-	Plan              *QueryPlan
-	Location          string
-	SelectionSet      ast.SelectionSet
-	ParentType        string
-	Parent            *QueryPlanStep
-	InsertionPoint    []string
-	Fragments         ast.FragmentDefinitionList
-	Wrapper           ast.SelectionSet
-	NodeIDAndTypeName ast.SelectionSet
+	Plan           *QueryPlan
+	Location       string
+	SelectionSet   ast.SelectionSet
+	ParentType     string
+	Parent         *QueryPlanStep
+	InsertionPoint []string
+	Fragments      ast.FragmentDefinitionList
+	Wrapper        ast.SelectionSet
 }
 
 // QueryPlanner is responsible for taking a string with a graphql query and returns
@@ -245,16 +244,16 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 					step.SelectionSet = newSelection
 
 				}
+
 				// if the id or __typename fields are requested under query.node, we need to make sure they are included in the query sent to the remote service
-				if payload.NodeIDAndTypeName != nil {
-					step.SelectionSet = append(step.SelectionSet, payload.NodeIDAndTypeName...)
-					// also copy variables that are used in the `Query.node` id and __typename fields
-					for _, selection := range payload.NodeIDAndTypeName {
-						field, ok := selection.(*ast.Field)
+				if payload.ParentType == "Node" && payload.Parent.Queryer == ctx.Gateway {
+					for _, entry := range payload.Wrapper {
+						field, ok := entry.(*ast.Field)
 						if !ok {
 							continue
 						}
-
+						step.SelectionSet = append(step.SelectionSet, field)
+						// copy over variables from the wrapper field to the step
 						for _, directive := range field.Directives {
 							for _, name := range graphql.ExtractVariables(directive.Arguments) {
 								step.Variables.Add(name)
@@ -328,15 +327,14 @@ type extractSelectionConfig struct {
 	stepCh chan *newQueryPlanStepPayload
 	stepWg *sync.WaitGroup
 
-	locations         FieldURLMap
-	parentLocation    string
-	parentType        string
-	step              *QueryPlanStep
-	plan              *QueryPlan
-	selection         ast.SelectionSet
-	insertionPoint    []string
-	wrapper           ast.SelectionSet
-	nodeIDAndTypeName ast.SelectionSet
+	locations      FieldURLMap
+	parentLocation string
+	parentType     string
+	step           *QueryPlanStep
+	plan           *QueryPlan
+	selection      ast.SelectionSet
+	insertionPoint []string
+	wrapper        ast.SelectionSet
 }
 
 // flattenSameUnionSelections flattens selection sets from inside a Union such that only member types or __typename are selected.
@@ -511,10 +509,9 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 			Wrapper:        config.wrapper,
 			ParentType:     config.parentType,
 
-			Location:          location,
-			SelectionSet:      selectionSet,
-			Fragments:         locationFragments[location],
-			NodeIDAndTypeName: config.nodeIDAndTypeName,
+			Location:     location,
+			SelectionSet: selectionSet,
+			Fragments:    locationFragments[location],
 		}
 	}
 
@@ -558,12 +555,11 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				}
 
 				ctx.Gateway.logger.Debug("found a thing with a selection. extracting to ", insertionPoint, ". Parent insertion", config.insertionPoint)
-				var nodeIdentity ast.SelectionSet
 				// Only the gateway's own `Query.node` needs its identity fields (id and
 				// __typename) preserved
 				if config.parentType == typeNameQuery && selection.Name == "node" && config.parentLocation == internalSchemaLocation {
 					// save node identity fields before getting recursively removed
-					nodeIdentity = p.findNodeFields(ctx, config, selection.SelectionSet)
+					wrapper = append(wrapper, p.findNodeFields(ctx, config, selection.SelectionSet)...)
 				}
 				fieldTypeName := coreFieldType(selection).Name()
 				var subSelectionTypes map[string]ast.SelectionSet
@@ -592,11 +588,10 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 						parentLocation: config.parentLocation,
 						plan:           config.plan,
 
-						parentType:        typeName,
-						selection:         selectionSet,
-						insertionPoint:    insertionPoint,
-						wrapper:           wrapper,
-						nodeIDAndTypeName: nodeIdentity,
+						parentType:     typeName,
+						selection:      selectionSet,
+						insertionPoint: insertionPoint,
+						wrapper:        wrapper,
 					})
 					if err != nil {
 						return nil, err
@@ -657,9 +652,8 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				insertionPoint: config.insertionPoint,
 				plan:           config.plan,
 
-				parentType:        defn.TypeCondition,
-				selection:         defn.SelectionSet,
-				nodeIDAndTypeName: config.nodeIDAndTypeName,
+				parentType: defn.TypeCondition,
+				selection:  defn.SelectionSet,
 				// Children should now be wrapped by this fragment and nothing else
 				wrapper: ast.SelectionSet{selection},
 			})
@@ -700,10 +694,9 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 				plan:           config.plan,
 				insertionPoint: config.insertionPoint,
 
-				parentType:        selection.TypeCondition,
-				selection:         selection.SelectionSet,
-				wrapper:           newWrapper,
-				nodeIDAndTypeName: config.nodeIDAndTypeName,
+				parentType: selection.TypeCondition,
+				selection:  selection.SelectionSet,
+				wrapper:    newWrapper,
 			})
 			if err != nil {
 				return nil, err
@@ -731,6 +724,9 @@ func (p *MinQueriesPlanner) wrapSelectionSet(ctx *PlanningContext, config *extra
 		var newSelection ast.Selection
 
 		switch wrap := wrap.(type) {
+		case *ast.Field:
+			// skip processing the field, and it will be handled after the selection extraction within generatePlans
+			continue
 		case *ast.InlineFragment:
 			// create a new inline fragment
 			newSelection = &ast.InlineFragment{
@@ -762,6 +758,11 @@ func (p *MinQueriesPlanner) wrapSelectionSet(ctx *PlanningContext, config *extra
 
 		// this is the new inner-most selection
 		innerSelection = newSelection
+	}
+
+	// if no fragments found then we don't need to wrap anything
+	if selection == nil {
+		return selectionSet, nil
 	}
 
 	if sel, ok := innerSelection.(*ast.InlineFragment); ok {

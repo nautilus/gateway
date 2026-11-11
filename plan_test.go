@@ -1844,7 +1844,7 @@ func TestPlanQuery_inlineFragmentFieldsRespectParentLocation(t *testing.T) {
 	step := rootSteps[0]
 	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
 	assert.Equal(t, location1, queryer.URL(), "field bar on inline fragment should be routed to location1")
-	assert.Empty(t, step.Then, "should have no dependent sub-steps — all fields should stay on location1")
+	assert.Empty(t, step.Then, "should have no dependent sub-steps â€” all fields should stay on location1")
 }
 
 func TestPlanQuery_unionShouldNotBeQueriedOnOtherServices(t *testing.T) {
@@ -2273,24 +2273,6 @@ func assertPlannedQueries(t *testing.T, expected map[string][]string, plans Quer
 	assert.Equal(t, expected, actual)
 }
 
-func allSteps(rootStep *QueryPlanStep) iter.Seq[*QueryPlanStep] {
-	return func(yield func(*QueryPlanStep) bool) {
-		allStepsRecursive(rootStep, yield)
-	}
-}
-
-func allStepsRecursive(step *QueryPlanStep, yield func(*QueryPlanStep) bool) bool {
-	if !yield(step) {
-		return false
-	}
-	for _, thenStep := range step.Then {
-		if !allStepsRecursive(thenStep, yield) {
-			return false
-		}
-	}
-	return true
-}
-
 func TestPlanQuery_completeNodeFields(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -2423,37 +2405,63 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 			rootSteps := plans[0].RootStep.Then
 			require.Len(t, rootSteps, 1, "should have exactly one root step")
 			rootStep := rootSteps[0]
-			require.Same(t, planningContext.Gateway, rootStep.Queryer)
-			assert.Equal(t, "Query", rootStep.ParentType)
-			
-			// Foo has sub-fields on two different locations
-			require.Len(t, rootStep.Then, 2)
 
-			// loop through all the remote steps and check for query match
-			expectedFields := map[string]string{location0: "bar { name }", location1: "baz { name }"}
-			for _, step := range rootStep.Then {
-				url := step.Queryer.(*graphql.SingleRequestQueryer).URL()
-				t.Logf("Found step on %q: %s", url, step.QueryString)
-				require.Contains(t, expectedFields, url)
-				assert.Equal(t, "Node", step.ParentType)
-				assert.Empty(t, step.Then)
+			for step := range allSteps(rootStep) {
+				if step == rootStep {
+					// root step check
+					require.Same(t, planningContext.Gateway, step.Queryer)
+					assert.Equal(t, "Query", step.ParentType)
+					require.Len(t, step.Then, 2)
+				} else {
+					// remote step check
+					expectedFields := map[string]string{
+						location0: "bar { name }",
+						location1: "baz { name }",
+					}
+					queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer)
+					require.True(t, ok, "expected a remote step")
+					url := queryer.URL()
+					t.Logf("Found step on %q: %s", url, step.QueryString)
+					require.Contains(t, expectedFields, url)
+					assert.Equal(t, "Node", step.ParentType)
+					assert.Empty(t, step.Then)
 
-				expectedVariables := "$id: ID!"
-				if tc.variables != "" {
-					expectedVariables = "$showType: Boolean!, $id: ID!"
-					assert.Contains(t, step.Variables, "showType")
+					expectedVariables := "$id: ID!"
+					if tc.variables != "" {
+						expectedVariables = "$showType: Boolean!, $id: ID!"
+						assert.Contains(t, step.Variables, "showType")
+					}
+					expectedQuery := fmt.Sprintf(`
+						query (%s) {
+							node(id: $id) {
+								... on Node {
+									... on Foo { %s }
+									%s
+								}
+							}
+						}`, expectedVariables, expectedFields[url], tc.expectedIdentity)
+					assert.Equal(t, strings.Fields(expectedQuery), strings.Fields(step.QueryString), step.QueryString)
 				}
-				expectedQuery := fmt.Sprintf(`
-     query (%s) {
-      node(id: $id) {
-       ... on Node {
-        ... on Foo { %s }
-        %s
-       }
-      }
-     }`, expectedVariables, expectedFields[url], tc.expectedIdentity)
-				assert.Equal(t, strings.Fields(expectedQuery), strings.Fields(step.QueryString), step.QueryString)
 			}
 		})
 	}
 }
+
+func allSteps(rootStep *QueryPlanStep) iter.Seq[*QueryPlanStep] {
+	return func(yield func(*QueryPlanStep) bool) {
+		allStepsRecursive(rootStep, yield)
+	}
+}
+
+func allStepsRecursive(step *QueryPlanStep, yield func(*QueryPlanStep) bool) bool {
+	if !yield(step) {
+		return false
+	}
+	for _, thenStep := range step.Then {
+		if !allStepsRecursive(thenStep, yield) {
+			return false
+		}
+	}
+	return true
+}
+
