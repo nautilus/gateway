@@ -1047,7 +1047,7 @@ func (p *MinQueriesPlanner) findNodeFields(ctx *PlanningContext, config *extract
 		switch selected := selected.(type) {
 		// Add each matching field to the result
 		case *ast.Field:
-			if selected.Name == "id" || selected.Name == "__typename" {
+			if selected.Name == "id" || selected.Name == typenameField {
 				field := *selected
 				result = append(result, &field)
 			}
