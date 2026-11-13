@@ -2255,27 +2255,6 @@ func TestPlanQuery_unionAllowsInlineFragmentWithoutTypeCondition(t *testing.T) {
 	}, plans)
 }
 
-// assertPlannedQueries compares the queries planned for each downstream URL.
-func assertPlannedQueries(t *testing.T, expected map[string][]string, plans QueryPlanList) {
-	t.Helper()
-	actual := map[string][]string{}
-	for _, plan := range plans {
-		// the root step only fans out to its children and never queries a service itself
-		for _, rootChild := range plan.RootStep.Then {
-			for step := range allSteps(rootChild) {
-				if _, local := step.Queryer.(*Gateway); local {
-					continue
-				}
-				queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer)
-				require.True(t, ok, "unexpected queryer %T", step.Queryer)
-				url := queryer.URL()
-				actual[url] = append(actual[url], step.QueryString)
-			}
-		}
-	}
-	assert.Equal(t, expected, actual, "planned queries should match the expected queries for each service URL")
-}
-
 func TestPlanQuery_completeNodeFields(t *testing.T) {
 	t.Parallel()
 	const (
@@ -2699,6 +2678,27 @@ fragment Identity on Node {
 			assertPlannedQueries(t, tc.expectedQueries, plans)
 		})
 	}
+}
+
+// assertPlannedQueries compares the queries planned for each downstream URL.
+func assertPlannedQueries(t *testing.T, expected map[string][]string, plans QueryPlanList) {
+	t.Helper()
+	actual := map[string][]string{}
+	for _, plan := range plans {
+		// the root step only fans out to its children and never queries a service itself
+		for _, rootChild := range plan.RootStep.Then {
+			for step := range allSteps(rootChild) {
+				if _, local := step.Queryer.(*Gateway); local {
+					continue
+				}
+				queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer)
+				require.True(t, ok, "unexpected queryer %T", step.Queryer)
+				url := queryer.URL()
+				actual[url] = append(actual[url], step.QueryString)
+			}
+		}
+	}
+	assert.Equal(t, expected, actual, "planned queries should match the expected queries for each service URL")
 }
 
 func allSteps(rootStep *QueryPlanStep) iter.Seq[*QueryPlanStep] {
