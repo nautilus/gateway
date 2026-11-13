@@ -2680,7 +2680,9 @@ fragment Identity on Node {
 	}
 }
 
-// assertPlannedQueries compares the queries planned for each downstream URL.
+// assertPlannedQueries asserts that executing the plans sends exactly the expected queries to each
+// downstream service (keyed by URL) and nothing else. Queries are compared ignoring the order of
+// selections within a selection set, because the planner groups union sub-selections by type in a map.
 func assertPlannedQueries(t *testing.T, expected map[string][]string, plans QueryPlanList) {
 	t.Helper()
 	actual := map[string][]string{}
@@ -2689,7 +2691,7 @@ func assertPlannedQueries(t *testing.T, expected map[string][]string, plans Quer
 		for _, rootChild := range plan.RootStep.Then {
 			for step := range allSteps(rootChild) {
 				if _, local := step.Queryer.(*Gateway); local {
-					continue
+					continue // skip any local gateway step, which does not query a downstream service
 				}
 				queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer)
 				require.True(t, ok, "unexpected queryer %T", step.Queryer)
