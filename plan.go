@@ -242,7 +242,6 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 					// we have a selection set from one of the root operation fields in the same location
 					// so add it to the query we are sending to the service
 					step.SelectionSet = newSelection
-
 				}
 
 				// if the id or __typename fields are requested under query.node, we need to make sure they are included in the query sent to the remote service
