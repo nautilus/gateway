@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,6 +18,17 @@ import (
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
+
+func must[Value any](value Value, err error) Value {
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
+func toPointer[Value any](value Value) *Value {
+	return &value
+}
 
 type schemaTableRow struct {
 	location string
@@ -1183,4 +1196,142 @@ func TestSingleObjectOnlyRequestingNonIDFieldScrubsIDs(t *testing.T) {
 			},
 		},
 	}, response, "Response must not contain ID fields and not fail while scrubbing them.")
+}
+
+// TestIssue100 verifies the fix for https://github.com/nautilus/gateway/issues/100
+func TestIssue100(t *testing.T) {
+	t.Parallel()
+	const (
+		service1URL = "service-url-1"
+		schemaStr1  = `
+			type Parent {
+				id: ID!
+				child: Child!
+			}
+			type Child implements Node {
+				id: ID!
+			}
+			interface Node {
+				id: ID!
+			}
+			type Query {
+				parents: [Parent]!
+				node(id: ID!): Node
+			}
+		`
+		service2URL = "service-url-2"
+		schemaStr2  = `
+			type Child implements Node {
+				id: ID!
+				name: String!
+			}
+			interface Node {
+				id: ID!
+			}
+			type Query {
+				node(id: ID!): Node
+			}
+		`
+
+		query = `
+			query {
+				parents {
+					child {
+						id
+						name
+					}
+				}
+			}
+		`
+		service1Query = `
+query {
+	parents {
+		child {
+			id
+		}
+	}
+}
+		`
+		service2Query = `
+query($id: ID!) {
+	node(id: $id) {
+		... on Child {
+			name
+		}
+	}
+}
+        `
+	)
+	var serviceCalls []string
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: must(graphql.LoadSchema(schemaStr1)), URL: service1URL},
+		{Schema: must(graphql.LoadSchema(schemaStr2)), URL: service2URL},
+	}, WithQueryerFactory(toPointer(QueryerFactory(func(_ *PlanningContext, url string) graphql.Queryer {
+		return graphql.QueryerFunc(func(input *graphql.QueryInput) (any, error) {
+			serviceCalls = append(serviceCalls, url)
+			if url == service1URL {
+				assert.Empty(t, input.Variables)
+				assert.Equal(t, strings.TrimSpace(service1Query), strings.TrimSpace(input.Query), "Unexpected query to service1")
+				return map[string]any{
+					"parents": []any{
+						map[string]any{"id": "some-child-id-1"},
+						map[string]any{"id": "some-child-id-2"},
+					},
+				}, nil
+			} else {
+				assert.Equal(t, []string{"id"}, slices.Collect(maps.Keys(input.Variables)))
+				assert.Equal(t, strings.TrimSpace(service2Query), strings.TrimSpace(input.Query), "Unexpected query to service2")
+				id, _ := input.Variables["id"].(string)
+				switch id {
+				case "some-child-id-1":
+					return map[string]any{
+						"node": map[string]any{
+							"name": "some-child-name-1",
+						},
+					}, nil
+				case "some-child-id-2":
+					return map[string]any{
+							"node": map[string]any{
+								"name": nil,
+							},
+						}, graphql.ErrorList{
+							&graphql.Error{
+								Message: "missing child 2 name",
+								Path:    []any{"node", "name"},
+							},
+						}
+
+				default:
+					t.Error("Unexpected child ID:", id)
+					return nil, errors.New("unexpected child ID")
+				}
+			}
+		})
+	}))))
+	require.NoError(t, err)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`
+		{
+			"query": %q
+		}
+	`, query)))
+	resp := httptest.NewRecorder()
+	gateway.GraphQLHandler(resp, req)
+	t.Log("Response:", resp.Body.String())
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, []string{service1URL, service2URL, service2URL}, serviceCalls)
+
+	var response map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	assert.Equal(t, map[string]any{
+		"data": map[string]any{
+			"parents": []any{
+				map[string]any{
+					"id":   "some-child-id-1",
+					"name": "some-child-name-1",
+				},
+				nil, // nil out from error
+			},
+		},
+	}, response)
 }
