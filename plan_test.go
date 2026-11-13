@@ -2255,9 +2255,7 @@ func TestPlanQuery_unionAllowsInlineFragmentWithoutTypeCondition(t *testing.T) {
 	}, plans)
 }
 
-// assertPlannedQueries asserts that executing the plans sends exactly the expected queries to each
-// downstream service (keyed by URL) and nothing else. Queries are compared ignoring the order of
-// selections within a selection set, because the planner groups union sub-selections by type in a map.
+// assertPlannedQueries compares the queries planned for each downstream URL.
 func assertPlannedQueries(t *testing.T, expected map[string][]string, plans QueryPlanList) {
 	t.Helper()
 	actual := map[string][]string{}
@@ -2265,79 +2263,361 @@ func assertPlannedQueries(t *testing.T, expected map[string][]string, plans Quer
 		// the root step only fans out to its children and never queries a service itself
 		for _, rootChild := range plan.RootStep.Then {
 			for step := range allSteps(rootChild) {
-				url := step.Queryer.(*graphql.SingleRequestQueryer).URL()
+				if _, local := step.Queryer.(*Gateway); local {
+					continue
+				}
+				queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer)
+				require.True(t, ok, "unexpected queryer %T", step.Queryer)
+				url := queryer.URL()
 				actual[url] = append(actual[url], step.QueryString)
 			}
 		}
 	}
-	assert.Equal(t, expected, actual)
+	assert.Equal(t, expected, actual, "planned queries should match the expected queries for each service URL")
 }
 
 func TestPlanQuery_completeNodeFields(t *testing.T) {
 	t.Parallel()
+	const (
+		location0 = "url0"
+		location1 = "url1"
+	)
 	tests := []struct {
-		name             string
-		variables        string
-		selection        string
-		fragments        string
-		expectedIdentity string
+		name            string
+		query           string
+		expectedQueries map[string][]string
 	}{
 		{
-			name:             "id and typename",
-			selection:        "id __typename",
-			expectedIdentity: "id __typename",
+			name: "include id and __typename in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		id
+		__typename
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				bar {
+					name
+				}
+			}
+			id
+			__typename
+		}
+	}
+}
+`},
+				location1: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				baz {
+					name
+				}
+			}
+			id
+			__typename
+		}
+	}
+}
+`},
+			},
 		},
 		{
-			name:             "id only",
-			selection:        "id",
-			expectedIdentity: "id",
+			name: "include id and omits __typename in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		id
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				bar {
+					name
+				}
+			}
+			id
+		}
+	}
+}
+`},
+				location1: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				baz {
+					name
+				}
+			}
+			id
+		}
+	}
+}
+`},
+			},
 		},
 		{
-			name:             "typename only",
-			selection:        "__typename",
-			expectedIdentity: "__typename",
+			name: "include __typename and omits the id in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		__typename
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				bar {
+					name
+				}
+			}
+			__typename
+		}
+	}
+}
+`},
+				location1: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				baz {
+					name
+				}
+			}
+			__typename
+		}
+	}
+}
+`},
+			},
 		},
 		{
-			name:             "typename with variable",
-			variables:        ", $showType: Boolean!",
-			selection:        "__typename @include(if: $showType)",
-			expectedIdentity: "__typename @include(if: $showType)",
+			name: "keep @include(if: $showType) on __typename in remote queries",
+			query: `query($showType: Boolean!, $id: ID!) {
+	node(id: $id) {
+		__typename @include(if: $showType)
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				location0: {`query ($showType: Boolean!, $id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				bar {
+					name
+				}
+			}
+			__typename @include(if: $showType)
+		}
+	}
+}
+`},
+				location1: {`query ($showType: Boolean!, $id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				baz {
+					name
+				}
+			}
+			__typename @include(if: $showType)
+		}
+	}
+}
+`},
+			},
 		},
 		{
-			name:             "aliases",
-			selection:        "key: id kind: __typename",
-			expectedIdentity: "key: id kind: __typename",
+			name: "keep aliases for id and __typename in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		key: id
+		kind: __typename
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				bar {
+					name
+				}
+			}
+			key: id
+			kind: __typename
+		}
+	}
+}
+`},
+				location1: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				baz {
+					name
+				}
+			}
+			key: id
+			kind: __typename
+		}
+	}
+}
+`},
+			},
 		},
 		{
-			name:             "inline Node fragment",
-			selection:        "... on Node { id __typename }",
-			expectedIdentity: "id __typename",
+			name: "include id and __typename from an inline Node fragment in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			id
+			__typename
+		}
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				bar {
+					name
+				}
+			}
+			id
+			__typename
+		}
+	}
+}
+`},
+				location1: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				baz {
+					name
+				}
+			}
+			id
+			__typename
+		}
+	}
+}
+`},
+			},
 		},
 		{
-			name:             "named Node fragment",
-			selection:        "...Identity",
-			fragments:        "fragment Identity on Node { id __typename }",
-			expectedIdentity: "id __typename",
+			name: "include id and __typename from an named Node fragment in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		...Identity
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}
+
+fragment Identity on Node {
+	id
+	__typename
+}`,
+			expectedQueries: map[string][]string{
+				location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				bar {
+					name
+				}
+			}
+			id
+			__typename
+		}
+	}
+}
+`},
+				location1: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... on Foo {
+				baz {
+					name
+				}
+			}
+			id
+			__typename
+		}
+	}
+}
+`},
+			},
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			query := fmt.Sprintf(`
-				query($id: ID!%s) {
-					node(id: $id) {
-						%s
-						... on Foo {
-							bar {
-								name
-							}
-							baz {
-								name
-							}
-						}
-					}
-				}
-				%s`, tc.variables, tc.selection, tc.fragments)
+			// a merged schema
 			schema, err := graphql.LoadSchema(`
 				type Query {
 					node(id: ID!): Node
@@ -2363,29 +2643,25 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 					name: String!
 				}
 			`)
-			require.NoError(t, err)
+			require.NoError(t, err, "test schema should load")
 
-			const (
-				location0 = "url0"
-				location1 = "url1"
-			)
 			// the location map for fields for this query
 			locations := FieldURLMap{}
-			// local resolver
+			// gateway location
 			locations.RegisterURL(typeNameQuery, "node", internalSchemaLocation)
 			locations.RegisterURL("Node", "id", internalSchemaLocation)
 			locations.RegisterURL("Node", "__typename", internalSchemaLocation)
-			// location0 Bar resolver
+			// remote location0
 			locations.RegisterURL("Foo", "bar", location0)
 			locations.RegisterURL("Bar", "id", location0)
 			locations.RegisterURL("Bar", "__typename", location0)
 			locations.RegisterURL("Bar", "name", location0)
-			// location1 Baz resolver
+			// remote location1
 			locations.RegisterURL("Baz", "id", location1)
 			locations.RegisterURL("Baz", "__typename", location1)
 			locations.RegisterURL("Foo", "baz", location1)
 			locations.RegisterURL("Baz", "name", location1)
-			// Both foo resolver
+			// exist in both remote locations
 			for _, url := range []string{location0, location1} {
 				locations.RegisterURL("Foo", "id", url)
 				locations.RegisterURL("Foo", "__typename", url)
@@ -2393,7 +2669,7 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 
 			// plan the query
 			planningContext := &PlanningContext{
-				Query:     query,
+				Query:     tc.query,
 				Schema:    schema,
 				Locations: locations,
 				Gateway:   &Gateway{logger: &DefaultLogger{}},
@@ -2402,47 +2678,25 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, plans, 1)
 
+			// root step for gateway's owned node resolver
 			rootSteps := plans[0].RootStep.Then
 			require.Len(t, rootSteps, 1, "should have exactly one root step")
 			rootStep := rootSteps[0]
+			assert.Equal(t, typeNameQuery, rootStep.ParentType)
+			_, ok := rootStep.Queryer.(*Gateway)
+			require.True(t, ok, "expected a local gateway step")
+			require.Len(t, rootStep.Then, 2, "the local step should have one child for bar and one for baz")
 
-			for step := range allSteps(rootStep) {
-				if step == rootStep {
-					// root step check
-					require.Same(t, planningContext.Gateway, step.Queryer)
-					assert.Equal(t, "Query", step.ParentType)
-					require.Len(t, step.Then, 2)
-				} else {
-					// remote step check
-					expectedFields := map[string]string{
-						location0: "bar { name }",
-						location1: "baz { name }",
-					}
-					queryer, ok := step.Queryer.(*graphql.SingleRequestQueryer)
-					require.True(t, ok, "expected a remote step")
-					url := queryer.URL()
-					t.Logf("Found step on %q: %s", url, step.QueryString)
-					require.Contains(t, expectedFields, url)
-					assert.Equal(t, "Node", step.ParentType)
-					assert.Empty(t, step.Then)
-
-					expectedVariables := "$id: ID!"
-					if tc.variables != "" {
-						expectedVariables = "$showType: Boolean!, $id: ID!"
-						assert.Contains(t, step.Variables, "showType")
-					}
-					expectedQuery := fmt.Sprintf(`
-						query (%s) {
-							node(id: $id) {
-								... on Node {
-									... on Foo { %s }
-									%s
-								}
-							}
-						}`, expectedVariables, expectedFields[url], tc.expectedIdentity)
-					assert.Equal(t, strings.Fields(expectedQuery), strings.Fields(step.QueryString), step.QueryString)
-				}
+			// remote sub-steps
+			for _, step := range rootStep.Then {
+				assert.Equal(t, "Node", step.ParentType)
+				_, ok := step.Queryer.(*graphql.SingleRequestQueryer)
+				require.True(t, ok, "expected a remote step")
+				assert.Empty(t, step.Then, "each remote step should have no further children")
 			}
+
+			// check for query sting match
+			assertPlannedQueries(t, tc.expectedQueries, plans)
 		})
 	}
 }
@@ -2464,4 +2718,3 @@ func allStepsRecursive(step *QueryPlanStep, yield func(*QueryPlanStep) bool) boo
 	}
 	return true
 }
-
