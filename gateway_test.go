@@ -770,14 +770,14 @@ type Query {
 	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
 		return graphql.QueryerFunc(func(*graphql.QueryInput) (interface{}, error) {
 			return map[string]interface{}{
-					"foo": "foo",
-					"bar": nil,
-				}, graphql.ErrorList{
-					&graphql.Error{
-						Message: "bar is broken",
-						Path:    []interface{}{"bar"},
-					},
-				}
+				"foo": "foo",
+				"bar": nil,
+			}, graphql.ErrorList{
+				&graphql.Error{
+					Message: "bar is broken",
+					Path:    []interface{}{"bar"},
+				},
+			}
 		})
 	})
 	gateway, err := New([]*graphql.RemoteSchema{
@@ -819,13 +819,13 @@ type Query {
 	queryerFactory := QueryerFactory(func(*PlanningContext, string) graphql.Queryer {
 		return graphql.QueryerFunc(func(*graphql.QueryInput) (interface{}, error) {
 			return map[string]interface{}{
-					"foo": nil,
-				}, graphql.ErrorList{
-					&graphql.Error{
-						Message: "foo is broken",
-						Path:    []interface{}{"foo"},
-					},
-				}
+				"foo": nil,
+			}, graphql.ErrorList{
+				&graphql.Error{
+					Message: "foo is broken",
+					Path:    []interface{}{"foo"},
+				},
+			}
 		})
 	})
 	executedResponseMiddleware := false
@@ -915,18 +915,18 @@ type Bar implements Node {
 				}, nil
 			}
 			return map[string]interface{}{
-					"foo": map[string]interface{}{
-						"bar": map[string]interface{}{
-							"id": "bar-id",
-						},
-						"boo": nil,
+				"foo": map[string]interface{}{
+					"bar": map[string]interface{}{
+						"id": "bar-id",
 					},
-				}, graphql.ErrorList{
-					&graphql.Error{
-						Message: "boo is broken",
-						Path:    []interface{}{"foo", "boo"},
-					},
-				}
+					"boo": nil,
+				},
+			}, graphql.ErrorList{
+				&graphql.Error{
+					Message: "boo is broken",
+					Path:    []interface{}{"foo", "boo"},
+				},
+			}
 		})
 	})
 	gateway, err := New([]*graphql.RemoteSchema{
