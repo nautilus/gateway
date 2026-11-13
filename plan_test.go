@@ -2592,6 +2592,63 @@ fragment Identity on Node {
 `},
 			},
 		},
+		{
+			name: "include id and __typename in remote queries when a named fragment on Query",
+			query: `query($id: ID!) {
+	...Boo
+}
+
+fragment Boo on Query {
+	node(id: $id) {
+		id
+		__typename
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				location0: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... Boo
+			id
+			__typename
+		}
+	}
+}
+fragment Boo on Node {
+	... on Foo {
+		bar {
+			name
+		}
+	}
+}
+`},
+				location1: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			... Boo
+			id
+			__typename
+		}
+	}
+}
+fragment Boo on Node {
+	... on Foo {
+		baz {
+			name
+		}
+	}
+}
+`},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
