@@ -807,7 +807,7 @@ func TestMergeSchema_interfaces(t *testing.T) {
 		}
 
 		assert.ElementsMatch(t, []string{"Foo", "User", "NotUser"}, possibleTypes("Foo"))
-		assert.ElementsMatch(t, []string{"Node", "Foo", "User", "NotUser"}, possibleTypes("Node"))
+		assert.ElementsMatch(t, []string{typeNameNode, "Foo", "User", "NotUser"}, possibleTypes(typeNameNode))
 	})
 
 	// the table we are testing
@@ -953,7 +953,8 @@ func TestMergeSchemaDifferentSetsOfInterfaces(t *testing.T) {
 			id: ID!
 			foo: String!
 		}
-	`)
+	`,
+	)
 	assert.Nil(t, err)
 	schema2, err := graphql.LoadSchema(
 		`
@@ -975,7 +976,8 @@ func TestMergeSchemaDifferentSetsOfInterfaces(t *testing.T) {
 			bar: String!
 			created_at: String!
 		}
-	`)
+	`,
+	)
 	assert.Nil(t, err)
 
 	_, err = New([]*graphql.RemoteSchema{

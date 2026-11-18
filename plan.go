@@ -250,7 +250,7 @@ func (p *MinQueriesPlanner) generatePlans(ctx *PlanningContext, query *ast.Query
 				// we need to grab the list of variable definitions
 				variableDefs := ast.VariableDefinitionList{}
 				// we need to grab the variable definitions and values for each variable in the step
-				for variable := range step.Variables {
+				for _, variable := range slices.Sorted(maps.Keys(step.Variables)) {
 					// add the definition
 					variableDefs = append(variableDefs, plan.Operation.VariableDefinitions.ForName(variable))
 				}
@@ -692,7 +692,7 @@ func (p *MinQueriesPlanner) extractSelection(ctx *PlanningContext, config *extra
 func (p *MinQueriesPlanner) wrapSelectionSet(ctx *PlanningContext, config *extractSelectionConfig, locationFragments map[string]ast.FragmentDefinitionList, location string, selectionSet ast.SelectionSet) (ast.SelectionSet, error) {
 	ctx.Gateway.logger.Debug("wrapping selection", config.wrapper)
 
-	// pointers required to nest the
+	// pointers required to nest the fragment wrappers
 	var selection ast.Selection
 	var innerSelection ast.Selection
 
@@ -1083,6 +1083,14 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 		//	 		}
 		//	 	}
 		// }
+		if parentType != typeNameNode {
+			selectionSet = ast.SelectionSet{
+				&ast.InlineFragment{
+					TypeCondition: parentType,
+					SelectionSet:  selectionSet,
+				},
+			}
+		}
 		operation.SelectionSet = ast.SelectionSet{
 			&ast.Field{
 				Name: "node",
@@ -1095,12 +1103,7 @@ func plannerBuildQuery(ctx *PlanningContext, operationName, parentType string, v
 						},
 					},
 				},
-				SelectionSet: ast.SelectionSet{
-					&ast.InlineFragment{
-						TypeCondition: parentType,
-						SelectionSet:  selectionSet,
-					},
-				},
+				SelectionSet: selectionSet,
 			},
 		}
 
