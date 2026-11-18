@@ -1844,7 +1844,7 @@ func TestPlanQuery_inlineFragmentFieldsRespectParentLocation(t *testing.T) {
 	step := rootSteps[0]
 	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
 	assert.Equal(t, location1, queryer.URL(), "field bar on inline fragment should be routed to location1")
-	assert.Empty(t, step.Then, "should have no dependent sub-steps â€” all fields should stay on location1")
+	assert.Empty(t, step.Then, "should have no dependent sub-steps - all fields should stay on location1")
 }
 
 func TestPlanQuery_unionShouldNotBeQueriedOnOtherServices(t *testing.T) {
