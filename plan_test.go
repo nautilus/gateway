@@ -2260,6 +2260,7 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 	const (
 		location0 = "url0"
 		location1 = "url1"
+		location2 = "url2"
 	)
 	tests := []struct {
 		name                string
@@ -2268,7 +2269,7 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 		expectedRemoteSteps int
 	}{
 		{
-			name: "include id and __typename in remote queries",
+			name: "include id and __typename in remote queries - Foo",
 			query: `query($id: ID!) {
 	node(id: $id) {
 		id
@@ -2315,7 +2316,7 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 			},
 		},
 		{
-			name: "include id and omits __typename in remote queries",
+			name: "include id and omits __typename in remote queries - Foo",
 			query: `query($id: ID!) {
 	node(id: $id) {
 		id
@@ -2360,7 +2361,7 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 			},
 		},
 		{
-			name: "include __typename and omits the id in remote queries",
+			name: "include __typename and omits the id in remote queries - Foo",
 			query: `query($id: ID!) {
 	node(id: $id) {
 		__typename
@@ -2405,7 +2406,7 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 			},
 		},
 		{
-			name: "keep @include(if: $showType) on __typename in remote queries",
+			name: "keep @include(if: $showType) on __typename in remote queries - Foo",
 			query: `query($id: ID!, $showType: Boolean!) {
 	node(id: $id) {
 		__typename @include(if: $showType)
@@ -2450,7 +2451,7 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 			},
 		},
 		{
-			name: "keep aliases for id and __typename in remote queries",
+			name: "keep aliases for id and __typename in remote queries - Foo",
 			query: `query($id: ID!) {
 	node(id: $id) {
 		key: id
@@ -2497,7 +2498,7 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 			},
 		},
 		{
-			name: "include id and __typename from an inline Node fragment in remote queries",
+			name: "include id and __typename from an inline Node fragment in remote queries - Foo",
 			query: `query($id: ID!) {
 	node(id: $id) {
 		... on Node {
@@ -2550,7 +2551,7 @@ func TestPlanQuery_completeNodeFields(t *testing.T) {
 			},
 		},
 		{
-			name: "include id and __typename from an named Node fragment in remote queries",
+			name: "include id and __typename from an named Node fragment in remote queries - Foo",
 			query: `query($id: ID!) {
 	node(id: $id) {
 		...Identity
@@ -2620,7 +2621,7 @@ fragment Identity on Node {
 			},
 		},
 		{
-			name: "include id and __typename in remote queries when a named fragment on Query",
+			name: "include id and __typename in remote queries when a named fragment on Query - Foo",
 			query: `query($id: ID!) {
 	...Boo
 }
@@ -2678,6 +2679,42 @@ fragment Boo on Node {
 `},
 			},
 		},
+		{
+			name: "include id and __typename in remote queries - Qux",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		id
+		__typename
+		... on Qux {
+			name
+		}
+	}
+}`,
+			expectedRemoteSteps: 2,
+			expectedQueries: map[string][]string{
+				internalSchemaLocation: {`query ($id: ID!) {
+	node(id: $id) {
+		id
+		id
+	}
+}
+`},
+				location0: {`query ($id: ID!) {
+	node(id: $id) {
+		__typename
+	}
+}
+`},
+				location2: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Qux {
+			name
+		}
+	}
+}
+`},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2722,10 +2759,27 @@ fragment Boo on Node {
 				}
 			`)
 			require.NoError(t, err)
+			schemaLocation2, err := graphql.LoadSchema(`
+				type Query {
+					node(id: ID!): Node
+				}
+
+				interface Node {
+					id: ID!
+				}
+
+				type Qux implements Node {
+					id: ID!
+					name: String!
+				}
+
+			`)
+			require.NoError(t, err)
 			schemas := []*graphql.RemoteSchema{
 				// schema differences aren't important for this test
 				{URL: location0, Schema: schemaLocation0},
 				{URL: location1, Schema: schemaLocation1},
+				{URL: location2, Schema: schemaLocation2},
 			}
 			gateway, err := New(schemas)
 			require.NoError(t, err)
