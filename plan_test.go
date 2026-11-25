@@ -3,7 +3,6 @@ package gateway
 import (
 	"fmt"
 	"iter"
-	"sort"
 	"strings"
 	"testing"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
-	"github.com/vektah/gqlparser/v2/parser"
 )
 
 func TestPlanQuery_singleRootField(t *testing.T) {
@@ -255,7 +253,8 @@ func TestPlanQuery_includeFragmentsDifferentLocation(t *testing.T) {
 			Schema:    schema,
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
+		},
+	)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -343,7 +342,8 @@ func TestPlanQuery_includeInlineFragments(t *testing.T) {
 			Schema:    schema,
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
+		},
+	)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -438,7 +438,8 @@ func TestPlanQuery_nestedInlineFragmentsSameLocation(t *testing.T) {
 			Schema:    schema,
 			Locations: locations,
 			Gateway:   &Gateway{logger: &DefaultLogger{}},
-		})
+		},
+	)
 	// if something went wrong planning the query
 	if err != nil {
 		// the test is over
@@ -1155,7 +1156,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	t.Run("Url1 Step", func(t *testing.T) {
 		t.Parallel()
 		// the url1 step should have Node as the parent type
-		assert.Equal(t, "Node", url1Step.ParentType)
+		assert.Equal(t, typeNameNode, url1Step.ParentType)
 		// there should be one selection set
 		if !assert.Len(t, url1Step.SelectionSet, 1) {
 			return
@@ -1178,7 +1179,7 @@ func TestPlanQuery_nodeField(t *testing.T) {
 	t.Run("Url2 Step", func(t *testing.T) {
 		t.Parallel()
 		// the url1 step should have Node as the parent type
-		assert.Equal(t, "Node", url2Step.ParentType)
+		assert.Equal(t, typeNameNode, url2Step.ParentType)
 		// there should be one selection set
 		if !assert.Len(t, url2Step.SelectionSet, 1) {
 			return
@@ -1492,7 +1493,8 @@ func TestPlanQuery_singleFragmentMultipleLocations(t *testing.T) {
 	assert.Len(t, secondStep.Then, 0)
 
 	// there should be one selection on the step
-	if !assert.Len(t, secondStep.SelectionSet, 1,
+	if !assert.Len(
+		t, secondStep.SelectionSet, 1,
 		"Second step had the wrong number of selections %v", graphql.FormatSelectionSet(secondStep.SelectionSet),
 	) {
 		return
@@ -2144,7 +2146,7 @@ func TestPlanQuery_inlineFragmentFieldsRespectParentLocation(t *testing.T) {
 	step := rootSteps[0]
 	queryer := step.Queryer.(*graphql.SingleRequestQueryer)
 	assert.Equal(t, location1, queryer.URL(), "field bar on inline fragment should be routed to location1")
-	assert.Empty(t, step.Then, "should have no dependent sub-steps — all fields should stay on location1")
+	assert.Empty(t, step.Then, "should have no dependent sub-steps - all fields should stay on location1")
 }
 
 func TestPlanQuery_unionShouldNotBeQueriedOnOtherServices(t *testing.T) {
@@ -2175,7 +2177,7 @@ func TestPlanQuery_unionShouldNotBeQueriedOnOtherServices(t *testing.T) {
 	locations := FieldURLMap{}
 	// location0 registers all shared types (Bar, Baz) but no unions
 	locations.RegisterURL(typeNameQuery, "node", location0)
-	locations.RegisterURL("Node", "id", location0)
+	locations.RegisterURL(typeNameNode, "id", location0)
 	locations.RegisterURL("Bar", "id", location0)
 	locations.RegisterURL("Bar", "bar", location0) // unique to location0
 	locations.RegisterURL("Baz", "id", location0)
@@ -2183,7 +2185,7 @@ func TestPlanQuery_unionShouldNotBeQueriedOnOtherServices(t *testing.T) {
 	// location1 registers foo union-typed 'Foo' field and all shared types (Bar, Baz)
 	locations.RegisterURL(typeNameQuery, "node", location1)
 	locations.RegisterURL(typeNameQuery, "foo", location1) // unique to location1
-	locations.RegisterURL("Node", "id", location1)
+	locations.RegisterURL(typeNameNode, "id", location1)
 	locations.RegisterURL("Bar", "id", location1)
 	locations.RegisterURL("Baz", "id", location1)
 
@@ -2288,20 +2290,19 @@ func TestPlanQuery_unionSingleLocationKeepsTypeConditions(t *testing.T) {
 	require.NoError(t, err)
 
 	assertPlannedQueries(t, map[string][]string{
-		location: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						__typename
-						bar
-					}
-					... on Baz {
-						baz
-					}
-				}
-			}
-		`},
+		location: {`query {
+	foo {
+		... on Bar {
+			__typename
+			bar
+		}
+		... on Baz {
+			baz
+		}
+		__typename
+	}
+}
+`},
 	}, plans)
 }
 
@@ -2335,7 +2336,7 @@ func unionTestSchemaAndLocations(t *testing.T) (*ast.Schema, FieldURLMap, string
 	locations := FieldURLMap{}
 	// location0 registers all shared types (Bar, Baz) but no unions
 	locations.RegisterURL(typeNameQuery, "node", location0)
-	locations.RegisterURL("Node", "id", location0)
+	locations.RegisterURL(typeNameNode, "id", location0)
 	locations.RegisterURL("Bar", "id", location0)
 	locations.RegisterURL("Bar", "bar", location0) // unique to location0
 	locations.RegisterURL("Baz", "id", location0)
@@ -2345,7 +2346,7 @@ func unionTestSchemaAndLocations(t *testing.T) (*ast.Schema, FieldURLMap, string
 	// location1 registers foo union-typed 'Foo' field and all shared types (Bar, Baz)
 	locations.RegisterURL(typeNameQuery, "node", location1)
 	locations.RegisterURL(typeNameQuery, "foo", location1) // unique to location1
-	locations.RegisterURL("Node", "id", location1)
+	locations.RegisterURL(typeNameNode, "id", location1)
 	locations.RegisterURL("Bar", "id", location1)
 	locations.RegisterURL("Baz", "id", location1)
 	locations.RegisterURL("Foo", typenameField, location1)
@@ -2386,31 +2387,29 @@ func TestPlanQuery_unionAllowsTypenameField(t *testing.T) {
 
 	assertPlannedQueries(t, map[string][]string{
 		// the union itself, its __typename, and the ids for the node lookup come from the service owning foo
-		location1: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						__typename
-						id
-					}
-					... on Baz {
-						__typename
-						id
-					}
-				}
-			}
-		`},
+		location1: {`query {
+	foo {
+		... on Bar {
+			__typename
+			id
+		}
+		... on Baz {
+			__typename
+			id
+		}
+		__typename
+	}
+}
+`},
 		// Bar.bar is only available on location0, which does not know the union Foo
-		location0: {`
-			query ($_gateway_node_id: ID!) {
-				node(id: $_gateway_node_id) {
-					... on Bar {
-						bar
-					}
-				}
-			}
-		`},
+		location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Bar {
+			bar
+		}
+	}
+}
+`},
 	}, plans)
 }
 
@@ -2440,25 +2439,23 @@ func TestPlanQuery_unionAllowsFragmentSpread(t *testing.T) {
 	require.NoError(t, err)
 
 	assertPlannedQueries(t, map[string][]string{
-		location1: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						id
-					}
-				}
-			}
-		`},
-		location0: {`
-			query ($_gateway_node_id: ID!) {
-				node(id: $_gateway_node_id) {
-					... on Bar {
-						bar
-					}
-				}
-			}
-		`},
+		location1: {`query {
+	foo {
+		... on Bar {
+			id
+		}
+		__typename
+	}
+}
+`},
+		location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Bar {
+			bar
+		}
+	}
+}
+`},
 	}, plans)
 }
 
@@ -2492,25 +2489,23 @@ func TestPlanQuery_unionAllowsFragmentSpreadOnUnionType(t *testing.T) {
 	require.NoError(t, err)
 
 	assertPlannedQueries(t, map[string][]string{
-		location1: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						id
-					}
-				}
-			}
-		`},
-		location0: {`
-			query ($_gateway_node_id: ID!) {
-				node(id: $_gateway_node_id) {
-					... on Bar {
-						bar
-					}
-				}
-			}
-		`},
+		location1: {`query {
+	foo {
+		... on Bar {
+			id
+		}
+		__typename
+	}
+}
+`},
+		location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Bar {
+			bar
+		}
+	}
+}
+`},
 	}, plans)
 }
 
@@ -2542,96 +2537,543 @@ func TestPlanQuery_unionAllowsInlineFragmentWithoutTypeCondition(t *testing.T) {
 	require.NoError(t, err)
 
 	assertPlannedQueries(t, map[string][]string{
-		location1: {`
-			query {
-				foo {
-					__typename
-					... on Bar {
-						id
-					}
-				}
-			}
-		`},
-		location0: {`
-			query ($_gateway_node_id: ID!) {
-				node(id: $_gateway_node_id) {
-					... on Bar {
-						bar
-					}
-				}
-			}
-		`},
+		location1: {`query {
+	foo {
+		... on Bar {
+			id
+		}
+		__typename
+	}
+}
+`},
+		location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Bar {
+			bar
+		}
+	}
+}
+`},
 	}, plans)
+}
+
+func TestPlanQuery_completeNodeFields(t *testing.T) {
+	t.Parallel()
+	const (
+		location0 = "url0"
+		location1 = "url1"
+	)
+	tests := []struct {
+		name                string
+		query               string
+		expectedQueries     map[string][]string
+		expectedRemoteSteps int
+	}{
+		{
+			name: "include id and __typename in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		id
+		__typename
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				internalSchemaLocation: {`query ($id: ID!) {
+	node(id: $id) {
+		id
+		id
+	}
+}
+`},
+				location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		__typename
+		... on Foo {
+			bar {
+				name
+			}
+		}
+	}
+}
+`},
+				location1: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Foo {
+			baz {
+				name
+			}
+		}
+	}
+}
+`},
+			},
+		},
+		{
+			name: "include id and omits __typename in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		id
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				internalSchemaLocation: {`query ($id: ID!) {
+	node(id: $id) {
+		id
+		id
+	}
+}
+`},
+				location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Foo {
+			bar {
+				name
+			}
+		}
+	}
+}
+`},
+				location1: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Foo {
+			baz {
+				name
+			}
+		}
+	}
+}
+`},
+			},
+		},
+		{
+			name: "include __typename and omits the id in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		__typename
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				internalSchemaLocation: {`query ($id: ID!) {
+	node(id: $id) {
+		id
+	}
+}
+`},
+				location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		__typename
+		... on Foo {
+			bar {
+				name
+			}
+		}
+	}
+}
+`},
+				location1: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Foo {
+			baz {
+				name
+			}
+		}
+	}
+}
+`},
+			},
+		},
+		{
+			name: "keep @include(if: $showType) on __typename in remote queries",
+			query: `query($id: ID!, $showType: Boolean!) {
+	node(id: $id) {
+		__typename @include(if: $showType)
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				internalSchemaLocation: {`query ($id: ID!) {
+	node(id: $id) {
+		id
+	}
+}
+`},
+				location0: {`query ($showType: Boolean!, $_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		__typename @include(if: $showType)
+		... on Foo {
+			bar {
+				name
+			}
+		}
+	}
+}
+`},
+				location1: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Foo {
+			baz {
+				name
+			}
+		}
+	}
+}
+`},
+			},
+		},
+		{
+			name: "keep aliases for id and __typename in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		key: id
+		kind: __typename
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				internalSchemaLocation: {`query ($id: ID!) {
+	node(id: $id) {
+		key: id
+		id
+	}
+}
+`},
+				location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		kind: __typename
+		... on Foo {
+			bar {
+				name
+			}
+		}
+	}
+}
+`},
+				location1: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Foo {
+			baz {
+				name
+			}
+		}
+	}
+}
+`},
+			},
+		},
+		{
+			name: "include id and __typename from an inline Node fragment in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			id
+			__typename
+		}
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				internalSchemaLocation: {`query ($id: ID!) {
+	node(id: $id) {
+		... on Node {
+			id
+		}
+		id
+	}
+}
+`},
+				location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Node {
+			__typename
+		}
+		... on Foo {
+			bar {
+				name
+			}
+		}
+	}
+}
+`},
+				location1: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Foo {
+			baz {
+				name
+			}
+		}
+	}
+}
+`},
+			},
+		},
+		{
+			name: "include id and __typename from an named Node fragment in remote queries",
+			query: `query($id: ID!) {
+	node(id: $id) {
+		...Identity
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}
+
+fragment Identity on Node {
+	id
+	__typename
+}`,
+			expectedQueries: map[string][]string{
+				internalSchemaLocation: {`query ($id: ID!) {
+	node(id: $id) {
+		... Identity
+		id
+	}
+}
+fragment Identity on Node {
+	id
+}
+`},
+				location0: {
+					`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... Identity
+		... on Foo {
+			bar {
+				name
+			}
+		}
+	}
+}
+fragment Identity on Node {
+	__typename
+}
+`,
+				},
+				location1: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... on Foo {
+			baz {
+				name
+			}
+		}
+	}
+}
+`},
+			},
+		},
+		{
+			name: "include id and __typename in remote queries when a named fragment on Query",
+			query: `query($id: ID!) {
+	...Boo
+}
+fragment Boo on Query {
+	node(id: $id) {
+		id
+		__typename
+		... on Foo {
+			bar {
+				name
+			}
+			baz {
+				name
+			}
+		}
+	}
+}`,
+			expectedQueries: map[string][]string{
+				internalSchemaLocation: {`query ($id: ID!) {
+	... Boo
+}
+fragment Boo on Query {
+	node(id: $id) {
+		id
+		id
+	}
+}
+`},
+				location0: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... Boo
+	}
+}
+fragment Boo on Node {
+	__typename
+	... on Foo {
+		bar {
+			name
+		}
+	}
+}
+`},
+				location1: {`query ($_gateway_node_id: ID!) {
+	node(id: $_gateway_node_id) {
+		... Boo
+	}
+}
+fragment Boo on Node {
+	... on Foo {
+		baz {
+			name
+		}
+	}
+}
+`},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schemaLocation0, err := graphql.LoadSchema(`
+				type Query {
+					node(id: ID!): Node
+				}
+
+				interface Node {
+					id: ID!
+				}
+
+				type Foo implements Node {
+					id: ID!
+					bar: Bar
+				}
+
+				type Bar implements Node {
+					id: ID!
+					name: String!
+				}
+			`)
+			require.NoError(t, err)
+			schemaLocation1, err := graphql.LoadSchema(`
+				type Query {
+					node(id: ID!): Node
+				}
+
+				interface Node {
+					id: ID!
+				}
+
+				type Foo implements Node {
+					id: ID!
+					baz: Baz
+				}
+
+				type Baz implements Node {
+					id: ID!
+					name: String!
+				}
+			`)
+			require.NoError(t, err)
+			schemas := []*graphql.RemoteSchema{
+				// schema differences aren't important for this test
+				{URL: location0, Schema: schemaLocation0},
+				{URL: location1, Schema: schemaLocation1},
+			}
+			gateway, err := New(schemas)
+			require.NoError(t, err)
+
+			plans, err := gateway.GetPlans(&RequestContext{Context: t.Context(), Query: tc.query})
+			require.NoError(t, err)
+			require.Len(t, plans, 1)
+
+			// root step for gateway's owned node resolver
+			rootSteps := plans[0].RootStep.Then
+			require.Len(t, rootSteps, 1, "should have exactly one root step")
+			rootStep := rootSteps[0]
+			assert.Equal(t, typeNameQuery, rootStep.ParentType)
+			_, ok := rootStep.Queryer.(*Gateway)
+			require.True(t, ok, "expected a local gateway step")
+
+			// remote sub-steps
+			expectedRemoteSteps := tc.expectedRemoteSteps
+			if expectedRemoteSteps == 0 {
+				expectedRemoteSteps = 2
+			}
+			assert.Len(t, rootStep.Then, expectedRemoteSteps, "the local step should have one child for bar and one for baz")
+			for _, step := range rootStep.Then {
+				_, ok := step.Queryer.(*graphql.SingleRequestQueryer)
+				require.True(t, ok, "expected a remote step")
+				assert.Empty(t, step.Then, "each remote step should have no further children")
+			}
+
+			// check for query sting match
+			assertPlannedQueries(t, tc.expectedQueries, plans)
+		})
+	}
 }
 
 // assertPlannedQueries asserts that executing the plans sends exactly the expected queries to each
 // downstream service (keyed by URL) and nothing else. Queries are compared ignoring the order of
 // selections within a selection set, because the planner groups union sub-selections by type in a map.
-func assertPlannedQueries(t *testing.T, expected map[string][]string, plans QueryPlanList) {
+func assertPlannedQueries(t *testing.T, expectedLocationQueries map[string][]string, plans QueryPlanList) {
 	t.Helper()
 	actual := map[string][]string{}
 	for _, plan := range plans {
 		// the root step only fans out to its children and never queries a service itself
 		for _, rootChild := range plan.RootStep.Then {
 			for step := range allSteps(rootChild) {
-				url := step.Queryer.(*graphql.SingleRequestQueryer).URL()
-				actual[url] = append(actual[url], step.QueryString)
+				switch queryer := step.Queryer.(type) {
+				case *graphql.SingleRequestQueryer:
+					location := queryer.URL()
+					actual[location] = append(actual[location], step.QueryString)
+				case *Gateway:
+					actual[internalSchemaLocation] = append(actual[internalSchemaLocation], step.QueryString)
+				default:
+					t.Errorf("Unexpected step queryer type: %T", queryer)
+				}
 			}
 		}
 	}
-	assert.Equal(t, normalizeQueries(t, expected), normalizeQueries(t, actual))
-}
-
-func normalizeQueries(t *testing.T, queries map[string][]string) map[string][]string {
-	t.Helper()
-	normalized := map[string][]string{}
-	for url, urlQueries := range queries {
-		for _, query := range urlQueries {
-			normalized[url] = append(normalized[url], normalizeQuery(t, query))
-		}
-		sort.Strings(normalized[url])
-	}
-	return normalized
-}
-
-// normalizeQuery parses a GraphQL document, recursively sorts every selection set, and prints it back
-func normalizeQuery(t *testing.T, query string) string {
-	t.Helper()
-	doc, err := parser.ParseQuery(&ast.Source{Input: query})
-	require.NoError(t, err, "query must be valid GraphQL: %s", query)
-	for _, operation := range doc.Operations {
-		sortSelectionSet(operation.SelectionSet)
-	}
-	for _, fragment := range doc.Fragments {
-		sortSelectionSet(fragment.SelectionSet)
-	}
-	printed, err := graphql.PrintQuery(doc)
-	require.NoError(t, err)
-	return strings.TrimSpace(printed)
-}
-
-func sortSelectionSet(selectionSet ast.SelectionSet) {
-	for _, selection := range selectionSet {
-		switch selection := selection.(type) {
-		case *ast.Field:
-			sortSelectionSet(selection.SelectionSet)
-		case *ast.InlineFragment:
-			sortSelectionSet(selection.SelectionSet)
-		}
-	}
-	sort.SliceStable(selectionSet, func(i, j int) bool {
-		return printSelection(selectionSet[i]) < printSelection(selectionSet[j])
-	})
-}
-
-func printSelection(selection ast.Selection) string {
-	printed, err := graphql.PrintQuery(&ast.QueryDocument{
-		Operations: ast.OperationList{{Operation: ast.Query, SelectionSet: ast.SelectionSet{selection}}},
-	})
-	if err != nil {
-		panic(err)
-	}
-	return printed
+	assert.Equal(t, expectedLocationQueries, actual, "planned queries should match the expected queries for each service URL")
 }
 
 func allSteps(rootStep *QueryPlanStep) iter.Seq[*QueryPlanStep] {

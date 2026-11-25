@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -62,7 +63,7 @@ func TestGateway(t *testing.T) {
 
 	t.Run("Compute Field URLs", func(t *testing.T) {
 		t.Parallel()
-		locations := fieldURLs(sources, false)
+		locations := fieldURLs(sources, true)
 
 		allUsersURL, err := locations.URLFor(typeNameQuery, "allUsers")
 		assert.Nil(t, err)
@@ -173,7 +174,7 @@ func TestGateway(t *testing.T) {
 
 	t.Run("fieldURLs ignore introspection", func(t *testing.T) {
 		t.Parallel()
-		locations := fieldURLs(sources, true)
+		locations := fieldURLs(sources, false)
 
 		for key := range locations {
 			if strings.HasPrefix(key, "__") {
@@ -424,10 +425,10 @@ func TestGateway(t *testing.T) {
 	t.Run("Introspection field on services", func(t *testing.T) {
 		t.Parallel()
 		// compute the location of each field
-		locations := fieldURLs(sources, false)
+		locations := fieldURLs(sources, true)
 
 		// make sure we have entries for __typename at each service
-		userTypenameURLs, err := locations.URLFor("User", "__typename")
+		userTypenameURLs, err := locations.URLFor("User", typenameField)
 		assert.Nil(t, err)
 		assert.Equal(t, []string{"url1", "url2"}, userTypenameURLs)
 	})
@@ -647,6 +648,65 @@ func TestGatewayExecuteRespectsOperationName(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{
 		"bar": "bar",
 	}, res)
+}
+
+func TestFieldURLsForRemoteSchema(t *testing.T) {
+	t.Parallel()
+	const someLocation = "some-location"
+	remoteSchema := &graphql.RemoteSchema{
+		URL: someLocation,
+		Schema: gqlparser.MustLoadSchema(&ast.Source{Name: "input.graphql", Input: `
+type Query {
+	node(id: ID!): Node
+}
+
+interface Node {
+	id: ID!
+}
+
+type Foo {
+	bar: String
+}
+`}),
+	}
+
+	l := []string{someLocation}
+	assert.Equal(t, FieldURLMap{
+		"Boolean.__typename": l,
+		"Float.__typename":   l,
+		"Foo.__typename":     l,
+		"Foo.bar":            l,
+		"ID.__typename":      l,
+		"Int.__typename":     l,
+		"Node.__typename":    l,
+		"Node.id":            l,
+		"Query.__typename":   l,
+		"Query.node":         l,
+		"String.__typename":  l,
+	}, fieldURLsForRemoteSchema(remoteSchema, false))
+
+	// There are tons of internal types (type names start with '__').
+	// Assert some exist, then reduce to a single type for simpler assertions.
+	allFieldURLs := fieldURLsForRemoteSchema(remoteSchema, true)
+	require.Equal(t, l, allFieldURLs["__Type.__typename"])
+	maps.DeleteFunc(allFieldURLs, func(typeAndField string, _ []string) bool {
+		return strings.HasPrefix(typeAndField, "__")
+	})
+	assert.Equal(t, FieldURLMap{
+		"Boolean.__typename": l,
+		"Float.__typename":   l,
+		"Foo.__typename":     l,
+		"Foo.bar":            l,
+		"ID.__typename":      l,
+		"Int.__typename":     l,
+		// NOTE: Node.__typename is intentionally NOT included. This is resolved by remote schemas, not internally.
+		"Node.id":           l,
+		"Query.__schema":    l,
+		"Query.__type":      l,
+		"Query.__typename":  l,
+		"Query.node":        l,
+		"String.__typename": l,
+	}, allFieldURLs)
 }
 
 func TestFieldURLs_concat(t *testing.T) {
@@ -1015,10 +1075,8 @@ type Foo implements Node {
 					assert.Equal(t, strings.TrimSpace(`
 query ($_gateway_node_id: ID!) {
 	node(id: $_gateway_node_id) {
-		... on Node {
-			... on Foo {
-				id
-			}
+		... on Foo {
+			id
 		}
 	}
 }
@@ -1028,10 +1086,8 @@ query ($_gateway_node_id: ID!) {
 					assert.Equal(t, strings.TrimSpace(`
 query ($_gateway_node_id: ID!) {
 	node(id: $_gateway_node_id) {
-		... on Node {
-			... on Foo {
-				bar
-			}
+		... on Foo {
+			bar
 		}
 	}
 }

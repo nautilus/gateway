@@ -26,6 +26,7 @@ const (
 	typeNameQuery        = "Query"
 	typeNameMutation     = "Mutation"
 	typeNameSubscription = "Subscription"
+	typeNameNode         = "Node"
 
 	// typenameField is the introspection field every selection set (including unions) may request
 	typenameField = "__typename"

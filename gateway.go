@@ -232,14 +232,15 @@ func New(sources []*graphql.RemoteSchema, configs ...Option) (*Gateway, error) {
 	}
 	// find the field URLs before we merge schemas. We need to make sure to include
 	// the fields defined by the gateway's internal schema
-	urls := fieldURLs(sources, true).Concat(
-		fieldURLs([]*graphql.RemoteSchema{
-			{
-				URL:    internalSchemaLocation,
-				Schema: internal,
+	urls := fieldURLs(sources, false).Concat(
+		fieldURLs(
+			[]*graphql.RemoteSchema{
+				{
+					URL:    internalSchemaLocation,
+					Schema: internal,
+				},
 			},
-		},
-			false,
+			true,
 		),
 	)
 
@@ -384,7 +385,7 @@ func WithLogger(l Logger) Option {
 func makeNodeField() *QueryField {
 	return &QueryField{
 		Name: "node",
-		Type: ast.NamedType("Node", &ast.Position{}),
+		Type: ast.NamedType(typeNameNode, &ast.Position{}),
 		Arguments: ast.ArgumentDefinitionList{
 			&ast.ArgumentDefinition{
 				Name: "id",
@@ -410,34 +411,39 @@ func makeNodeField() *QueryField {
 	}
 }
 
-func fieldURLs(schemas []*graphql.RemoteSchema, stripInternal bool) FieldURLMap {
-	// build the mapping of fields to urls
+func fieldURLs(schemas []*graphql.RemoteSchema, isInternal bool) FieldURLMap {
 	locations := FieldURLMap{}
-
-	// every schema we were given could define types
 	for _, remoteSchema := range schemas {
-		// each type defined by the schema can be found at remoteSchema.URL
-		for name, typeDef := range remoteSchema.Schema.Types {
-			// if the type is part of the introspection (and can't be left up to the backing services)
-			if !strings.HasPrefix(typeDef.Name, "__") || !stripInternal {
-				// you can ask for __typename at any service that defines the type
-				locations.RegisterURL(name, "__typename", remoteSchema.URL)
+		locations.Concat(fieldURLsForRemoteSchema(remoteSchema, isInternal))
+	}
+	return locations
+}
 
-				// each field of each type can be found here
-				for _, fieldDef := range typeDef.Fields {
-					// if the field is not an introspection field
-					if name != typeNameQuery || !strings.HasPrefix(fieldDef.Name, "__") {
-						locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
-					} else if !stripInternal { // its an introspection name
-						// register the location for the field
-						locations.RegisterURL(name, fieldDef.Name, remoteSchema.URL)
-					}
+func fieldURLsForRemoteSchema(schema *graphql.RemoteSchema, isInternal bool) FieldURLMap {
+	locations := FieldURLMap{}
+	// each type defined by the schema can be found at remoteSchema.URL
+	for name, typeDef := range schema.Schema.Types {
+		// if the type is part of the introspection (and can't be left up to the backing services)
+		isIntrospectionType := strings.HasPrefix(typeDef.Name, "__")
+		if !isIntrospectionType || isInternal {
+			// You can ask for __typename at any service that defines the type.
+			// Excludes the Node type, as this is the one we expect services to implement.
+			if !isInternal || name != typeNameNode {
+				locations.RegisterURL(name, typenameField, schema.URL)
+			}
+
+			// each field of each type can be found here
+			for _, fieldDef := range typeDef.Fields {
+				// if the field is not an introspection field
+				if name != typeNameQuery || !strings.HasPrefix(fieldDef.Name, "__") {
+					locations.RegisterURL(name, fieldDef.Name, schema.URL)
+				} else if isInternal { // its an introspection name
+					// register the location for the field
+					locations.RegisterURL(name, fieldDef.Name, schema.URL)
 				}
 			}
 		}
 	}
-
-	// return the location map
 	return locations
 }
 
@@ -540,21 +546,11 @@ func (m FieldURLMap) URLFor(parent string, field string) ([]string, error) {
 	return value, nil
 }
 
-// Concat returns a new field map url whose entries are the union of both maps
+// Concat modifies and returns m after merging in other's field locations
 func (m FieldURLMap) Concat(other FieldURLMap) FieldURLMap {
 	for key, value := range other {
-		// if we have seen the location before
-		if prevValue, ok := m[key]; ok {
-			// add the values to the internal registry
-			m[key] = append(prevValue, value...)
-
-			// we havent' seen the key before
-		} else {
-			m[key] = value
-		}
+		m[key] = append(m[key], value...)
 	}
-
-	// return the
 	return m
 }
 
