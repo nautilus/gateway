@@ -39,10 +39,14 @@ func (p ResponseMiddleware) ExecutionMiddleware() {}
 // scrubInsertionIDs removes the fields from the final response that the user did not
 // explicitly ask for
 func scrubInsertionIDs(ctx *ExecutionContext, response map[string]interface{}) error {
-	// there are many fields to scrub
-	responseObj := execresult.NewObjectFromMap(response)
+	// Converting the response and back visits every value in it, so only do it once
+	// there is a location to scrub.
+	var responseObj *execresult.Object
 	for field, locations := range ctx.Plan.FieldsToScrub {
 		for _, location := range locations {
+			if responseObj == nil {
+				responseObj = execresult.NewObjectFromMap(response)
+			}
 			// look for the insertion points in the response for the field
 			insertionPoints, _, err := executorFindInsertionPoints(ctx, location, ctx.Plan.Operation.SelectionSet, responseObj, [][]string{{}}, ctx.Plan.FragmentDefinitions)
 			if err != nil {
@@ -59,6 +63,9 @@ func scrubInsertionIDs(ctx *ExecutionContext, response map[string]interface{}) e
 				value.Delete(field)
 			}
 		}
+	}
+	if responseObj == nil {
+		return nil
 	}
 	// We cannot replace response by pointer without changing function signature, which would break backward compatibility, so clear it and add keys back in
 	for key := range response {

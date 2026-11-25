@@ -1186,6 +1186,40 @@ func TestSingleObjectOnlyRequestingNonIDFieldScrubsIDs(t *testing.T) {
 	}, response, "Response must not contain ID fields and not fail while scrubbing them.")
 }
 
+func TestScrubInsertionIDsKeepsResponseWhenPlanAddedNoFields(t *testing.T) {
+	t.Parallel()
+	user := map[string]any{"lastName": "bar"}
+	response := map[string]any{"node": user}
+	ctx := &ExecutionContext{Plan: &QueryPlan{FieldsToScrub: map[string][][]string{"id": {}}}}
+
+	require.NoError(t, scrubInsertionIDs(ctx, response))
+
+	user["lastName"] = "changed"
+	assert.Equal(t, map[string]any{"node": map[string]any{"lastName": "changed"}}, response,
+		"Response must still hold the values it was given, not copies of them.")
+}
+
+func BenchmarkScrubInsertionIDsNothingToScrub(b *testing.B) {
+	const sections, nodesPerSection = 20, 1500
+	list := make([]any, sections)
+	for i := range list {
+		nodes := make([]any, nodesPerSection)
+		for j := range nodes {
+			nodes[j] = map[string]any{"type": "text", "text": "lorem ipsum", "children": []any{}}
+		}
+		list[i] = map[string]any{"title": "section", "content": map[string]any{"children": nodes}}
+	}
+	response := map[string]any{"article": map[string]any{"sections": list}}
+	ctx := &ExecutionContext{Plan: &QueryPlan{FieldsToScrub: map[string][][]string{"id": {}}}}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		if err := scrubInsertionIDs(ctx, response); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func TestDeclaredDirectives(t *testing.T) {
 	t.Parallel()
 
