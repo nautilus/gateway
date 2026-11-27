@@ -30,6 +30,22 @@ type HTTPOperation struct {
 
 type setResultFunc func(r map[string]interface{})
 
+// PreOperationHook is a function that GraphQLHandler runs once for every
+// operation in a request, after the RequestContext has been built and before
+// the operation is planned. Operations in a batch request share the incoming
+// http.Request context, so a hook that needs per-operation state should
+// derive a child context and store it in rc.Context; the executor and the
+// queryers see that context during execution.
+type PreOperationHook func(rc *RequestContext)
+
+// PostOperationHook is a function that GraphQLHandler runs once for every
+// operation in a request, as the last step before the operation's response
+// payload is written. The payload is exactly what the gateway would have
+// written without the hook, including any keys the gateway adds itself. The
+// hook may add or modify keys and is responsible for preserving existing ones
+// it does not mean to change.
+type PostOperationHook func(rc *RequestContext, payload map[string]interface{})
+
 func formatErrors(err error) map[string]interface{} {
 	return formatErrorsWithCode(nil, err, "UNKNOWN_ERROR")
 }
@@ -104,6 +120,10 @@ func (g *Gateway) GraphQLHandler(w http.ResponseWriter, r *http.Request) {
 			CacheKey:      cacheKey,
 		}
 
+		if g.preOperationHook != nil {
+			g.preOperationHook(requestContext)
+		}
+
 		// Get the plan, and return a 400 if we can't get the plan
 		plan, err := g.GetPlans(requestContext)
 		if err != nil {
@@ -161,17 +181,17 @@ func (g *Gateway) executeRequest(requestContext *RequestContext, plan QueryPlanL
 
 	// fire the query with the request context passed through to execution
 	result, err := g.Execute(requestContext, plan)
-	if err != nil {
-		setResult(formatErrorsWithCode(result, err, "INTERNAL_SERVER_ERROR"))
-
-		return
-	}
 
 	// the result for this operation
-	payload := map[string]interface{}{"data": result}
+	var payload map[string]interface{}
+	if err != nil {
+		payload = formatErrorsWithCode(result, err, "INTERNAL_SERVER_ERROR")
+	} else {
+		payload = map[string]interface{}{"data": result}
+	}
 
 	// if there was a cache key associated with this query
-	if requestContext.CacheKey != "" {
+	if err == nil && requestContext.CacheKey != "" {
 		// embed the cache key in the response
 		payload["extensions"] = map[string]interface{}{
 			"persistedQuery": map[string]interface{}{
@@ -179,6 +199,11 @@ func (g *Gateway) executeRequest(requestContext *RequestContext, plan QueryPlanL
 				"version":    "1",
 			},
 		}
+	}
+
+	// the hook gets the last word on the payload
+	if g.postOperationHook != nil {
+		g.postOperationHook(requestContext, payload)
 	}
 
 	// add this result to the list

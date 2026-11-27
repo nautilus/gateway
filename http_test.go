@@ -1557,3 +1557,173 @@ func TestGraphQLHandler_OptionsMethod(t *testing.T) {
   ]
 }`, response.Body.String())
 }
+
+type operationHookCtxKey struct{}
+
+func TestGraphQLHandler_operationHooks(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema(`
+		type Query {
+			queryA: String!
+			queryB: String!
+		}
+	`)
+	assert.NoError(t, err)
+
+	// the executor reads the per-operation value the pre hook stored in the context
+	// and echoes it back so the test can verify each operation saw its own value
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url1"},
+	}, WithExecutor(ExecutorFunc(
+		func(ec *ExecutionContext) (map[string]interface{}, error) {
+			seen, _ := ec.RequestContext.Value(operationHookCtxKey{}).(string)
+			return map[string]interface{}{"seen": seen}, nil
+		},
+	)), WithPreOperationHook(func(rc *RequestContext) {
+		rc.Context = context.WithValue(rc.Context, operationHookCtxKey{}, "ctx-"+rc.OperationName)
+	}), WithPostOperationHook(func(rc *RequestContext, payload map[string]interface{}) {
+		payload["extensions"] = map[string]interface{}{
+			"operation": rc.OperationName,
+			"seen":      rc.Context.Value(operationHookCtxKey{}),
+		}
+	}))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`[
+			{ "query": "query queryAOperation { queryA }", "operationName": "queryAOperation" },
+			{ "query": "query queryBOperation { queryB }", "operationName": "queryBOperation" }
+	]`))
+	responseRecorder := httptest.NewRecorder()
+	gateway.GraphQLHandler(responseRecorder, request)
+
+	response := responseRecorder.Result()
+	defer response.Body.Close()
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+
+	result := []map[string]interface{}{}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// each operation in the batch ran under its own context and got its own payload
+	assert.Equal(t, []map[string]interface{}{
+		{
+			"data":       map[string]interface{}{"seen": "ctx-queryAOperation"},
+			"extensions": map[string]interface{}{"operation": "queryAOperation", "seen": "ctx-queryAOperation"},
+		},
+		{
+			"data":       map[string]interface{}{"seen": "ctx-queryBOperation"},
+			"extensions": map[string]interface{}{"operation": "queryBOperation", "seen": "ctx-queryBOperation"},
+		},
+	}, result)
+}
+
+func TestGraphQLHandler_postOperationHookSeesGatewayExtensions(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema(`
+		type Query {
+			allUsers: [String!]!
+		}
+	`)
+	assert.NoError(t, err)
+
+	// the hook runs last, so it sees the gateway's own extensions and can add to them
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url1"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return map[string]interface{}{"Hello": "world"}, nil
+		},
+	)), WithAutomaticQueryPlanCache(), WithPostOperationHook(func(_ *RequestContext, payload map[string]interface{}) {
+		ext, ok := payload["extensions"].(map[string]interface{})
+		if assert.True(t, ok, "hook should see the gateway's extensions") {
+			ext["fromHook"] = "yes"
+		}
+	}))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`
+		{
+			"query": "{ allUsers }",
+			"extensions": {
+				"persistedQuery": {
+					"version": 1,
+					"sha256Hash": "1234"
+				}
+			}
+		}
+	`))
+	responseRecorder := httptest.NewRecorder()
+	gateway.GraphQLHandler(responseRecorder, request)
+
+	response := responseRecorder.Result()
+	defer response.Body.Close()
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+
+	result := map[string]interface{}{}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// both the gateway's key and the hook's key are in the response
+	assert.Equal(t, map[string]interface{}{
+		"data": map[string]interface{}{"Hello": "world"},
+		"extensions": map[string]interface{}{
+			"fromHook": "yes",
+			"persistedQuery": map[string]interface{}{
+				"sha265Hash": "1234",
+				"version":    "1",
+			},
+		},
+	}, result)
+}
+
+func TestGraphQLHandler_postOperationHookRunsOnExecutionError(t *testing.T) {
+	t.Parallel()
+	schema, err := graphql.LoadSchema(`
+		type Query {
+			allUsers: [String!]!
+		}
+	`)
+	assert.NoError(t, err)
+
+	gateway, err := New([]*graphql.RemoteSchema{
+		{Schema: schema, URL: "url1"},
+	}, WithExecutor(ExecutorFunc(
+		func(*ExecutionContext) (map[string]interface{}, error) {
+			return nil, errors.New("downstream exploded")
+		},
+	)), WithPostOperationHook(func(_ *RequestContext, payload map[string]interface{}) {
+		payload["extensions"] = map[string]interface{}{"fromHook": "yes"}
+	}))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`{ "query": "{ allUsers }" }`))
+	responseRecorder := httptest.NewRecorder()
+	gateway.GraphQLHandler(responseRecorder, request)
+
+	response := responseRecorder.Result()
+	defer response.Body.Close()
+
+	result := map[string]interface{}{}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	// errors are reported as before and the hook's extension is present
+	assert.Nil(t, result["data"])
+	assert.Len(t, result["errors"], 1)
+	assert.Equal(t, map[string]interface{}{"fromHook": "yes"}, result["extensions"])
+}
