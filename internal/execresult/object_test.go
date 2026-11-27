@@ -59,6 +59,44 @@ func TestNewObject(t *testing.T) {
 	require.Equal(t, expected, NewObjectFromMap(mapValue).ToMap())
 }
 
+func TestObject_leavesUntouchedValuesAlone(t *testing.T) {
+	t.Parallel()
+	untouched := map[string]any{"text": "lorem"}
+	touched := map[string]any{"id": "1"}
+	source := map[string]any{"untouched": untouched, "touched": touched}
+	obj := NewObjectFromMap(source)
+
+	child, ok := obj.GetObject("touched")
+	require.True(t, ok)
+	child.set("name", "foo")
+	delete(source, "untouched")
+	untouched["text"] = "changed"
+
+	assert.Equal(t, map[string]any{
+		"untouched": map[string]any{"text": "changed"},
+		"touched":   map[string]any{"id": "1", "name": "foo"},
+	}, obj.ToMap(), "Must keep the value nothing touched, and must not keep the map it was built from.")
+	assert.Equal(t, map[string]any{"id": "1"}, touched, "Must not write to a value it was given.")
+}
+
+func BenchmarkObject_untouchedRoundTrip(b *testing.B) {
+	const sections, nodesPerSection = 20, 1500
+	list := make([]any, sections)
+	for i := range list {
+		nodes := make([]any, nodesPerSection)
+		for j := range nodes {
+			nodes[j] = map[string]any{"type": "text", "text": "lorem ipsum", "children": []any{}}
+		}
+		list[i] = map[string]any{"title": "section", "content": map[string]any{"children": nodes}}
+	}
+	response := map[string]any{"article": map[string]any{"sections": list}}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		NewObjectFromMap(response).ToMap()
+	}
+}
+
 func TestToMap_niladic_values(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, nil, toMap(nil))
